@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omega-guardian-x"
+version = "0.7.1a1"
+description = "Universal local-first software intelligence, repository security, diagnostics and governance toolkit"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary - see LICENSE" }
+authors = [{ name = "OMEGA GUARDIAN X Project" }]
+keywords = ["dependency-audit", "security-scanning", "repository-analysis", "sbom", "devsecops", "reverse-engineering", "debugging", "multi-agent"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.scripts]
+ogx = "ogx.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+"ogx.enterprise" = ["schema.sql"]
+"ogx" = ["skillpacks/official/*/skill.json", "skillpacks/official/*/SKILL.md"]

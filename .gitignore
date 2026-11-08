@@ -1,0 +1,4 @@
+# Private environment files and credentials
+.env
+.env.*
+!.env.example

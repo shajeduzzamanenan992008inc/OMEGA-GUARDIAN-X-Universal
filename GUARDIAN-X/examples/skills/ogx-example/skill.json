@@ -1,0 +1,11 @@
+{
+  "name": "ogx-example-review",
+  "version": "1.0.0",
+  "description": "Example declarative review skill manifest; it does not execute code.",
+  "entrypoint": "SKILL.md",
+  "permissions": ["read_project"],
+  "execution": "declarative",
+  "supported_domains": ["general-software"],
+  "inputs": ["project_profile"],
+  "outputs": ["review_checklist"]
+}

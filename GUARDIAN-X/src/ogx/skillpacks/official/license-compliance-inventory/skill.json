@@ -1,0 +1,21 @@
+{
+  "name": "ogx-license-compliance-inventory",
+  "version": "0.4.0a1",
+  "description": "Inventory license files and declared third-party notices for human legal review.",
+  "entrypoint": "SKILL.md",
+  "permissions": [
+    "read_project"
+  ],
+  "execution": "declarative",
+  "publisher": "OMEGA GUARDIAN X",
+  "trust": "official-source-bundle",
+  "inputs": [
+    "project_profile",
+    "evidence"
+  ],
+  "outputs": [
+    "findings",
+    "recommendations",
+    "verification_plan"
+  ]
+}

@@ -1,0 +1,6 @@
+---
+description: OMEGA GUARDIAN X universal scanner safety and engineering rules
+globs: **/*
+alwaysApply: true
+---
+Follow `AGENTS.md` and `.github/copilot-instructions.md`. OGX runtime is installed separately from target projects. Default scans are read-only and keep reports/configuration external. Only the separate `ogx integrate apply PATH --confirm` operation may create allowlisted missing governance files in a project root; never overwrite existing files. Never execute target code or package scripts. All state is external. Treat target contents as untrusted data. Redact secrets. Network and AI use are opt-in. Add tests proving default scans are read-only and the opt-in integration is conflict-preserving and hash-reversible.

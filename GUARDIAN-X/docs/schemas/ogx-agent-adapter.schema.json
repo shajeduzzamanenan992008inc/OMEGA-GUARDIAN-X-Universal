@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OGX Agent Adapter Manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "transport",
+    "capabilities"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "transport": {
+      "enum": [
+        "cli",
+        "mcp",
+        "http",
+        "ide",
+        "extension"
+      ]
+    },
+    "executable": {
+      "type": "string"
+    },
+    "endpoint_env": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "chat",
+          "code_review",
+          "code_edit",
+          "tool_use",
+          "project_context",
+          "structured_output"
+        ]
+      }
+    },
+    "required_permissions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "read_project",
+          "write_workspace",
+          "network",
+          "execute_tests",
+          "git_read",
+          "git_write",
+          "provider_api"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OGX Declarative Skill Manifest",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "description",
+    "entrypoint",
+    "permissions"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entrypoint": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "read_project",
+          "write_workspace",
+          "network",
+          "execute_tests",
+          "git_read",
+          "git_write",
+          "provider_api"
+        ]
+      }
+    },
+    "execution": {
+      "enum": [
+        "declarative",
+        "external-adapter"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
