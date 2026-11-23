@@ -1,0 +1,57 @@
+# OMEGA Shield - runtime guard configuration (firewall, request validation, rate limiting, access control).
+# Validate:  python omega-shield/init.py guard check
+# Try rules: python omega-shield/init.py guard test "/search?q=1 union select 1"
+# Every value below is the built-in default, so deleting this file changes nothing.
+#
+# Rollout advice: start with mode = "monitor" (log only), read the events with `init.py logs`, tune,
+# then switch to "enforce".
+
+[firewall]
+mode = "enforce"                 # enforce | monitor (log only, never blocks)
+signature_profile = "balanced"   # off | balanced | strict (strict also blocks SSRF probes and scans bodies for XSS)
+allowed_methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+max_url_length = 4096
+max_header_count = 100
+max_header_bytes = 16384
+max_body_bytes = 1048576         # 1 MiB; raise it for upload routes
+inspect_body_bytes = 65536       # only the first 64 KiB of text/JSON/form bodies are inspected
+allowed_hosts = []               # e.g. ["app.example.com"]; empty = any Host header
+trusted_proxies = []             # CIDRs whose X-Forwarded-For is trusted, e.g. ["10.0.0.0/8"]
+block_ips = []                   # IPs / CIDRs that are always refused
+allow_ips = []                   # when non-empty, ONLY these IPs / CIDRs may connect
+block_user_agents = ["sqlmap", "nikto", "nmap", "masscan", "acunetix", "nessus", "havij", "dirbuster"]
+disabled_rules = []              # e.g. ["OGX-RT-1020"] when a CMS legitimately posts HTML
+skip_signature_paths = []        # e.g. ["/cms/editor"]: signatures are skipped there (hygiene limits still apply)
+security_headers = true          # adds nosniff, frame, referrer and permissions policies when the app set none
+expose_rule_id = false           # true puts the rule id in blocked responses (debugging only)
+
+[ratelimit]
+enabled = true
+requests_per_minute = 300
+burst = 60
+max_tracked_clients = 10000
+
+# [[ratelimit.routes]]           # stricter buckets for sensitive routes
+# prefix = "/login"
+# requests_per_minute = 20
+# burst = 5
+
+[access]
+enabled = false
+
+# Create a key:  python omega-shield/init.py guard keygen --name billing --role admin
+# Only the SHA-256 is stored here, never the key itself.
+# [[access.keys]]
+# name = "billing"
+# role = "admin"
+# sha256 = "<64 hex characters printed by keygen>"
+#
+# [[access.rules]]
+# prefix = "/admin"
+# require = "api_key"            # api_key | none
+# roles = ["admin"]
+#
+# [[access.rules]]
+# prefix = "/internal"
+# require = "none"
+# ip_allow = ["10.0.0.0/8"]

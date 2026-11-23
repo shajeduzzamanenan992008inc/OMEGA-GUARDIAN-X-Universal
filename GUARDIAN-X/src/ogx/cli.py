@@ -42,6 +42,38 @@ from .guardian import (
     apply_safe_fixes, build_evolution_report, build_guardian_audit, check_upstream,
     fetch_remote, plan_safe_fixes, render_guardian_markdown,
 )
+from .engines.registry import EngineRegistry
+from .pipeline import (
+    analyze_android, analyze_project, inspect_engines,
+    render_android_markdown, render_universal_markdown,
+)
+from .pap import (
+    ProjectIdentity,
+    create_identity,
+    read_identity,
+    validate_identity_file,
+    recover_identity,
+    update_identity_field,
+    IdentityError,
+    IdentityCorruptedError,
+    IdentityMissingError,
+    IdentityValidationError,
+    IdentityImmutableError,
+    # Manifest
+    resolve_project_configuration,
+    resolve_manifest_conflict,
+    load_and_validate_manifest,
+    discover_manifest,
+    ManifestConflictResolution,
+    ManifestLocation,
+    TrustClassification,
+    ActivationReadiness,
+)
+from .registry import RegistryV2, get_registry, RegistryError, RegistryNotFoundError, MigrationError
+from .discovery import (
+    DiscoveryEngine, DiscoveryConfig, DiscoveryScope, DiscoveryRoot,
+    DiscoveryStatus, discover_projects, discover_root, run_discovery_cycle,
+)
 
 BANNER = "OMEGA GUARDIAN X — Universal Repository Intelligence"
 GLOBAL_CONFIG = """# OMEGA GUARDIAN X global configuration
@@ -233,6 +265,156 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _engine_ids(values: list[str] | None) -> list[str] | None:
+    """Accept repeated values and comma-separated engine IDs."""
+    if not values:
+        return None
+    selected: list[str] = []
+    for value in values:
+        selected.extend(part.strip() for part in value.split(",") if part.strip())
+    return selected or None
+
+
+def _write_report_bundle(root: Path, prefix: str, report: dict, report_format: str,
+                         renderer) -> list[Path]:
+    """Write reports to OGX external state only, refusing symlinked destinations."""
+    report_dir = _prepare_report_dir(root)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    base = f"{prefix}-{stamp}"
+    outputs: list[Path] = []
+    if report_format in ("json", "both"):
+        destination = report_dir / f"{base}.json"
+        if destination.is_symlink():
+            raise OSError(f"External report must not be a symlink: {destination}")
+        destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        outputs.append(destination)
+    if report_format in ("markdown", "both"):
+        destination = report_dir / f"{base}.md"
+        if destination.is_symlink():
+            raise OSError(f"External report must not be a symlink: {destination}")
+        destination.write_text(renderer(report), encoding="utf-8")
+        outputs.append(destination)
+    return outputs
+
+
+def cmd_engines(args: argparse.Namespace) -> int:
+    """Inspect the engine registry without analyzing or executing a project."""
+    if args.engines_action == "list":
+        registry = EngineRegistry()
+        entries = [{
+            "engine_id": engine.engine_id,
+            "engine_version": engine.engine_version,
+            "display_name": engine.display_name,
+            "category": engine.category,
+            "language_keys": list(engine.language_keys),
+            "health": engine.health(),
+        } for engine in registry.all()]
+        result = {
+            "schema": "ogx-engine-registry-1",
+            "tool": "OMEGA GUARDIAN X",
+            "engine_version": __version__,
+            "count": len(entries),
+            "engines": entries,
+        }
+        if args.json:
+            _json_print(result)
+        else:
+            print(BANNER)
+            print(f"Registered engines: {len(entries)} (static-read-only; no project code is executed)")
+            print(f"{'ENGINE':24} {'CATEGORY':15} {'VERSION':10} DISPLAY NAME")
+            for entry in entries:
+                print(f"{entry['engine_id']:24} {entry['category']:15} "
+                      f"{entry['engine_version']:10} {entry['display_name']}")
+        return 0
+
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            raise ValueError(f"Project directory not found: {root}")
+        result = inspect_engines(root, engine_ids=_engine_ids(args.engines))
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        print(f"Engine inspection failed: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        _json_print(result)
+        return 0
+    print(BANNER)
+    print(f"Project: {result['project']['name']}")
+    print(f"Files indexed: {result['project']['file_count']}; "
+          f"detected engines: {len(result['detected_engines'])} of {len(result['engines'])}")
+    print(f"{'ENGINE':24} {'DETECTED':9} {'ANALYZE':14} {'DEPS':14} {'BUILD':14} {'TEST':14}")
+    for entry in result["engines"]:
+        caps = entry["capabilities"]
+        values = [caps.get(name, {}).get("status", "unsupported")
+                  for name in ("analyze", "dependencies", "build", "test")]
+        print(f"{entry['engine_id']:24} {str(entry['detected']):9} "
+              + " ".join(f"{value:14}" for value in values))
+    for warning in result["warnings"]:
+        print(f"WARNING: {warning}")
+    for error in result["errors"]:
+        print(f"ERROR: {error}")
+    print("No project code, build tool, package manager, device or network was executed or contacted.")
+    return 0
+
+
+def cmd_analyze(args: argparse.Namespace) -> int:
+    """Run the universal static engine pipeline and write external reports."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            raise ValueError(f"Project directory not found: {root}")
+        report = analyze_project(root, engine_ids=_engine_ids(args.engines))
+        outputs = _write_report_bundle(root, "universal-analysis", report, args.format,
+                                       render_universal_markdown)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        print(f"Universal analysis failed: {exc}", file=sys.stderr)
+        return 2
+    summary = report["summary"]
+    print(BANNER)
+    print(f"Project: {report['project']['name']}")
+    print(f"Detected engines: {len(report['detected_engines'])} of {len(report['engines'])}")
+    print("Findings: " + ", ".join(f"{key}={value}" for key, value in summary.items()))
+    for output in outputs:
+        print(f"External report: {output}")
+    for warning in report["warnings"]:
+        print(f"WARNING: {warning}")
+    for error in report["errors"]:
+        print(f"ERROR: {error}")
+    print("Target repository: READ-ONLY; no project-local files created or changed.")
+    if args.strict and (summary["critical"] or summary["high"]):
+        return 1
+    return 0
+
+
+def cmd_android(args: argparse.Namespace) -> int:
+    """Run the dedicated Android engine without build/device execution."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            raise ValueError(f"Project directory not found: {root}")
+        report = analyze_android(root)
+        outputs = _write_report_bundle(root, "android-analysis", report, args.format,
+                                       render_android_markdown)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        print(f"Android analysis failed: {exc}", file=sys.stderr)
+        return 2
+    summary = report["summary"]
+    print(BANNER)
+    print(f"Project: {report['project']['name']}")
+    print(f"Android detected: {report['detected']}")
+    print("Findings: " + ", ".join(f"{key}={value}" for key, value in summary.items()))
+    for output in outputs:
+        print(f"External report: {output}")
+    for warning in report["warnings"]:
+        print(f"WARNING: {warning}")
+    for error in report["errors"]:
+        print(f"ERROR: {error}")
+    print("No Gradle build, Android SDK tool, adb command, emulator, device or APK install was executed.")
+    if args.strict and (summary["critical"] or summary["high"]):
+        return 1
+    return 0
+
+
 def cmd_projects_add(args: argparse.Namespace) -> int:
     root = _root(args.path)
     if not root.is_dir():
@@ -265,6 +447,595 @@ def cmd_projects_list(args: argparse.Namespace) -> int:
     for name, path in sorted(projects.items()):
         print(f"{name}: {path}")
     return 0
+
+
+def cmd_registry_list(args: argparse.Namespace) -> int:
+    """List all projects in Registry V2."""
+    try:
+        registry = get_registry()
+        projects = registry.list_projects(limit=args.limit, offset=args.offset)
+        
+        if args.json:
+            result = {
+                "projects": [
+                    {
+                        "project_id": str(p.project_id),
+                        "canonical_name": p.canonical_name,
+                        "description": p.description,
+                        "identity_hash": p.identity_hash,
+                        "created_at": p.created_at.isoformat(),
+                        "updated_at": p.updated_at.isoformat(),
+                        "lifecycle_state": p.lifecycle_state.value,
+                    }
+                    for p in projects
+                ],
+                "count": len(projects),
+                "limit": args.limit,
+                "offset": args.offset,
+            }
+            _json_print(result)
+        else:
+            if not projects:
+                print("No projects in registry.")
+            for p in projects:
+                print(f"{p.project_id}  {p.canonical_name}  [{p.lifecycle_state.value}]")
+        return 0
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Registry list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_show(args: argparse.Namespace) -> int:
+    """Show detailed project information from Registry V2."""
+    try:
+        registry = get_registry()
+        project_id = args.project_id
+        
+        # Try to parse as UUID, fallback to name lookup
+        try:
+            from uuid import UUID
+            pid = UUID(project_id)
+            project = registry.get_project(pid)
+        except ValueError:
+            # Try name lookup
+            project = registry.find_project_by_identity(canonical_name=project_id)
+            if not project:
+                print(f"Project not found: {project_id}", file=sys.stderr)
+                return 2
+        
+        # Get associated repositories and workspaces
+        repos = registry.list_repositories(project.project_id)
+        workspaces = registry.list_workspaces(project.project_id)
+        
+        if args.json:
+            result = {
+                "project": {
+                    "project_id": str(project.project_id),
+                    "canonical_name": project.canonical_name,
+                    "description": project.description,
+                    "identity_hash": project.identity_hash,
+                    "created_at": project.created_at.isoformat(),
+                    "updated_at": project.updated_at.isoformat(),
+                    "lifecycle_state": project.lifecycle_state.value,
+                    "metadata": project.metadata,
+                },
+                "repositories": [
+                    {
+                        "repository_id": str(r.repository_id),
+                        "provider": r.provider,
+                        "repository_url": r.repository_url,
+                        "normalized_repository_url": r.normalized_repository_url,
+                        "repository_name": r.repository_name,
+                        "default_branch": r.default_branch,
+                        "visibility": r.visibility,
+                    }
+                    for r in repos
+                ],
+                "workspaces": [
+                    {
+                        "workspace_id": str(w.workspace_id),
+                        "repository_id": str(w.repository_id) if w.repository_id else None,
+                        "workspace_provider": w.workspace_provider,
+                        "workspace_type": w.workspace_type,
+                        "location_reference": w.location_reference,
+                        "normalized_location": w.normalized_location,
+                        "display_name": w.display_name,
+                        "status": w.status.value,
+                        "last_seen_at": w.last_seen_at.isoformat(),
+                    }
+                    for w in workspaces
+                ],
+            }
+            _json_print(result)
+        else:
+            print(f"Project: {project.canonical_name} ({project.project_id})")
+            print(f"  Lifecycle: {project.lifecycle_state.value}")
+            print(f"  Created: {project.created_at.isoformat()}")
+            print(f"  Updated: {project.updated_at.isoformat()}")
+            print(f"  Description: {project.description or '(none)'}")
+            print(f"  Identity Hash: {project.identity_hash or '(none)'}")
+            print(f"  Repositories: {len(repos)}")
+            for r in repos:
+                print(f"    {r.repository_id}  {r.provider}  {r.repository_name or r.repository_url}")
+            print(f"  Workspaces: {len(workspaces)}")
+            for w in workspaces:
+                print(f"    {w.workspace_id}  [{w.status.value}]  {w.location_reference}")
+        return 0
+    except RegistryNotFoundError as exc:
+        print(f"Project not found: {exc}", file=sys.stderr)
+        return 2
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Registry show failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_status(args: argparse.Namespace) -> int:
+    """Show registry status and statistics."""
+    try:
+        registry = get_registry()
+        
+        projects = registry.list_projects()
+        total_repos = 0
+        total_workspaces = 0
+        
+        for p in projects:
+            total_repos += len(registry.list_repositories(p.project_id))
+            total_workspaces += len(registry.list_workspaces(p.project_id))
+        
+        result = {
+            "projects": len(projects),
+            "repositories": total_repos,
+            "workspaces": total_workspaces,
+            "schema_version": registry.get_schema_version(),
+            "database_path": str(registry.db_path),
+        }
+        
+        if args.json:
+            _json_print(result)
+        else:
+            print(f"Registry V2 Status:")
+            print(f"  Database: {registry.db_path}")
+            print(f"  Schema Version: {registry.get_schema_version()}")
+            print(f"  Projects: {len(projects)}")
+            print(f"  Repositories: {total_repos}")
+            print(f"  Workspaces: {total_workspaces}")
+        return 0
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Registry status failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_integrity(args: argparse.Namespace) -> int:
+    """Check registry database integrity."""
+    try:
+        registry = get_registry()
+        result = registry.check_integrity()
+        
+        if args.json:
+            _json_print(result)
+        else:
+            print(f"Registry Integrity Check:")
+            print(f"  Database: {registry.db_path}")
+            print(f"  Schema Version: {result['schema_version']}")
+            print(f"  Integrity OK: {result['integrity_ok']}")
+            print(f"  Details: {result['integrity_details']}")
+            print(f"  Foreign Key Violations: {result['foreign_key_violations']}")
+            print(f"  Counts: {result['counts']}")
+        return 0 if result['integrity_ok'] else 1
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Registry integrity check failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_migrate(args: argparse.Namespace) -> int:
+    """Migrate from Registry V1 to V2."""
+    try:
+        registry = get_registry()
+        
+        # Find V1 registry
+        from .config import state_dir
+        v1_path = state_dir() / "projects.json"
+        
+        if not v1_path.exists():
+            print(f"Registry V1 not found at {v1_path}", file=sys.stderr)
+            return 2
+        
+        if not args.confirm and not args.dry_run:
+            print("Migration requires --confirm or --dry-run", file=sys.stderr)
+            return 2
+        
+        result = registry.migrate_from_v1(v1_path, dry_run=args.dry_run)
+        
+        if args.json:
+            _json_print(result)
+        else:
+            if args.dry_run:
+                print(f"Migration Preview (dry run):")
+                print(f"  Projects to migrate: {result['preview']['projects_to_migrate']}")
+                for p in result['preview']['projects']:
+                    print(f"    {p['v1_name']} -> {p['project_id']}  (identity: {'yes' if p['identity_found'] else 'no'})")
+            else:
+                print(f"Migration completed:")
+                print(f"  Migrated: {result['migrated']}/{result['total']}")
+                if result['errors']:
+                    print(f"  Errors: {len(result['errors'])}")
+                    for e in result['errors']:
+                        print(f"    {e['project']}: {e['error']}")
+                if result.get('backup_path'):
+                    print(f"  Backup saved: {result['backup_path']}")
+        return 0
+    except (RegistryError, MigrationError, OSError, ValueError) as exc:
+        print(f"Migration failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_backup(args: argparse.Namespace) -> int:
+    """Create a backup of the registry database."""
+    try:
+        registry = get_registry()
+        
+        output_path = None
+        if args.output:
+            output_path = Path(args.output)
+        
+        backup_path = registry.backup(output_path)
+        
+        if args.json:
+            _json_print({"backup_path": str(backup_path)})
+        else:
+            print(f"Backup created: {backup_path}")
+        return 0
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_registry_recover(args: argparse.Namespace) -> int:
+    """Recover registry from backup."""
+    try:
+        if not args.confirm:
+            print("Recovery requires --confirm (will overwrite current registry)", file=sys.stderr)
+            return 2
+        
+        backup_path = Path(args.backup_path)
+        if not backup_path.exists():
+            print(f"Backup file not found: {backup_path}", file=sys.stderr)
+            return 2
+        
+        registry = get_registry()
+        
+        # Close current connections
+        registry.close()
+        
+        # Replace database file
+        import shutil
+        shutil.copy2(backup_path, registry.db_path)
+        
+        # Reinitialize
+        registry.initialize()
+        
+        print(f"Registry recovered from: {backup_path}")
+        return 0
+    except (RegistryError, OSError, ValueError) as exc:
+        print(f"Recovery failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_pap_inspect(args: argparse.Namespace) -> int:
+    """Inspect project PAP configuration."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            print(f"Error: directory not found: {root}", file=sys.stderr)
+            return 2
+        
+        config = resolve_project_configuration(root)
+        
+        if args.json:
+            result = {
+                "manifest_data": config.manifest_data,
+                "project_profile": {
+                    "name": config.project_profile.name,
+                    "root": config.project_profile.root,
+                    "languages": config.project_profile.languages,
+                    "ecosystems": config.project_profile.ecosystems,
+                    "frameworks": config.project_profile.frameworks,
+                } if config.project_profile else None,
+                "identity": config.identity.to_dict() if config.identity else None,
+                "effective_config": config.effective_config,
+                "source_priority": config.source_priority,
+                "trust_classification": config.trust_classification.value,
+                "activation_readiness": config.activation_readiness.value,
+                "validation_warnings": config.validation_warnings,
+            }
+            _json_print(result)
+        else:
+            print(f"Project: {config.project_profile.name if config.project_profile else 'Unknown'}")
+            print(f"  Trust: {config.trust_classification.value}")
+            print(f"  Readiness: {config.activation_readiness.value}")
+            print(f"  Manifest: {'Yes' if config.manifest_data else 'No (auto-detected defaults)'}")
+            if config.identity:
+                print(f"  Identity: {config.identity.project_id}")
+            for warning in config.validation_warnings:
+                print(f"  WARNING: {warning}")
+            print("\nEffective Configuration:")
+            print(f"  Mode: {config.effective_config['guardian_x']['mode']}")
+            print(f"  Execution Policy: {config.effective_config['policies']['execution']}")
+            print(f"  Supported Hosts: {', '.join(config.effective_config['hosts']['supported'])}")
+        
+        return 0
+    except (OSError, ValueError, IdentityValidationError) as exc:
+        print(f"PAP inspect failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_pap_validate(args: argparse.Namespace) -> int:
+    """Validate project PAP manifest."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            print(f"Error: directory not found: {root}", file=sys.stderr)
+            return 2
+        
+        discovery = discover_manifest(root)
+        
+        if not discovery.has_manifest:
+            print("No manifest found.")
+            if args.json:
+                _json_print({"valid": False, "reason": "no_manifest"})
+            else:
+                print("No manifest file found (GUARDIAN-X.json or .guardian-x/manifest.json)")
+            return 1
+        
+        if discovery.conflict:
+            print("Manifest conflict detected!")
+            if args.json:
+                _json_print({"valid": False, "reason": "conflict", "locations": [l.value for l in discovery.conflicting_locations]})
+            else:
+                for loc in discovery.conflicting_locations:
+                    print(f"  {loc.value}")
+            return 1
+        
+        manifest_path = discovery.manifest_path
+        result = load_and_validate_manifest(manifest_path)
+        
+        if args.json:
+            output = {
+                "valid": result.valid,
+                "schema_version": result.schema_version,
+                "errors": result.errors,
+                "warnings": result.warnings,
+                "defaults_applied": result.defaults_applied,
+            }
+            if result.data:
+                output["data"] = result.data
+            _json_print(output)
+        else:
+            if result.valid:
+                print(f"Manifest VALID (schema v{result.schema_version})")
+                if result.defaults_applied:
+                    print("  Defaults applied: Yes")
+            else:
+                print(f"Manifest INVALID")
+                for err in result.errors:
+                    print(f"  ERROR: {err}")
+            for warning in result.warnings:
+                print(f"  WARNING: {warning}")
+        
+        return 0 if result.valid else 1
+    except (OSError, ValueError, IdentityValidationError) as exc:
+        print(f"PAP validate failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_pap_status(args: argparse.Namespace) -> int:
+    """Show project PAP activation status."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            print(f"Error: directory not found: {root}", file=sys.stderr)
+            return 2
+        
+        config = resolve_project_configuration(root)
+        
+        if args.json:
+            result = {
+                "project_name": config.project_profile.name if config.project_profile else "Unknown",
+                "activation_readiness": config.activation_readiness.value,
+                "trust_classification": config.trust_classification.value,
+                "has_manifest": config.manifest_data is not None and not config.validation_warnings,
+                "validation_warnings": config.validation_warnings,
+                "trust_classification": config.trust_classification.value,
+                "activation_readiness": config.activation_readiness.value,
+                "effective_mode": config.effective_config["guardian_x"]["mode"],
+                "effective_execution_policy": config.effective_config["policies"]["execution"],
+            }
+            _json_print(result)
+        else:
+            print(f"Project: {config.project_profile.name if config.project_profile else 'Unknown'}")
+            print(f"  Activation Readiness: {config.activation_readiness.value}")
+            print(f"  Trust Classification: {config.trust_classification.value}")
+            print(f"  Effective Mode: {config.effective_config['guardian_x']['mode']}")
+            print(f"  Execution Policy: {config.effective_config['policies']['execution']}")
+            for warning in config.validation_warnings:
+                print(f"  WARNING: {warning}")
+        
+        return 0
+    except (OSError, ValueError, IdentityValidationError) as exc:
+        print(f"PAP status failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_pap_schema(args: argparse.Namespace) -> int:
+    """Print the GX-PAP manifest JSON schema."""
+    try:
+        from .pap.manifest_schema import MANIFEST_SCHEMA_V1
+        _json_print(MANIFEST_SCHEMA_V1)
+        return 0
+    except (OSError, ValueError) as exc:
+        print(f"PAP schema failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_discover(args: argparse.Namespace) -> int:
+    """Discover projects in configured roots or specified paths."""
+    try:
+        config = DiscoveryConfig()
+        
+        if args.root:
+            # Use specified root(s)
+            roots = [Path(r) for r in args.root]
+            projects = discover_root(roots[0]) if len(roots) == 1 else discover_projects(roots=roots)
+        else:
+            # Use configured roots
+            if args.full:
+                projects = discover_projects()
+            else:
+                # Show configured roots
+                config_obj = DiscoveryConfig()
+                if args.json:
+                    _json_print({
+                        "roots": [
+                            {
+                                "name": r.name,
+                                "path": str(r.path),
+                                "enabled": r.enabled,
+                                "max_depth": r.max_depth,
+                            }
+                            for r in config_obj.get_enabled_roots()
+                        ]
+                    })
+                else:
+                    print("Discovery Roots:")
+                    for r in config_obj.get_enabled_roots():
+                        status = "enabled" if r.enabled else "disabled"
+                        print(f"  {r.name}: {r.path} ({status}, max_depth={r.max_depth})")
+                return 0
+        
+        if args.json:
+            _json_print({
+                "projects": [
+                    {
+                        "project_id": str(p.project_id),
+                        "candidate_id": str(p.candidate.candidate_id),
+                        "root_path": str(p.candidate.root_path),
+                        "project_name": p.candidate.project_name,
+                        "languages": p.candidate.languages,
+                        "frameworks": p.candidate.frameworks,
+                        "confidence": p.candidate.confidence,
+                        "is_git_repo": p.candidate.is_git_repo,
+                        "has_identity": p.candidate.has_identity,
+                        "has_manifest": p.candidate.has_manifest,
+                        "activation_status": p.activation_status.value,
+                        "trust_classification": p.project_config.trust_classification.value,
+                        "activation_readiness": p.project_config.activation_readiness.value,
+                    }
+                    for p in projects
+                ]
+            })
+        else:
+            print(f"Discovered {len(projects)} project(s):")
+            for p in projects:
+                status = p.activation_status.value
+                print(f"  {p.candidate.project_name} ({p.candidate.root_path})")
+                print(f"    ID: {p.project_id}")
+                print(f"    Languages: {', '.join(p.candidate.languages) or 'none'}")
+                print(f"    Frameworks: {', '.join(p.candidate.frameworks) or 'none'}")
+                print(f"    Confidence: {p.candidate.confidence:.2f}")
+                print(f"    Git: {'yes' if p.candidate.is_git_repo else 'no'}")
+                print(f"    Identity: {'yes' if p.candidate.has_identity else 'no'}")
+                print(f"    Manifest: {'yes' if p.candidate.has_manifest else 'no'}")
+                print(f"    Status: {status}")
+                print(f"    Trust: {p.project_config.trust_classification.value}")
+                print(f"    Readiness: {p.project_config.activation_readiness.value}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Discovery failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_discover_root(args: argparse.Namespace) -> int:
+    """Add or manage discovery roots."""
+    try:
+        config_obj = DiscoveryConfig()
+        
+        if args.discover_root_action == "add":
+            root = config_obj.add_root(
+                Path(args.path),
+                name=args.name,
+                max_depth=args.max_depth,
+                exclusions=args.exclusions if args.exclusions else [],
+            )
+            print(f"Added discovery root: {root.name} -> {root.path}")
+            return 0
+        
+        elif args.discover_root_action == "remove":
+            if config_obj.remove_root(Path(args.path)):
+                print(f"Removed discovery root: {args.path}")
+            else:
+                print(f"Root not found: {args.path}", file=sys.stderr)
+                return 1
+            return 0
+        
+        elif args.discover_root_action == "list":
+            if args.json:
+                _json_print({
+                    "roots": [
+                        {
+                            "name": r.name,
+                            "path": str(r.path),
+                            "enabled": r.enabled,
+                            "max_depth": r.max_depth,
+                            "exclusions": r.exclusions,
+                        }
+                        for r in config_obj.roots
+                    ]
+                })
+            else:
+                print("Discovery Roots:")
+                for r in config_obj.roots:
+                    status = "enabled" if r.enabled else "disabled"
+                    print(f"  {r.name}: {r.path} ({status}, max_depth={r.max_depth})")
+            return 0
+        
+        return 0
+    except (OSError, ValueError) as exc:
+        print(f"Root management failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_activate(args: argparse.Namespace) -> int:
+    """Activate a project (run discovery and activation lifecycle)."""
+    try:
+        # For now, this is equivalent to discover + process
+        # In future, this could run activation lifecycle steps
+        if args.path:
+            projects = discover_root(Path(args.path))
+        else:
+            projects = discover_projects()
+        
+        if args.json:
+            _json_print({
+                "activated": len(projects),
+                "projects": [
+                    {
+                        "project_id": str(p.project_id),
+                        "project_name": p.candidate.project_name,
+                        "activation_status": p.activation_status.value,
+                        "trust": p.project_config.trust_classification.value,
+                        "readiness": p.project_config.activation_readiness.value,
+                    }
+                    for p in projects
+                ]
+            })
+        else:
+            print(f"Activated {len(projects)} project(s):")
+            for p in projects:
+                print(f"  {p.candidate.project_name} ({p.project_id}) - {p.activation_status.value}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Activation failed: {exc}", file=sys.stderr)
+        return 2
 
 
 def _requires_email_approval() -> bool:
@@ -412,6 +1183,130 @@ def cmd_skills(args: argparse.Namespace) -> int:
         return 1 if any(not item.get("valid") for item in results) else 0
     except (OSError, ValueError) as exc:
         print(f"Skill operation failed: {exc}", file=sys.stderr); return 2
+
+
+def cmd_identity(args: argparse.Namespace) -> int:
+    """Manage project identity (.guardian-x/identity.json)."""
+    try:
+        root = _resolve_project(args)
+        if not root.is_dir():
+            print(f"Error: directory not found: {root}", file=sys.stderr)
+            return 2
+        
+        action = args.identity_action
+        
+        if action == "create":
+            if not args.confirm:
+                # Check if identity already exists
+                identity_file = root / ".guardian-x" / "identity.json"
+                if identity_file.exists():
+                    print(f"Identity already exists at {identity_file}. Use --confirm to overwrite.", file=sys.stderr)
+                    return 2
+            identity = create_identity(
+                root,
+                project_name=args.name,
+                description=args.description or "",
+                created_by=args.created_by,
+                project_id=args.project_id,
+                confirm=args.confirm,
+            )
+            print(f"Created project identity:")
+            print(f"  project_id: {identity.project_id}")
+            print(f"  project_name: {identity.project_name}")
+            print(f"  created_at: {identity.created_at}")
+            print(f"  identity_hash: {identity.identity_hash}")
+            print(f"  location: {root / '.guardian-x' / 'identity.json'}")
+            return 0
+        
+        elif action == "show":
+            try:
+                identity = read_identity(root)
+                if args.json:
+                    _json_print(identity.to_dict())
+                else:
+                    print(f"Project Identity:")
+                    print(f"  schema_version: {identity.schema_version}")
+                    print(f"  project_id: {identity.project_id}")
+                    print(f"  project_name: {identity.project_name}")
+                    print(f"  description: {identity.description or '(none)'}")
+                    print(f"  created_at: {identity.created_at}")
+                    print(f"  created_by: {identity.created_by}")
+                    print(f"  ogx_version: {identity.ogx_version}")
+                    print(f"  identity_hash: {identity.identity_hash}")
+                    print(f"  hash_valid: {identity.verify_hash()}")
+                    print(f"  location: {root / '.guardian-x' / 'identity.json'}")
+                return 0
+            except IdentityMissingError as e:
+                print(f"Identity not found: {e}", file=sys.stderr)
+                return 2
+            except IdentityCorruptedError as e:
+                print(f"Identity corrupted: {e}", file=sys.stderr)
+                if e.details:
+                    print(f"  Details: {e.details}", file=sys.stderr)
+                return 2
+            except IdentityValidationError as e:
+                print(f"Identity validation failed: {e}", file=sys.stderr)
+                return 2
+        
+        elif action == "validate":
+            result = validate_identity_file(root)
+            if args.json:
+                # Convert ProjectIdentity to dict if present
+                if result["identity"]:
+                    result = {**result, "identity": result["identity"].to_dict()}
+                _json_print(result)
+            else:
+                if result["valid"]:
+                    print(f"Identity is VALID")
+                    ident = result["identity"]
+                    print(f"  project_id: {ident.project_id}")
+                    print(f"  project_name: {ident.project_name}")
+                    print(f"  hash_valid: {ident.verify_hash()}")
+                else:
+                    print(f"Identity is INVALID")
+                    for err in result["errors"]:
+                        print(f"  ERROR: {err}")
+                for warn in result["warnings"]:
+                    print(f"  WARNING: {warn}")
+            return 0 if result["valid"] else 1
+        
+        elif action == "recover":
+            if not args.confirm:
+                print("Recovery requires explicit --confirm. This may create a new identity if recovery evidence is insufficient.", file=sys.stderr)
+                return 2
+            # For now, simple recovery without registry/manifest integration
+            # (registry integration comes in Milestone B)
+            try:
+                identity = recover_identity(root, confirm=True)
+                print(f"Recovered identity:")
+                print(f"  project_id: {identity.project_id}")
+                print(f"  project_name: {identity.project_name}")
+                print(f"  created_at: {identity.created_at}")
+                print(f"  identity_hash: {identity.identity_hash}")
+                return 0
+            except IdentityError as e:
+                print(f"Recovery failed: {e}", file=sys.stderr)
+                return 2
+        
+        elif action == "update":
+            if not args.field or not args.value:
+                print("Both --field and --value are required for update.", file=sys.stderr)
+                return 2
+            identity = update_identity_field(root, args.field, args.value, confirm=args.confirm)
+            print(f"Updated {args.field}:")
+            print(f"  project_id: {identity.project_id}")
+            print(f"  project_name: {identity.project_name}")
+            print(f"  description: {identity.description}")
+            print(f"  identity_hash: {identity.identity_hash}")
+            return 0
+        
+        else:
+            print(f"Unknown identity action: {action}", file=sys.stderr)
+            return 2
+            
+    except (ValueError, OSError, IdentityError) as exc:
+        print(f"Identity operation failed: {exc}", file=sys.stderr)
+        return 2
 
 
 def cmd_diagnose(args: argparse.Namespace) -> int:
@@ -884,6 +1779,35 @@ def build_parser() -> argparse.ArgumentParser:
             item.add_argument("--strict", action="store_true", help="Return 1 when high/critical findings exist")
         item.set_defaults(func=handler)
 
+    engines = sub.add_parser("engines", help="List or inspect capability-declared analysis engines")
+    engines_sub = engines.add_subparsers(dest="engines_action", required=True)
+    engines_list = engines_sub.add_parser("list", help="List registered engines without scanning")
+    engines_list.add_argument("--json", action="store_true", help="Print full registry JSON")
+    engines_list.set_defaults(func=cmd_engines)
+    engines_inspect = engines_sub.add_parser("inspect", help="Inspect detection and capabilities for a project")
+    engines_inspect.add_argument("path", nargs="?", default=None)
+    engines_inspect.add_argument("--project", help="Name of a registered project")
+    engines_inspect.add_argument("--engines", nargs="+", metavar="ID",
+                                 help="Engine IDs to inspect; accepts repeated or comma-separated values")
+    engines_inspect.add_argument("--json", action="store_true", help="Print full inspection JSON")
+    engines_inspect.set_defaults(func=cmd_engines)
+
+    analyze = sub.add_parser("analyze", help="Run the universal static engine pipeline; writes external reports")
+    analyze.add_argument("path", nargs="?", default=None)
+    analyze.add_argument("--project", help="Name of a registered project")
+    analyze.add_argument("--format", choices=("json", "markdown", "both"), default="both")
+    analyze.add_argument("--engines", nargs="+", metavar="ID",
+                         help="Limit to engine IDs; accepts repeated or comma-separated values")
+    analyze.add_argument("--strict", action="store_true", help="Return 1 when high/critical findings exist")
+    analyze.set_defaults(func=cmd_analyze)
+
+    android = sub.add_parser("android", help="Run the dedicated Android static engine; no build/device execution")
+    android.add_argument("path", nargs="?", default=None)
+    android.add_argument("--project", help="Name of a registered project")
+    android.add_argument("--format", choices=("json", "markdown", "both"), default="both")
+    android.add_argument("--strict", action="store_true", help="Return 1 when high/critical findings exist")
+    android.set_defaults(func=cmd_android)
+
     integrate = sub.add_parser("integrate", help="Install safe project-root AI governance and OGX control folder")
     integrate_sub = integrate.add_subparsers(dest="integration_action", required=True)
     for action, help_text in (("plan", "Preview root integration without writing"),
@@ -905,6 +1829,107 @@ def build_parser() -> argparse.ArgumentParser:
     add.set_defaults(func=cmd_projects_add)
     listing = project_sub.add_parser("list", help="List registered repositories")
     listing.set_defaults(func=cmd_projects_list)
+
+    registry = sub.add_parser("registry", help="Manage Registry V2 (projects, repositories, workspaces, hosts)")
+    registry_sub = registry.add_subparsers(dest="registry_command", required=True)
+    
+    reg_list = registry_sub.add_parser("list", help="List all projects in registry")
+    reg_list.add_argument("--json", action="store_true", help="Print full registry JSON")
+    reg_list.add_argument("--limit", type=int, default=100, help="Maximum number of results")
+    reg_list.add_argument("--offset", type=int, default=0, help="Offset for pagination")
+    reg_list.set_defaults(func=cmd_registry_list)
+    
+    reg_show = registry_sub.add_parser("show", help="Show project details from registry")
+    reg_show.add_argument("project_id", help="Project UUID")
+    reg_show.add_argument("--json", action="store_true", help="Print full project JSON")
+    reg_show.set_defaults(func=cmd_registry_show)
+    
+    reg_status = registry_sub.add_parser("status", help="Show registry status and statistics")
+    reg_status.add_argument("--json", action="store_true", help="Print status JSON")
+    reg_status.set_defaults(func=cmd_registry_status)
+    
+    reg_integrity = registry_sub.add_parser("integrity", help="Check registry database integrity")
+    reg_integrity.add_argument("--json", action="store_true", help="Print integrity check JSON")
+    reg_integrity.set_defaults(func=cmd_registry_integrity)
+    
+    reg_migrate = registry_sub.add_parser("migrate", help="Migrate from Registry V1 to V2")
+    reg_migrate.add_argument("--dry-run", action="store_true", help="Preview migration without applying")
+    reg_migrate.add_argument("--confirm", action="store_true", help="Confirm migration")
+    reg_migrate.add_argument("--json", action="store_true", help="Print migration result JSON")
+    reg_migrate.set_defaults(func=cmd_registry_migrate)
+    
+    reg_backup = registry_sub.add_parser("backup", help="Create a backup of the registry database")
+    reg_backup.add_argument("--output", help="Backup file path (default: OGX_HOME/registry/registry-backup-<timestamp>.db)")
+    reg_backup.add_argument("--json", action="store_true", help="Print backup result JSON")
+    reg_backup.set_defaults(func=cmd_registry_backup)
+    
+    reg_recover = registry_sub.add_parser("recover", help="Recover registry from backup")
+    reg_recover.add_argument("backup_path", help="Path to backup file")
+    reg_recover.add_argument("--confirm", action="store_true", help="Confirm recovery (overwrites current registry)")
+    reg_recover.set_defaults(func=cmd_registry_recover)
+    
+    pap = sub.add_parser("pap", help="GX-PAP Project Activation Protocol management")
+    pap_sub = pap.add_subparsers(dest="pap_command", required=True)
+    
+    pap_inspect = pap_sub.add_parser("inspect", help="Inspect project PAP configuration")
+    pap_inspect.add_argument("path", nargs="?", default=".", help="Project root directory")
+    pap_inspect.add_argument("--project", help="Name of a registered project")
+    pap_inspect.add_argument("--json", action="store_true", help="Print full configuration JSON")
+    pap_inspect.set_defaults(func=cmd_pap_inspect)
+    
+    pap_validate = pap_sub.add_parser("validate", help="Validate project PAP manifest")
+    pap_validate.add_argument("path", nargs="?", default=".", help="Project root directory")
+    pap_validate.add_argument("--project", help="Name of a registered project")
+    pap_validate.add_argument("--json", action="store_true", help="Print validation result JSON")
+    pap_validate.set_defaults(func=cmd_pap_validate)
+    
+    pap_status = pap_sub.add_parser("status", help="Show project PAP activation status")
+    pap_status.add_argument("path", nargs="?", default=".", help="Project root directory")
+    pap_status.add_argument("--project", help="Name of a registered project")
+    pap_status.add_argument("--json", action="store_true", help="Print status JSON")
+    pap_status.set_defaults(func=cmd_pap_status)
+    
+    pap_schema = pap_sub.add_parser("schema", help="Print the GX-PAP manifest JSON schema")
+    pap_schema.set_defaults(func=cmd_pap_schema)
+    
+    identity = sub.add_parser("identity", help="Manage project identity (.guardian-x/identity.json)")
+    identity_sub = identity.add_subparsers(dest="identity_action", required=True)
+    
+    id_create = identity_sub.add_parser("create", help="Create a new project identity")
+    id_create.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_create.add_argument("--project", help="Name of a registered project")
+    id_create.add_argument("--name", help="Project name (defaults to directory name)")
+    id_create.add_argument("--description", help="Project description")
+    id_create.add_argument("--created-by", help="Actor identity (defaults to environment)")
+    id_create.add_argument("--project-id", help="Explicit UUID v4 (for recovery)")
+    id_create.add_argument("--confirm", action="store_true", help="Overwrite existing identity")
+    id_create.set_defaults(func=cmd_identity)
+    
+    id_show = identity_sub.add_parser("show", help="Show project identity")
+    id_show.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_show.add_argument("--project", help="Name of a registered project")
+    id_show.add_argument("--json", action="store_true", help="Print full identity JSON")
+    id_show.set_defaults(func=cmd_identity)
+    
+    id_validate = identity_sub.add_parser("validate", help="Validate project identity")
+    id_validate.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_validate.add_argument("--project", help="Name of a registered project")
+    id_validate.add_argument("--json", action="store_true", help="Print validation result JSON")
+    id_validate.set_defaults(func=cmd_identity)
+    
+    id_recover = identity_sub.add_parser("recover", help="Recover corrupted/missing identity")
+    id_recover.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_recover.add_argument("--project", help="Name of a registered project")
+    id_recover.add_argument("--confirm", action="store_true", help="Confirm recovery/new identity creation")
+    id_recover.set_defaults(func=cmd_identity)
+    
+    id_update = identity_sub.add_parser("update", help="Update mutable identity field")
+    id_update.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_update.add_argument("--project", help="Name of a registered project")
+    id_update.add_argument("--field", required=True, choices=["project_name", "description"], help="Field to update")
+    id_update.add_argument("--value", required=True, help="New value")
+    id_update.add_argument("--confirm", action="store_true", help="Confirm update")
+    id_update.set_defaults(func=cmd_identity)
 
     inventory = sub.add_parser("inventory", help="Build a bounded file and technology inventory")
     inventory.add_argument("path", nargs="?")
@@ -1093,6 +2118,32 @@ def build_parser() -> argparse.ArgumentParser:
     upgrade_fetch.add_argument("--confirm", action="store_true", help="Queue an email approval before remote fetch")
     upgrade_fetch.add_argument("--requester-subject", help="External identity; defaults to OGX_ACTOR_SUBJECT")
     upgrade_fetch.set_defaults(func=cmd_guardian)
+
+    discover = sub.add_parser("discover", help="Automatically discover projects in configured roots")
+    discover.add_argument("root", nargs="*", default=None, help="Specific root path(s) to scan")
+    discover.add_argument("--full", action="store_true", help="Run full discovery across all configured roots")
+    discover.add_argument("--json", action="store_true", help="Print full discovery results JSON")
+    discover.set_defaults(func=cmd_discover)
+    
+    discover_root_cmd = sub.add_parser("discover-root", help="Manage discovery roots")
+    discover_root_sub = discover_root_cmd.add_subparsers(dest="discover_root_action", required=True)
+    dr_add = discover_root_sub.add_parser("add", help="Add a discovery root")
+    dr_add.add_argument("path", help="Root path to add")
+    dr_add.add_argument("--name", help="Root name (defaults to directory name)")
+    dr_add.add_argument("--max-depth", type=int, default=4, help="Maximum scan depth")
+    dr_add.add_argument("--exclusions", nargs="*", help="Additional exclusion patterns")
+    dr_add.set_defaults(func=cmd_discover_root)
+    dr_remove = discover_root_sub.add_parser("remove", help="Remove a discovery root")
+    dr_remove.add_argument("path", help="Root path to remove")
+    dr_remove.set_defaults(func=cmd_discover_root)
+    dr_list = discover_root_sub.add_parser("list", help="List discovery roots")
+    dr_list.add_argument("--json", action="store_true", help="Print roots JSON")
+    dr_list.set_defaults(func=cmd_discover_root)
+    
+    activate = sub.add_parser("activate", help="Automatically activate discovered projects")
+    activate.add_argument("path", nargs="?", default=None, help="Specific project path to activate")
+    activate.add_argument("--json", action="store_true", help="Print activation results JSON")
+    activate.set_defaults(func=cmd_activate)
 
     enterprise = sub.add_parser("enterprise", help="Local tenant/organization data-model preview; not a SaaS server")
     enterprise_sub = enterprise.add_subparsers(dest="enterprise_action", required=True)

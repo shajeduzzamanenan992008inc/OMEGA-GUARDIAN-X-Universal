@@ -1,6 +1,6 @@
 # Configuration and storage
 
-OGX runtime state, registry, global configuration, and reports live outside target repositories. Normal scan/detect/start operations are read-only. An explicit, separate project-root integration can create missing AI-agent instructions, Dependabot configuration, and an `OMEGA GUARDIAN X/` policy folder after the user reviews a plan and supplies `--confirm`.
+OGX runtime state, registry, global configuration, and reports live outside target repositories. Normal scan/detect/start operations are read-only. An explicit, opt-in link (`ogx integrate`, groups chosen with `--with`) can create missing AI-agent instructions and Dependabot/Renovate configuration after the user reviews a plan and supplies `--confirm`; the project policy is the shield folder's `shield.toml`.
 
 ## External state directory
 
@@ -46,7 +46,7 @@ OGX rejects symlinked global config/registry/report paths. Project registration 
 - `ogx integrate status PATH`: verify OGX-managed files using SHA-256.
 - `ogx integrate remove PATH --confirm`: remove only unchanged OGX-managed files; user-modified files are preserved.
 
-Scan limits are global in the current alpha. The project-local `OMEGA GUARDIAN X/project.toml` is currently governance metadata for supported agents; the scanner deliberately does not load untrusted project-local policy automatically. Enforced per-project scanner profiles are planned for a later release.
+Scan limits are global in the current alpha. The project-local `omega-shield/shield.toml` is restrict-only policy plus governance guidance for supported agents; the scanner deliberately does not load untrusted project-local policy automatically. Enforced per-project scanner profiles are planned for a later release.
 
 ## Private `.env` configuration
 

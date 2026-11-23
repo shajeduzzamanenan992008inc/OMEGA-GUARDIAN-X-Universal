@@ -1,0 +1,26 @@
+# OMEGA Shield - project policy (restrict-only).
+#
+# This file can only RESTRICT the shield. It never grants a capability: every file write, network call or
+# code execution still needs its own explicit confirmation (and an email approval when approvals are configured).
+# Only [security] is enforced by the engine; [governance] and [review] are guidance that AI agents and
+# reviewers are expected to follow (see devkit/agents/canonical-policy.md).
+# A pristine copy lives in guard/policies/default.toml.
+
+[security]
+allow_file_writes = false
+allow_network = false
+allow_execution = false
+
+[governance]
+default_mode = "read-only-audit"
+require_approval_for_changes = true
+require_approval_for_dependency_changes = true
+require_approval_for_production_actions = true
+allow_untrusted_code_execution = false
+allow_automatic_commit_push_deploy = false
+redact_secrets = true
+
+[review]
+require_tests_for_code_changes = true
+require_diff_review = true
+require_evidence_for_security_findings = true

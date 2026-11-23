@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OGX Plugin Manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "api_version",
+    "entrypoint",
+    "permissions"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "api_version": {
+      "type": "string"
+    },
+    "entrypoint": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "read_project",
+          "write_workspace",
+          "network",
+          "execute_tests",
+          "git_read",
+          "git_write",
+          "provider_api"
+        ]
+      }
+    },
+    "publisher": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

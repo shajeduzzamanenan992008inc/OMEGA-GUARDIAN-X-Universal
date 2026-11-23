@@ -12,31 +12,10 @@ from . import __version__
 from .config import ScanConfig, load_config
 from .detector import detect_project
 from .models import Finding, ScanReport, relative_path, utc_now
-
-SECRET_PATTERNS = [
-    ("OGX-SEC-001", "Possible hard-coded credential", re.compile(
-        r"(?i)\b(api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret[_-]?key)\b\s*[:=]\s*(['\"])([^'\"\n]{12,})\2"
-    )),
-    ("OGX-SEC-002", "Private key material", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
-]
-PLACEHOLDER_WORDS = ("changeme", "change_me", "example", "placeholder", "your_", "<", "test", "dummy", "xxxxx", "xxxx")
-TEXT_SUFFIXES = {
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".rs",
-    ".php", ".rb", ".cs", ".swift", ".c", ".h", ".cpp", ".hpp", ".json", ".toml", ".yaml",
-    ".yml", ".xml", ".ini", ".cfg", ".conf", ".env", ".properties", ".sh", ".ps1", ".bat",
-    ".sql", ".html", ".htm", ".css", ".scss", ".md", ".txt", ".lock", ".gradle", ".dockerfile", ".tf", ".dart", ".scala", ".ex", ".exs", ".lua", ".sol", ".proto", ".csproj", ".fsproj", ".vbproj",
-}
-
-
-def _is_placeholder(value: str) -> bool:
-    low = value.strip().lower()
-    if low in {"changeme", "change_me", "example", "placeholder", "test", "dummy", "password", "secret", "your_api_key"}:
-        return True
-    if low.startswith(("${", "%", "env(", "os.getenv", "your_")):
-        return True
-    if re.search(r"(?:^|[^a-z0-9])(?:change[_-]?me|example|placeholder|dummy|test)(?:$|[^a-z0-9])", low):
-        return True
-    return bool(re.fullmatch(r"x{4,}|0{8,}", low))
+from .rules import (
+    CODE_CHECKS, PLACEHOLDER_WORDS, SECRET_PATTERNS, TEXT_SUFFIXES,
+    is_placeholder as _is_placeholder, line_for as _line_for,
+)
 
 
 def _iter_files(root: Path, config: ScanConfig) -> tuple[list[Path], int, list[str]]:
@@ -73,10 +52,6 @@ def _iter_files(root: Path, config: ScanConfig) -> tuple[list[Path], int, list[s
     return files, skipped, warnings
 
 
-def _line_for(text: str, offset: int) -> int:
-    return text.count("\n", 0, offset) + 1
-
-
 def _scan_secrets(path: Path, root: Path, text: str) -> list[Finding]:
     findings: list[Finding] = []
     rel = relative_path(path, root)
@@ -103,33 +78,7 @@ def _scan_secrets(path: Path, root: Path, text: str) -> list[Finding]:
 def _scan_code_patterns(path: Path, root: Path, text: str) -> list[Finding]:
     rel = relative_path(path, root)
     findings: list[Finding] = []
-    checks = [
-        ("OGX-CODE-001", "Subprocess shell execution", re.compile(r"\bshell\s*=\s*True\b"), "medium",
-         "Shell execution can create command-injection risk when inputs are not strictly controlled.",
-         "Prefer argument arrays with shell=False; validate and constrain any unavoidable shell inputs."),
-        ("OGX-CODE-002", "TLS certificate verification disabled", re.compile(r"\bverify\s*=\s*False\b"), "high",
-         "TLS certificate verification appears to be disabled.",
-         "Enable certificate verification and use a trusted CA bundle; do not suppress TLS validation in production."),
-        ("OGX-CODE-003", "Dynamic code evaluation", re.compile(r"\b(?:eval|exec)\s*\("), "medium",
-         "Dynamic code evaluation can execute attacker-controlled input if data flow is unsafe.",
-         "Avoid eval/exec for untrusted input; use constrained parsers or explicit dispatch tables."),
-        ("OGX-CODE-004", "Potential unsafe YAML loading", re.compile(r"\byaml\.load\s*\("), "medium",
-         "yaml.load may construct arbitrary Python objects depending on loader and library version.",
-         "Use yaml.safe_load for untrusted YAML and verify the loader argument in context."),
-        ("OGX-CODE-005", "Potential unsafe deserialization", re.compile(r"\b(?:pickle\.loads?|joblib\.load|dill\.loads?)\s*\("), "high",
-         "Deserialization APIs may execute code or instantiate unsafe objects when input is untrusted.",
-         "Do not deserialize untrusted data with pickle-compatible formats; prefer safe, schema-validated formats."),
-        ("OGX-CODE-006", "Potential weak random generator", re.compile(r"\brandom\.(?:random|randint|choice)\s*\("), "low",
-         "The standard random module is not intended for security-sensitive tokens.",
-         "Use secrets or an OS-backed cryptographic random source for tokens, reset links and security identifiers."),
-        ("OGX-CODE-007", "Potential permissive CORS configuration", re.compile(r"(?i)(?:allow_origins|Access-Control-Allow-Origin)[^\n]{0,100}(?:\*|\[\s*['\"]\*['\"]\s*\])"), "medium",
-         "A wildcard CORS origin may expose authenticated browser endpoints to untrusted origins.",
-         "Use an explicit origin allowlist and review credential settings and endpoint sensitivity."),
-        ("OGX-CODE-008", "Potential disabled authentication or authorization", re.compile(r"(?i)(?:auth(?:entication|orization)?|csrf|verify[_-]?token)\s*[:=]\s*(?:false|0|none)\b"), "medium",
-         "A security-related control appears disabled; context is required to determine impact.",
-         "Review the setting and keep authentication, authorization and CSRF checks enabled for protected operations."),
-    ]
-    for rule_id, title, pattern, severity, message, recommendation in checks:
+    for rule_id, title, pattern, severity, message, recommendation in CODE_CHECKS:
         for match in pattern.finditer(text):
             findings.append(Finding(rule_id, title, severity, "secure-coding", message, rel,
                                     _line_for(text, match.start()), match.group(0), recommendation, "low"))

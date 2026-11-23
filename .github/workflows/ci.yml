@@ -26,4 +26,6 @@ jobs:
           persist-credentials: false
 
       - name: Validate project profile and run configured checks
-        run: python3 .github/scripts/run_project_checks.py
+        env:
+          OMEGA_PROFILE: _dev/project-profile.json
+        run: python3 devkit/health/run_project_checks.py

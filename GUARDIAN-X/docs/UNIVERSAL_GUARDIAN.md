@@ -65,8 +65,8 @@ OGX's Git operations work with standard Git remotes, including generic/self-host
 
 ## Verification checklist
 
-1. `python -m compileall -q src tests`
-2. `PYTHONPATH=src python -m unittest discover -s tests -v`
+1. `python -m compileall -q core _dev/tests`
+2. `PYTHONPATH=core python -m unittest discover -s _dev/tests -v`
 3. `ogx guardian audit <fixture-project>` and review both external reports.
 4. `ogx guardian repair-plan <fixture-project>` then verify preview makes no changes.
 5. Run one confirmed repair on a disposable fixture; verify the external before-image and rescan.

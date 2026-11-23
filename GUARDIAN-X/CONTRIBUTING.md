@@ -8,8 +8,8 @@ Python 3.11+ is required. The runtime has no third-party dependencies.
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = "src"
-python -m compileall -q src tests
-python -m unittest discover -s tests -v
+python -m compileall -q core _dev/tests
+python -m unittest discover -s _dev/tests -v
 ```
 
 ## Engineering rules

@@ -1,0 +1,21 @@
+{
+  "name": "ogx-legacy-modernization",
+  "version": "0.4.0a1",
+  "description": "Map legacy behavior and prepare incremental migration plans with compatibility tests.",
+  "entrypoint": "SKILL.md",
+  "permissions": [
+    "read_project"
+  ],
+  "execution": "declarative",
+  "publisher": "OMEGA GUARDIAN X",
+  "trust": "official-source-bundle",
+  "inputs": [
+    "project_profile",
+    "evidence"
+  ],
+  "outputs": [
+    "findings",
+    "recommendations",
+    "verification_plan"
+  ]
+}

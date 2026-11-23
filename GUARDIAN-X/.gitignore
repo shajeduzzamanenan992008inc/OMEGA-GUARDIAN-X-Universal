@@ -1,15 +1,201 @@
-.venv/
+# ==============================================================================
+# .gitignore FOR PYTHON PROJECTS (CLI / Web / API / Data / Packaging)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Byte-compiled / Optimized / DLL Files
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.ogx/
-dist/
-build/
-*.egg-info/
+*$py.class
+*.so
+*.pyd
+*.dll
+*.dylib
 
-# Private environment files and credentials
+# ------------------------------------------------------------------------------
+# 2. Virtual Environments & Package Managers
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.conda/
+conda-meta/
+pip-wheel-metadata/
+pip-delete-this-directory.txt
+.uv/
+.pdm-python
+.pdm-build/
+.rye/
+__pypackages__/
+
+# ------------------------------------------------------------------------------
+# 3. Distribution, Build & Packaging Artifacts
+# ------------------------------------------------------------------------------
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.whl
+MANIFEST
+*.spec
+
+# ------------------------------------------------------------------------------
+# 4. Testing, Coverage, Linting & Type Checking Caches
+# ------------------------------------------------------------------------------
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.nyc_output/
+test-results/
+junit.xml
+
+# Linters, formatters & type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pyright/
+.pyre/
+.flake8
+
+# ------------------------------------------------------------------------------
+# 5. Environment Variables, Secrets, Keys & Certificates (CRITICAL SECURITY)
+# ------------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
+!.env.template
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+*credentials*.json
+*secret*.json
+*secrets*.json
+service-account*.json
+firebase-adminsdk*.json
+
+# ------------------------------------------------------------------------------
+# 6. Databases, Runtime Data, Logs & Temp Files
+# ------------------------------------------------------------------------------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+instance/
+*.log
+logs/
+*.tmp
+*.temp
+.tmp/
+tests/.tmp/
+*.bak
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+
+# ------------------------------------------------------------------------------
+# 7. Jupyter Notebook & Data Science / ML Artifacts
+# ------------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+profile_default/
+ipython_config.py
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.parquet
+*.feather
+
+# ------------------------------------------------------------------------------
+# 8. Frontend / Node / Static Bundlers (if project has UI/React/Tailwind)
+# ------------------------------------------------------------------------------
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+.pnp.*
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# ------------------------------------------------------------------------------
+# 9. IDEs & Editors (Keep shared team configs if needed)
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------------------------
+# 10. Operating System Files (Windows / macOS / Linux)
+# ------------------------------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

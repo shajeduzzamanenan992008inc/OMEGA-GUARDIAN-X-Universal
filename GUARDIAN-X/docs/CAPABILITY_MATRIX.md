@@ -1,16 +1,25 @@
-# OGX 0.5.0a1 Capability Matrix
+# OGX 0.7.1a1 Capability Matrix
 
-Status: **Implemented** means code exists and has local automated tests; **Heuristic** means rule-based and incomplete; **Adapter foundation** means an interface/integration exists but does not provide the full lifecycle; **Planned** means not shipped in this release.
+Status: **Implemented** means code exists and has local automated tests; **Heuristic** means rule-based and incomplete; **Adapter foundation** means an interface/integration exists but does not provide the full lifecycle; **Not configured** means the implementation exists but the required local tool/SDK, manifest or test source is absent; **Unsupported** means no implementation for that operation; **Planned** means not shipped in this release. Engine reports use the exact status vocabulary `supported`, `partial`, `not_configured`, `unsupported` and `failed`.
 
 | Capability | Status | Notes |
 |---|---|---|
 | Local project registry | Implemented | External OGX state |
+| Universal engine contract and registry | Implemented | 51 unique engines: 1 Android + 50 declarative technology engines; capability-declared, failure-isolated, static-read-only |
+| Engine inspection CLI | Implemented | `ogx engines list` and `ogx engines inspect`; JSON output supported |
+| Unified findings | Implemented | Stable IDs, engine provenance, severity/confidence, verification state, deduplication, secret redaction |
+| Spec-driven language/technology engines | Implemented, heuristic | Detection plus bounded structural checks; not compiler-grade or full AST per language |
+| Android static analysis | Implemented, heuristic | Manifest, Gradle, resources, sources, tests and APK/AAB ZIP metadata; no binary manifest decoding or signature verification |
+| Android build/test discovery | Implemented | Reports candidate commands/tools and test files; never executes Gradle, tests or adb |
+| Android build/test execution | Not configured | Requires Android SDK + Gradle in an approved isolated environment; not attempted here |
+| Device/emulator operations | Not attempted/not configured | No adb, emulator or device is available; no APK install or instrumentation test was run |
+| APK/AAB signature verification | Unsupported | ZIP metadata and v1 signature-entry presence only; no cryptographic verification |
 | Bounded filesystem inventory | Implemented | Symlinks skipped; configured limits |
-| Language/ecosystem detection | Heuristic | Broad manifest/extension indicators |
+| Language/ecosystem detection | Heuristic | Broad manifest/extension indicators, including manifest-only technologies |
 | Framework detection | Heuristic | Selected manifest dependency indicators |
 | Secrets scanning | Heuristic | Redacted pattern matches; not exhaustive |
 | Secure coding rules | Heuristic | Regex patterns; no full taint/data-flow engine |
-| Dependency declaration review | Heuristic | Python requirements and npm basic checks |
+| Dependency declaration review | Heuristic | Declared manifests across the technology specs; no resolution or transitive graph |
 | CycloneDX manifest inventory | Implemented, best-effort | Selected ecosystems; no transitive resolution |
 | License/SPDX inventory | Implemented, best-effort | Not legal advice; not complete dependency licensing |
 | OSV.dev exact-version advisory query | Implemented, opt-in | Network requires both `--online` and `--confirm-network`; manifest-declared versions only; candidate matches require review |
@@ -51,4 +60,6 @@ Status: **Implemented** means code exists and has local automated tests; **Heuri
 
 ## Compatibility interpretation
 
-A language can be detected while deep static analysis, dependency resolution or build/test execution is unavailable. Use `ogx compatibility PATH` to view toolchain presence and capability gaps. Detection is not certification.
+A language can be detected while deep static analysis, dependency resolution or build/test execution is unavailable. Use `ogx compatibility PATH` to view toolchain presence, `ogx engines inspect PATH` for per-engine capability states, and `ogx android PATH` for the Android-specific view. Detection is not certification, and `not_configured` is not a pass.
+
+No Android build, test, device, emulator or APK-signature verification is claimed in this release. The environment used for validation had a JDK but no Android SDK, Gradle, adb, sdkmanager or emulator, so those capabilities remain unverified.

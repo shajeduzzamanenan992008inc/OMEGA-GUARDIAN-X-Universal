@@ -4,11 +4,17 @@ on:
   push:
     paths:
       - ".github/**"
+      - "devkit/agents/**"
+      - "devkit/health/**"
+      - "link/templates/**"
       - "SECURITY.md"
       - "CODEOWNERS"
   pull_request:
     paths:
       - ".github/**"
+      - "devkit/agents/**"
+      - "devkit/health/**"
+      - "link/templates/**"
       - "SECURITY.md"
       - "CODEOWNERS"
   workflow_dispatch:
@@ -34,4 +40,4 @@ jobs:
           persist-credentials: false
 
       - name: Validate GitHub configuration
-        run: ruby .github/scripts/validate_github_config.rb
+        run: ruby _dev/tools/validate_config.rb

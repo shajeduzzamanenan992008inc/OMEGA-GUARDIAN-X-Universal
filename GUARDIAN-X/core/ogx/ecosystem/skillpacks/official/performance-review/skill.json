@@ -1,0 +1,21 @@
+{
+  "name": "ogx-performance-review",
+  "version": "0.4.0a1",
+  "description": "Identify measurable performance risks and propose safe profiling/benchmark plans.",
+  "entrypoint": "SKILL.md",
+  "permissions": [
+    "read_project"
+  ],
+  "execution": "declarative",
+  "publisher": "OMEGA GUARDIAN X",
+  "trust": "official-source-bundle",
+  "inputs": [
+    "project_profile",
+    "evidence"
+  ],
+  "outputs": [
+    "findings",
+    "recommendations",
+    "verification_plan"
+  ]
+}

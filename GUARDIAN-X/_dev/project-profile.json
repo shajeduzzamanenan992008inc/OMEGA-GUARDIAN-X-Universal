@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "omega-shield",
+    "description": "Plug-and-play shield & dev core (stdlib-only Python).",
+    "type": "library",
+    "criticality": "high",
+    "languages": [
+      "python"
+    ],
+    "platforms": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "deploymentTargets": []
+  },
+  "governance": {
+    "dataClassification": [
+      "unclassified"
+    ],
+    "securityBaseline": "strict",
+    "accessibilityRequired": false,
+    "changeApprovalRequiredForProduction": true
+  },
+  "ci": {
+    "enabled": true,
+    "noChecksPolicy": "fail",
+    "checks": [
+      {
+        "name": "compile",
+        "command": [
+          "python3",
+          "-m",
+          "compileall",
+          "-q",
+          "core",
+          "_dev/tests"
+        ],
+        "timeoutSeconds": 300
+      },
+      {
+        "name": "unit-tests",
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "_dev/tests"
+        ],
+        "env": {
+          "PYTHONPATH": "core",
+          "PYTHONDONTWRITEBYTECODE": "1"
+        },
+        "timeoutSeconds": 900
+      }
+    ]
+  }
+}

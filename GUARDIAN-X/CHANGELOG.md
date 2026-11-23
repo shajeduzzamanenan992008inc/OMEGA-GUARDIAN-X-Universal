@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0a1 - plug-and-play shield & dev core
+
+Restructure (no change to scanner/report behaviour, rule ids or the `ogx` package/CLI names):
+- One drop-in folder `omega-shield/` with a single entry point `init.py` (stdlib-only, cwd/`PYTHONPATH`-independent, per-host external state).
+- `core/ogx` regrouped into capability packages `kernel`, `connectors`, `analysis`, `shield`, `devkit`, `governance`, `ecosystem`, `runtime`, `cli` with an enforced one-way dependency rule (`_dev/tests/test_architecture.py`) and a standard-library-only test.
+- `ogx.kernel.paths` is the single source for names and exclusion sets (previously three diverging lists); the shield folder is always excluded from scans, detection, inventory and sandbox snapshots (fixes false "SQL" detection caused by the vendored `schema.sql`).
+- `cli.py` (1,391 lines) split into `ogx/cli/{app,common}.py` and `ogx/cli/commands/*.py`.
+- `integrate` is now an opt-in linker: nothing is created without `--with <groups>` (`copilot`, `agents`, `editors`, `deps`) and `--confirm`; the 30-file scatter and the `OMEGA GUARDIAN X/` (spaces) control folder are gone; manifest moved to `omega-shield/link-manifest.json`; approval payloads for `integration.apply` carry `groups`.
+- Project policy moved to `omega-shield/shield.toml`; single `VERSION` file; `guardian evolve` recognises the new source layout.
+- Kit assets moved to `devkit/` and `link/templates/`; `run_project_checks.py` resolves the host root itself and supports per-check `env`; build outputs, duplicate PowerShell scripts and wheels removed (`scripts/scan_many.py` added).
+
+New (not part of the original engine):
+- `ogx.runtime` request guard: hygiene limits, request-smuggling shape checks, attack signatures, IP policy, token-bucket rate limiting, API-key/role/IP access control, security headers; WSGI and ASGI middleware; experimental reverse proxy for applications in any language.
+- `ogx.runtime.observe`: structured redacted JSON logging, de-duplicating error tracker (SQLite), debug utilities.
+- CLI: `ogx guard check|test|keygen|proxy`, `ogx observe logs|errors|snapshot`; `init.py` verbs `scan audit detect doctor hooks guard proxy logs errors snapshot link status ogx`.
+- Git hooks: `init.py hooks install|remove [--hook pre-commit|pre-push] --confirm` (never overwrites foreign hooks, honours `core.hooksPath`).
+
 ## 0.7.1a1
 
 - Added private external-state `.env` configuration for mail approval and Git-hosting credentials.
@@ -7,6 +24,13 @@
 - Added safe dotenv parsing: known-key allowlist, no shell execution/expansion, OS environment precedence, symlink rejection, 128 KB bound, and file permission checks.
 - Added `.env.example` and Git ignore protection; actual credentials are not included in release archives.
 - Added tests for parser safety, external-only loading, permission warnings and configuration validation.
+- Added an additive universal engine contract, registry and capability vocabulary with 51 unique engines: 1 Android engine + 50 spec-driven technology engines.
+- Added a bounded read-only workspace, unified findings with stable IDs/provenance/verification state/deduplication, and a pipeline that writes reports only under external `OGX_HOME` state.
+- Added `ogx engines list`, `ogx engines inspect`, `ogx analyze` and `ogx android`, with JSON/Markdown output and optional engine selection.
+- Added Android static checks for manifests, Gradle, R8/shrinking, resources, sources, tests, Lint XML and APK/AAB ZIP metadata; build/test/device operations remain discovery-only and report `not_configured`/`not_attempted`.
+- Extracted shared scanner rules into `ogx.rules`; existing scan output and CLI behavior remain compatible.
+- Added 40 tests for engines, Android analysis, pipeline and CLI; full suite is 134 passed with 9 skipped.
+- Updated the package readme reference to the existing `README-Guardian-X.md` without recreating the user-removed `README.md`.
 
 # Changelog
 

@@ -2,8 +2,9 @@
 
 **Product:** OMEGA GUARDIAN X (OGX)  
 **Edition target:** Universal / Professional / Business / Enterprise / Self-hosted / SaaS  
-**Current release:** 0.5.0a1 Guardian alpha  
-**Status:** Foundation implementation; enterprise capabilities are planned and gated by evidence.
+**Current release:** 0.7.1a1 Guardian alpha with universal engine layer
+
+**Status:** Foundation implementation; universal static analysis is implemented, Android build/test execution is not configured, and enterprise capabilities are planned and gated by evidence.
 
 ## 1. Product vision
 
@@ -61,9 +62,17 @@ Support versioned language/framework/package-manager adapters. Default adapters 
 
 Future remediation may produce patch proposals. Applying patches requires explicit approval, backups/rollback, and successful regression validation. No autonomous production deployment.
 
-### FR-09 — Enterprise administration
+### FR-09 - Enterprise administration
 
 Future enterprise control plane must provide tenant isolation, role-based access, SSO, policy packs, signed updates, audit export, retention controls, and self-hosted deployment.
+
+### FR-10 - Universal engine contract
+
+Provide a stable, versioned engine contract with explicit capability states (`supported`, `partial`, `not_configured`, `unsupported`, `failed`), failure isolation, execution/network assertions, bounded resource use, and engine provenance on every finding. A registry must expose engine health and support additive, spec-driven language/technology engines without changing existing scanner behavior.
+
+### FR-11 - Android intelligence
+
+Provide an equal-priority Android engine that statically inspects manifests, Gradle configuration, resources, sources, tests and APK/AAB metadata. It must report unavailable SDK/Gradle/adb/emulator capabilities as `not_configured` or `not_attempted`, never simulate build, test, device or signature-verification results. Executing builds, tests, adb or emulators requires a separately approved isolated environment.
 
 ## 5. Non-functional requirements
 
@@ -87,9 +96,13 @@ One core engine should support different delivery models without duplicating sca
 
 Entitlements and licensing must be enforced by signed, auditable policy—not by unsafe obfuscation or hidden data collection. Final pricing, EULA, trademark and distribution terms require business and legal review.
 
-## Current 0.5.0a1 Guardian increment
+## Current 0.7.1a1 universal engine increment
 
-The current Guardian increment provides consolidated repository audits, common JSON/TOML/XML syntax checks, maintenance prioritization, one narrow allowlisted safe repair, optional read-only Git remote comparison, confirmed ref-only fetch, Dependabot/Renovate configuration and an OGX self-audit proposal. It does not provide generic AI source patch generation, automatic dependency merges, unattended deployment or autonomous engine self-rewriting. See `docs/UNIVERSAL_GUARDIAN.md` for the operational contract.
+The 0.7.1a1 increment adds an additive universal static-analysis layer: an engine contract and registry, 51 engines (1 Android + 50 spec-driven technology engines), bounded read-only workspace indexing, unified findings with stable IDs/provenance/deduplication, build/test discovery, and the `engines list`, `engines inspect`, `analyze` and `android` CLI commands. Reports are written only under external `OGX_HOME` state. Android build/test/device operations are not configured in this environment and are not simulated. The pre-existing scanner and Guardian workflows remain intact. See `docs/UNIVERSAL_AUDIT.md`, `docs/ANDROID_ENGINE.md` and `docs/LANGUAGE_SUPPORT_MATRIX.md`.
+
+## Previous 0.5.0a1 Guardian increment
+
+The 0.5.0a1 Guardian increment provides consolidated repository audits, common JSON/TOML/XML syntax checks, maintenance prioritization, one narrow allowlisted safe repair, optional read-only Git remote comparison, confirmed ref-only fetch, Dependabot/Renovate configuration and an OGX self-audit proposal. It does not provide generic AI source patch generation, automatic dependency merges, unattended deployment or autonomous engine self-rewriting. See `docs/UNIVERSAL_GUARDIAN.md` for the operational contract.
 
 ## 7. Acceptance criteria for 0.4.0a1 foundation
 
@@ -106,6 +119,17 @@ The current Guardian increment provides consolidated repository audits, common J
 - Supports optional exact-version OSV requests only after explicit network opt-in.
 - Passes the included unit tests and builds/install tests an isolated wheel.
 
+## 7a. Acceptance criteria for 0.7.1a1 universal layer
+
+- Registers 51 unique engines with stable IDs, versions, categories and explicit capability states.
+- Reports `execution_performed: false` and `network_access: false` for every scan.
+- Never executes project scripts, builds, tests, package managers, adb, emulators or devices.
+- Produces unified findings with provenance, verification status, deduplication and redacted evidence.
+- Writes universal and Android reports only to external OGX state; refuses symlinked report destinations.
+- Detects Android statically and reports build/test as `not_configured` and device operations as `not_attempted` when the toolchain is absent.
+- Keeps the existing CLI commands and scanner behavior working; the full local suite passes.
+- Builds a wheel containing the engine layer and installs into an isolated target for a CLI smoke test.
+
 ## 8. Explicit exclusions from 0.4.0a1
 
-Full dependency resolution, comprehensive CVE coverage, complete SAST/DAST/data-flow, malware detection, dynamic runtime debugger, proven root cause, autonomous code repair, production-grade sandbox certification, full Git provider lifecycle, live AI agent execution, plugin runtime, hosted dashboard/API, production SaaS, SSO/RBAC enforcement, commercial billing/licensing server and compliance certification are not implemented. AI-agent instruction files are not an OS-enforced control.
+Full dependency resolution, comprehensive CVE coverage, complete SAST/DAST/data-flow, malware detection, dynamic runtime debugger, proven root cause, autonomous code repair, production-grade sandbox certification, full Git provider lifecycle, live AI agent execution, plugin runtime, hosted dashboard/API, production SaaS, SSO/RBAC enforcement, commercial billing/licensing server and compliance certification are not implemented. AI-agent instruction files are not an OS-enforced control. Android build/test execution, emulator/device validation, binary-manifest decoding and cryptographic APK/AAB signature verification are also not implemented or not configured; they are not claimed by static analysis.

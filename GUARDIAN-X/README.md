@@ -1,235 +1,58 @@
-# OMEGA GUARDIAN X (OGX) — Universal Software Intelligence
+# OMEGA Shield (OGX) - universal plug-and-play shield & dev core
 
-**Release:** `0.7.1a1` (Guardian alpha — universal maintenance and governed upgrade workflows)  
-**Runtime:** Python 3.11+ · zero mandatory third-party runtime dependencies  
-**Deployment intent:** Local-first, self-hosted, cloud/hybrid-ready architecture  
-**Default safety mode:** Read-only analysis; explicit approval for writes and remote operations
+Drop **one folder** into the root of any project. **One entry point** (`init.py`). **Python 3.11+, standard library only** - no packages to install.
 
-> OGX is a modular repository and software-project intelligence foundation. It is not yet a completed enterprise SaaS, a certified security product, a full static-analysis suite, or a universal runtime debugger. This Guardian alpha adds consolidated multi-signal maintenance audits, common structured-manifest syntax checks, allowlisted safe repair, opt-in Git remote checking/fetching and cross-platform dependency-bot configuration. See the capability matrix before relying on any check.
-
-## Product design principles
-
-- One external OGX engine can register and inspect many local repositories and connect to multiple Git hosting services.
-- OGX's runtime, state, logs, caches and reports remain outside target repositories.
-- Optional root integration creates only separate policy/control files, preserves existing files and records SHA-256 ownership for safe removal.
-- Project code is not executed during normal scans.
-- Remote clone, branch creation, push and Pull/Merge Request creation require explicit command-line confirmation.
-- Sandbox commands use a pre-pulled immutable image digest, no network, a read-only container root, dropped Linux capabilities, process/memory/CPU limits and a temporary project snapshot. There is no unsandboxed fallback.
-- AI agents and skills are adapters/extensions, not trusted authorities. Their output is untrusted and all operations are governed by OGX policy/approval checks.
-- Unknown technologies are never rejected solely because they are unknown: OGX provides generic inventory and reports capability gaps.
-
-## Install from source
-
-Windows PowerShell:
-
-```powershell
-cd D:\Tools\OMEGA-GUARDIAN-X
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --no-build-isolation -e .
-ogx --help
+```
+python omega-shield/init.py status
 ```
 
-Linux/macOS:
+| Pillar | Folder | You get |
+|---|---|---|
+| **Protect** | `guard/` | commit/push/CI gate, read-only security scanner, **runtime request guard** (hygiene, attack signatures, rate limiting, IP policy, API-key/role access control) as WSGI/ASGI middleware or a reverse proxy for apps in any language |
+| **Develop** | `devkit/` | profile-driven health checks, **central structured logging**, **error tracking**, debug utilities, AI-agent kit (11 agents, 20 instructions, 6 prompts, 6 skills), runbooks |
+| **Connect** | `link/` | *opt-in* files for Copilot, agent guides, editor rules, Dependabot/Renovate - nothing is created unless you choose it |
 
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --no-build-isolation -e .
-ogx --help
+## Quick start
+```
+python omega-shield/init.py scan --strict            # read-only scan; exit 1 on high/critical
+python omega-shield/init.py audit                    # health + security + maintenance report
+python omega-shield/init.py hooks install --confirm  # git pre-commit gate
+python omega-shield/init.py guard test "/s?q=<script>alert(1)</script>"      # try the request guard (exit 1 = blocked)
+python omega-shield/init.py proxy --upstream http://127.0.0.1:3000           # guard any app (experimental)
+python omega-shield/init.py logs                     # central log events
+python omega-shield/init.py link plan                # what could be linked (changes nothing)
+```
+Embed in a Python app without touching `sys.path` permanently:
+```python
+import runpy
+shield = runpy.run_path("omega-shield/init.py")["load_runtime"]()
+app = shield.ShieldMiddleware(app)       # WSGI;  shield.ShieldASGI(app) for ASGI
 ```
 
-The released wheel can be installed into a dedicated OGX environment. Do not install OGX dependencies into a target project unless that is an intentional project decision.
+## Zero-conflict contract
+1. Location is found from `__file__` - cwd, `PYTHONPATH` and the host layout do not matter.
+2. Nothing is written inside the host unless a command says `--confirm` (git hooks, `link`).
+3. No `.pyc`, no permanent `sys.path` change; only the `omega.*` loggers are configured.
+4. Reports, logs and error data live **outside** the project in a per-host state folder (`init.py status` shows it).
+5. The shield folder is excluded from its own scans; names contain no spaces.
 
-## Private environment and secrets
-
-Keep OGX mail credentials, approval identities and optional Git-hosting tokens in one private environment file. OGX stores it outside scanned repositories by default:
-
-```powershell
-ogx env init
-ogx env path
-# Open the displayed path in Notepad, fill in required values, then:
-ogx env check
+## Layout
 ```
-
-The template documents Brevo/SMTP, approval mailboxes and GitHub/GitLab/Bitbucket/Gitea/Forgejo settings. Real `.env` files are ignored by Git; only the placeholder `.env.example` is included in this release. Environment variables already present in the OS take precedence. OGX never loads a target repository's `.env` automatically. See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
-
-## Core workflows
-
-```powershell
-# Initialize global OGX state outside target projects
-ogx init
-
-# Discover stack and compatibility
-ogx detect "D:\FTP\NexHaat"
-ogx compatibility "D:\FTP\NexHaat"
-
-# Main bounded, read-only scan (writes reports only to OGX external state)
-ogx scan "D:\FTP\NexHaat" --format both
-
-# Inventory, architecture, SBOM and license inventory
-ogx inventory "D:\FTP\NexHaat"
-ogx architecture "D:\FTP\NexHaat" --format mermaid
-ogx sbom "D:\FTP\NexHaat"
-ogx licenses "D:\FTP\NexHaat"
-
-# Optional online dependency advisory lookup (sends exact package names/versions only)
-ogx osv-audit "D:\FTP\NexHaat" --online --confirm-network
-
-# Diagnose existing logs and generate a no-edit remediation plan
-ogx diagnose .\logs\app.log
-ogx debug "D:\FTP\NexHaat" --logs .\logs\app.log
-ogx impact "D:\FTP\NexHaat" --file src\services\cart.py
-ogx test-plan "D:\FTP\NexHaat" --logs .\logs\app.log
-ogx fix-plan "D:\FTP\NexHaat"
-
-# Detect installed AI agents and optional toolchains
-ogx agents list
-ogx skills list
-ogx doctor
-
-# Inspect Git metadata and a public/private remote (uses local Git credential helpers)
-ogx repo inspect "D:\FTP\NexHaat"
-ogx repo remote https://github.com/owner/repository.git
-
-# Clone requires explicit confirmation and a non-existing destination
-ogx repo clone https://github.com/owner/repository.git D:\Repos\repository --confirm
-
-# Project-root control integration: plan first, then explicitly approve
-ogx integrate plan "D:\FTP\NexHaat"
-ogx integrate apply "D:\FTP\NexHaat" --confirm
-ogx integrate status "D:\FTP\NexHaat"
-
-# Git write operations require explicit confirmation; main/master pushes are refused
-ogx repo branch-create "D:\FTP\NexHaat" feature/ogx-review --confirm
-ogx repo push "D:\FTP\NexHaat" feature/ogx-review --confirm
-
-# Git hosting API calls: store tokens in environment variables, never project files
-$env:OGX_GITHUB_TOKEN = "<your-token>"
-ogx platform repo github https://github.com/owner/repository
-ogx platform pr github https://github.com/owner/repository --title "OGX review" --head feature/ogx-review --base main --confirm
+omega-shield/
+├─ init.py  shield.toml  VERSION  README(.bn).md  LICENSE  SECURITY.md  CHANGELOG.md  AGENTS.md ...
+├─ core/ogx/   kernel · connectors · analysis · shield · devkit · governance · ecosystem · runtime · cli   (vendored, stdlib-only)
+├─ guard/      gates/  policies/  runtime/
+├─ devkit/     health/  observability/  agents/  runbooks/
+├─ link/       templates/
+├─ docs/  schemas/  scripts/
+└─ _dev/  .github/     tests, tools, release material, this repo's CI (not in the drop-in)
 ```
+Details: `docs/ARCHITECTURE.md` - integration: `docs/INTEGRATION.md` - runtime guard: `docs/RUNTIME_GUARD.md` - migration from 0.7: `docs/MIGRATION.md`.
 
-Supported API credential variables:
+## Honest limits
+* The scanner is heuristic (static rules, no data-flow analysis, no DAST). A clean scan is not proof of safety.
+* The runtime guard is defence in depth, **not a managed WAF**; multipart bodies are not inspected; the proxy is experimental (HTTP/1.1, no TLS/WebSocket/chunked requests).
+* Governance RBAC identities are not authenticated (local prototype).
+* Verified on Linux with Python 3.12. Windows and Python 3.11 are expected to work (no OS-specific code was added) but were not exercised here.
 
-- GitHub: `OGX_GITHUB_TOKEN` (repository metadata and draft PR creation)
-- GitLab: `OGX_GITLAB_TOKEN` (project metadata and draft merge request creation); self-managed instances may set `OGX_GITLAB_API_BASE`
-- Bitbucket: `OGX_BITBUCKET_TOKEN` (Bearer access token, or `username:app_password` for Basic auth)
-- Gitea/Forgejo: `OGX_GITEA_TOKEN` / `OGX_FORGEJO_TOKEN`; custom host API base is derived from the remote URL
-- GitHub Enterprise may set `OGX_GITHUB_API_BASE`
-
-Tokens are read from the process environment and are not persisted by OGX. Use least-privilege scopes and your platform's credential manager. `repo remote` and generic Git operations work without the platform API token when Git authentication is configured separately.
-
-## Run project commands in the disposable sandbox
-
-First inspect local sandbox capability:
-
-```powershell
-ogx sandbox plan
-```
-
-OGX never pulls an image automatically. Pull, review and pin an approved image digest yourself, then:
-
-```powershell
-ogx sandbox run "D:\FTP\NexHaat" --image "python@sha256:<64-hex-digest>" --confirm -- python -m pytest
-```
-
-The sandbox copies the project to a temporary directory, excludes `.git`, common generated/dependency directories and common `.env`/credential files, disables network access, and deletes the snapshot after the run. It does not mount the Docker socket or host home directory. It is a restricted container—not a formally verified VM—and the Docker daemon/host remain in the trusted computing base. Build tools and dependencies must already be available inside the pinned image or offline project snapshot.
-
-## Universal Guardian: project protection, maintenance and upgrades
-
-```powershell
-# Consolidated stack/security/architecture/maintenance audit (reports remain outside the project)
-ogx guardian audit "D:\Repos\MyProject"
-
-# Maintenance priorities and deterministic repair preview
-ogx guardian maintain "D:\Repos\MyProject"
-ogx guardian repair-plan "D:\Repos\MyProject"
-
-# Apply only supported safe fixes after reviewing the preview (creates external backup)
-ogx guardian repair "D:\Repos\MyProject" --confirm
-
-# Local Git remote check; add --online for read-only branch-head comparison
-ogx guardian upgrade-check "D:\Repos\MyProject"
-ogx guardian upgrade-check "D:\Repos\MyProject" --online
-
-# Fetch remote-tracking refs only; no merge/rebase/checkout
-ogx guardian upgrade-fetch "D:\Repos\MyProject" --remote origin --confirm
-
-# Audit OGX itself and produce a governed self-evolution proposal
-ogx guardian evolve .
-```
-
-Root integration now previews/creates a technology-aware Dependabot file and a Renovate configuration. Dependabot covers GitHub; Renovate is the cross-platform option for GitHub, GitLab, Bitbucket, Azure DevOps, Gitea and Forgejo, subject to each platform's supported features and hosted/self-hosted bot setup. Configuration files alone do not install or schedule the bot. See [`docs/UNIVERSAL_GUARDIAN.md`](docs/UNIVERSAL_GUARDIAN.md) for exact behavior, limitations and safe workflows.
-
-Guardian audits do not execute target project code. `repair` currently applies only an allowlisted `.env` ignore fix when it is safe; it does not generate arbitrary source-code patches. Project checks still require an explicitly approved restricted sandbox command. Upgrade checks never merge or deploy, and dependency bots should create reviewable PRs/MRs rather than auto-merging unreviewed changes.
-
-## Skills and agent adapters
-
-```powershell
-# List built-in declarative skills
-ogx skills list
-
-# Validate an external skill without executing it
-ogx skills validate "D:\Skills\my-skill"
-
-# Detect supported agent CLIs and declared adapters
-ogx agents list
-```
-
-Built-in skill packs are under `src/ogx/skillpacks/official/`. Skills are declarative guidance/manifests in this release; the registry validates manifests but does not execute third-party skill code. Agent discovery reports runtime presence only. IDE/CLI/MCP adapters still require the respective supported product interfaces and user-granted permissions.
-
-## Enterprise data-model preview
-
-The release contains a tenant-oriented SQLite schema and local data-store prototype for organizations, memberships, projects, licenses, usage events, API credential hashes and audit events. It is **not** an authentication server or production SaaS service. Production deployment still requires PostgreSQL migrations, real SSO/OIDC, API authorization middleware, tenant isolation tests, encryption/key management, rate limits, backups, observability and an independent security review.
-
-```powershell
-ogx enterprise init
-ogx enterprise org-create --slug acme --name "Acme Inc" --owner-subject "your-idp-subject"
-```
-
-The `external_subject` is an identity-provider subject identifier for the local prototype; this command does not authenticate the owner. Never expose this local SQLite store as a public multi-tenant API.
-
-## Safety model
-
-- Scans, inventory, architecture analysis, SBOM generation, license inventory and log diagnostics are read-only with respect to the target repository.
-- Reports and registry data are external to the target repository.
-- `integrate apply` writes only missing OGX-owned control files after explicit `--confirm`; existing files are preserved.
-- `integrate remove` removes only unchanged files whose hashes match the ownership manifest.
-- Clone, branch creation, push and PR/MR creation require explicit confirmation.
-- The scanner uses heuristics. A finding is not automatically a confirmed vulnerability; reports include evidence, severity and confidence.
-- `ogx debug` correlates supported traceback frames, log patterns and static findings into root-cause hypotheses; `ogx impact` estimates import-based dependents; `ogx test-plan` writes a regression-test proposal. These do not prove causation or automatically fix code.
-- Optional OSV.dev advisory lookup is available for exact manifest-declared dependency versions. It is an advisory candidate check, not a resolved lockfile audit or exploitability proof. It requires both `--online` and `--confirm-network`; source code is not transmitted. See the OSV API documentation at https://google.github.io/osv.dev/api/.
-- Comprehensive SAST/DAST, full data-flow analysis, exploit verification, legal license opinion or production certification is not included.
-
-## Development and tests
-
-```bash
-python -m compileall -q src tests
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m pip wheel --no-deps --no-build-isolation . -w dist
-```
-
-The test suite uses temporary repositories and fake local state. Network-facing Git-hosting API calls, real Docker execution, Windows installation, large-repository performance and three reference-repository compatibility have not been certified by this build.
-
-## Documentation
-
-- `docs/UNIVERSAL_ENTERPRISE_MASTER_BLUEPRINT.md` — authoritative target architecture and delivery gates
-- `docs/CAPABILITY_MATRIX.md` — implemented versus planned capabilities
-- `docs/SECURITY_MODEL.md` — threats, trust boundaries and guardrails
-- `docs/ADAPTERS.md` — Git, agent, skill and tool adapter contracts
-- `docs/ENTERPRISE_READINESS.md` — commercial and SaaS readiness gaps
-- `docs/PROJECT_ROOT_INTEGRATION.md` — safe per-project integration
-- `docs/AI_AGENT_GUIDE.md` — agent policy and workflows
-- `docs/TEST_RESULTS.md` — current validation evidence
-
-## Commercialization note
-
-This source bundle is not yet a legally cleared or certified commercial release. Before selling it, complete trademark and ownership review, third-party license inventory, an attorney-reviewed EULA/privacy policy/DPA, signed release pipeline, independent penetration test, vulnerability-response process, support/SLA policy, export/privacy review and tax/payment compliance for the selling jurisdiction. Do not copy code from repositories with restrictive licenses into OGX without a separate license grant.
-
-
-## Enterprise governance (0.7.0a1)
-
-The current alpha adds the six-pillar enterprise operating model (Leadership, Direction, Management, Administration, Steering and Operations), organization-scoped objectives/initiatives/risks/decisions/changes/incidents/service metrics, role-governed membership management, audited status transitions and email-gated write approvals. See [`docs/ENTERPRISE_GOVERNANCE_AND_APPROVALS.md`](docs/ENTERPRISE_GOVERNANCE_AND_APPROVALS.md) for the full setup and security model.
-
-High-impact project writes are email approval-gated by default. Configure Brevo transactional email or a standard SMTP-compatible mail relay, then use `ogx governance list`, `ogx governance approve` and `ogx governance execute`. Read-only project audits remain available without email configuration. The local-alpha identity subject values are not a substitute for OIDC/SAML authentication; production SaaS still requires an authenticated identity service, managed database, KMS, tenant isolation verification, backup/restore and security review.
+Develop & test: `PYTHONPATH=core python -m unittest discover -s _dev/tests` - build the lean drop-in zip: `python _dev/tools/make_dist.py`.
