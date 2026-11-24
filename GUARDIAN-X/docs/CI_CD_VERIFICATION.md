@@ -60,5 +60,5 @@ python _dev/tools/sync_core_from_src.py --check
 python -m pip wheel . --no-deps --no-build-isolation -w <dir>
 ```
 
-Results: 409 passed / 12 skipped; 245 drop-in tests OK (9 skipped); compile and
+Results: 465 passed / 15 skipped at HEAD `e7e7686`; 245 drop-in tests OK (9 skipped); compile and
 sync checks passed; wheel built and installed in a fresh venv.
