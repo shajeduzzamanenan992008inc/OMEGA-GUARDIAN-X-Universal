@@ -56,6 +56,13 @@ the provider's `OGX_*_API_BASE` variable or by passing `api_base` to the adapter
 Path components (for example `/api/v1`) are permitted so self-hosted Gitea and
 GitLab work.
 
+## Local hosts
+
+The host lifecycle layer uses local read-only hosts. `local_filesystem` and
+`local_git` adapters use the local OS permissions and the repository on disk;
+they do not authenticate against any remote host and do not issue network
+requests. There is no host credential variable.
+
 ## Failure handling
 
 | Condition | Normalized error | Retried |

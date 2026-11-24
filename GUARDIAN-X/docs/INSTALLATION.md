@@ -68,6 +68,58 @@ ogx scan .        # read-only scan; reports in the OGX state directory
 state is global, reports are external, and scanning never writes into the
 project.
 
+## Read-only local filesystem and Git hosts (0.8.0a1)
+
+The implemented local hosts are read-only. They connect, read, report health,
+recover and run through the CLI, but they do **not** support writes,
+execution, branch operations or any remote/network access.
+
+### Register a read-only local filesystem host
+
+```bash
+ogx init
+guardian-x/host/register/filesystem --identifier my-fs --root GUARDIAN-X
+ogx host connect my-fs
+guardian-x/host/health my-fs
+guardian-x/host/sessions
+guardian-x/host/status my-fs --json
+```
+
+### Register a read-only local Git host
+
+```bash
+ogx init
+guardian-x/host/register/git --identifier my-git --root GUARDIAN-X
+guardian-x/host/connect my-git
+guardian-x/host/health my-git
+guardian-x/host/branch-info my-git my-git/main
+guardian-x/host/file my-git VERSION
+guardian-x/host/sessions
+guardian-x/host/status my-git --json
+```
+
+### Recovery and disconnect
+
+```bash
+guardian-x/host/recover my-git --attempts 3
+guardian-x/host/disconnect my-git
+guardian-x/host/sessions   # process-local; empty after disconnect/restart
+```
+
+`guardian-x/host/sessions` and `guardian-x/host/status` reflect the true
+process-local state: after disconnect, the session is gone, but the coarse
+persisted status will show `disconnected` until the next registration.
+
+`guardian-x host register` reads the root once; the session root may not be
+empty, and an invalid root is rejected at registration time.
+
+### Capability truth
+
+`guardian-x host status <id> --json` includes `effective_capabilities`.
+When the session is connected/degraded they reflect the adapter; otherwise every
+declared capability is `unavailable`. Reads from the host never write, execute,
+push or branch.
+
 ## Project identity
 
 ```bash

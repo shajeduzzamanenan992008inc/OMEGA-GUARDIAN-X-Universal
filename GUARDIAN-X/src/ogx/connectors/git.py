@@ -22,6 +22,15 @@ def _run(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT_SECOND
                           timeout=timeout, check=False, shell=False)
 
 
+def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
+    """Public bounded Git runner used by host adapters.
+
+    Arguments are passed as an array with ``shell=False``; callers must validate
+    any untrusted revision or path component before adding it.
+    """
+    return _run(args, cwd=cwd, timeout=timeout)
+
+
 def detect_provider(remote: str) -> str:
     value = remote.lower().strip()
     if "github.com" in value:

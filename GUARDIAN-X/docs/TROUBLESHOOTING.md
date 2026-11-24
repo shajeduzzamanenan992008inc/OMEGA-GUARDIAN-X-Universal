@@ -49,11 +49,10 @@ Symlinks not supported on this platform
 
 These are platform gates for symlink and POSIX file-mode checks, not failures.
 They must remain skips; do not delete the tests or force them to pass. On Linux
-and macOS the same tests are expected to run.
+and macOS the same tests are expected to run.## Provider says `requires_auth`
 
-## Provider says `requires_auth`
-
-The adapter is implemented but the environment has no credential. Set the
+The adapter is implemented but the environment has no credential.
+ Set the
 provider-specific variable, for example:
 
 ```bash
@@ -72,9 +71,16 @@ adding a token. See `docs/PROVIDER_ARCHITECTURE.md`.
 
 ## `ogx host list` prints “No hosts registered.”
 
-Expected on a fresh state directory. No host is declared operational because no
-host contract suite exists. Registering a host does not make it verified; see
+Expected on a fresh state directory. Local filesystem and Git hosts are
+**operational (read-only)**: they connect, read, report health, recover and run
+through the CLI, but they do not support writes, execution, branch operations
+or remote/network access. Registering a host does not make it verified; see
 `docs/HOST_ARCHITECTURE.md`.
+
+Registration requires `--identifier` for local hosts and rejects an empty root.
+Sessions are process-local; after disconnect or a restart the session is gone,
+and the coarse persisted status will show `disconnected` until the next
+registration.
 
 ## `identity create` refuses to overwrite
 

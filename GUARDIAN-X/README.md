@@ -61,7 +61,55 @@ Develop & test (canonical source): `python -m pytest -q` - drop-in and architect
 
 CI lives only in the repository root `.github/workflows/` (the workflow uses `working-directory: GUARDIAN-X`). The nested `GUARDIAN-X/.github/` directory is reusable kit content and contains no active workflows.
 
-## Universal provider engine (Milestone H)
+## Universal host lifecycle & engineering (Milestone H — in progress)
+
+`src/ogx/hosts/` adds a synchronous host **session lifecycle** (`HostSessionManager`)
+and two **operational local hosts**: a scoped read-only **local filesystem host**
+and a **local Git host**. Both are read-only; they do not perform writes, remote
+operations, push/branch operations, or execution. Health/recovery, CLI host
+commands, and documentation are implemented.
+
+```bash
+# register, connect, health, recover, sessions, inspect — local hosts only so far
+git clone https://github.com/acme/demo local-git && cd local-git
+ogx host register local-git <id> --kind git   # registers, starts at registered
+ogx host connect <id>                          # process-local connect, guarded adapter
+ogx host health <id>                           # computed from known router directories
+ogx host recover <id>                          # best-effort reconcile of a live session
+git clone /path/to/project local-fs && cd local-fs
+ogx host register local-fs <id> --kind filesystem --root /path/to/project
+ogx host connect <id>
+ogx host sessions                               # list live (non-terminal) sessions
+ogx host status                                 # enhanced status w/ live state
+git status                                      # host-shield harness below
+```
+
+Capability matrix was rewritten to **truthful read-only values**; registration
+starts hosts at `registered` (not `active`); new statuses
+`REGISTERED`/`DISCONNECTED`/`FAILED` were added to `src/ogx/hosts/models.py`. The
+local hosts are `OPERATIONAL` for their implemented read-only surface (list, read,
+metadata, file, tree, branches, tags, commits, history, discover, connect,
+disconnect, health, recover, shutdown, dispose, lookup).
+
+Truths that hold despite the `OPERATIONAL` label: these local hosts are read-only;
+`effective_capabilities()` returns the adapter's reported values only while
+connected/degraded, otherwise every declared capability is `unavailable`; and
+registration does **not** mark a host `active`.
+
+Local verification: 68 host-lifecycle/adapter/CLI/contract tests passed (3 skips),
+within a full canonical suite of 465 passed / 15 skipped, and a 245-test drop-in
+suite, and a clean wheel install plus drop-in smoke.
+
+Docs: `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
+`docs/LOCAL_GIT_HOST.md`, `docs/HOST_HEALTH_AND_RECOVERY.md`,
+`docs/HOST_LIFECYCLE_CI_VALIDATION.md`, `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`,
+`docs/HOST_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`.
+
+**Only local hosts are implemented.** Remote SSH, hosted Git hosts (GitHub/GitLab/
+Bitbucket/etc.), Docker and Kubernetes hosts are **not** implemented — only a short
+roadmap is recorded.
+
+## Universal provider engine (Milestone G)
 
 `src/ogx/platform/` is a provider-neutral engine for Git hosting, workspaces,
 CI/CD, project management, package registries and cloud platforms. It is

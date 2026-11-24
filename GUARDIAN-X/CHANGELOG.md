@@ -2,6 +2,26 @@
 
 ## Unreleased — release-readiness fixes (0.8.0a1)
 
+Host lifecycle & host engineering (v2)
+
+- Added `src/ogx/hosts/lifecycle.py`: 12-state synchronous `HostSessionManager` with
+  `HostSessionConfig`, `HostHealth`, live `HostSession`/`HostAdapter` contract,
+  locked operations, process-local session manager, and audit logging.
+- Added `src/ogx/hosts/adapters/filesystem_runtime.py`: scoped read-only local-filesystem
+  host with strict containment, symlink-escape rejection and bounded reads/listings.
+- Added `src/ogx/hosts/adapters/git_runtime.py`: read-only local-Git host using safe
+  `subprocess.run` with bounded timeout and no remote/write commands.
+- Added `src/ogx/hosts/adapters/runtime_factory.py`.
+- Rewrote `src/ogx/hosts/capabilities.py` to truthful read-only values and added
+  `REGISTERED`/`DISCONNECTED`/`FAILED` to `src/ogx/hosts/models.py`.
+- `src/ogx/hosts/registry.py`: registration starts hosts at `registered`, not `active`.
+- `src/ogx/cli.py`: `host connect/disconnect/health/recover/sessions/inspect/register`
+  plus enhanced `host status` (live-state filtering), and registration now requires
+  `--identifier` for local hosts. Fixed the missing `uuid4` import.
+- Added tests: `tests/test_host_lifecycle.py` (13), `test_host_filesystem_runtime.py`
+  (16/3 skipped), `test_host_git_runtime.py` (21), `test_host_cli_lifecycle.py` (6),
+  `tests/test_host_contract.py` (12). Report: `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`.
+
 - Restored the PAP identity/manifest validators that commit `dbf8874` replaced with documentation-only constants while `identity.py` and `manifest_engine.py` still imported them. `import ogx` and the canonical test suite now collect again (340 passed).
 - Removed the accidental 125-file `core/ogx/core/ogx/` nested duplicate and replaced the destructive `sync_core_from_src.py` generator with a read-only version/structure checker. It no longer copies or deletes feature code and supports `--check` and `--dry-run`.
 - Architecture tests now validate both `src/ogx` and `core/ogx`: required packages/modules, no nested tree, no module/package collisions, import-time cycles, stdlib-only imports, version agreement, packaging declarations and clean imports of both packages. The `package == "core": continue` skip that hid the duplicate is gone.

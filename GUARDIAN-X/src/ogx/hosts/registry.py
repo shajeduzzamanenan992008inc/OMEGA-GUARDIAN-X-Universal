@@ -73,7 +73,7 @@ class HostRegistry:
             display_name=display_name or host_type.value,
             normalized_identifier=normalized_identifier,
             capabilities=capabilities,
-            status=HostStatus.ACTIVE,
+            status=HostStatus.REGISTERED,
             metadata=metadata or {},
         )
         
