@@ -68,3 +68,25 @@ A pattern match is a lead, not proof. Findings must record rule, severity, confi
 Vault/KMS-backed credentials, OAuth device or refresh flows, webhook signature
 verification, per-tenant provider quotas, and live production credential
 rotation.
+
+## Release-review hardening (2026-11-24)
+
+- **Resolved-address enforcement.** The default transport resolves the provider
+  host once, validates every IPv4/IPv6 answer, and dials the validated address.
+  Private, loopback, link-local, reserved, multicast and unspecified answers are
+  refused unless the operator explicitly opts in (loopback only for a literal
+  loopback hostname). Mixed public/private answers fail closed. The original
+  hostname is still used for SNI and certificate verification. This closes the
+  hostname-only validation / connect-time resolution gap (DNS rebinding).
+- **Redirects** are refused at the transport layer, including for custom request
+  functions.
+- **No proxy support.** `HTTP_PROXY`/`HTTPS_PROXY` are ignored by the pinned
+  transport, deliberately avoiding an unvalidated resolution path. Enterprise
+  proxies require a dedicated reviewed integration.
+- **Tamper-evident audit.** Platform audit records are hash-chained
+  (`seq`, `prev_hash`, `sha256`). `ogx platform audit` verifies the chain and
+  exits non-zero on corruption.
+
+Limits: the chain is not signing, not WORM storage and not externally anchored;
+rewriting the entire file or truncating the newest records is not prevented.
+There is still no address allowlist, certificate pinning or credential vault.

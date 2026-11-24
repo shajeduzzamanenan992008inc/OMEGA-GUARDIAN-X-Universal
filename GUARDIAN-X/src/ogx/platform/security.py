@@ -16,6 +16,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import socket
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 from urllib.parse import urlsplit
@@ -245,3 +246,99 @@ def basic_auth_value(username: str, secret: str) -> str:
 
     raw = f"{username}:{secret}".encode("utf-8")
     return "Basic " + base64.b64encode(raw).decode("ascii")
+
+
+def is_loopback_hostname(host: str) -> bool:
+    """True only for a *literal* loopback host name, never for a public name."""
+
+    normalized = str(host).strip("[]").lower()
+    if normalized in LOOPBACK_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def address_is_forbidden(address: str) -> bool:
+    """Classify an IP literal that must not receive provider credentials."""
+
+    try:
+        parsed = ipaddress.ip_address(str(address).strip("[]"))
+    except ValueError:
+        return True
+    return any(
+        (
+            parsed.is_private,
+            parsed.is_loopback,
+            parsed.is_link_local,
+            parsed.is_reserved,
+            parsed.is_multicast,
+            parsed.is_unspecified,
+        )
+    )
+
+
+def resolve_pinned_address(
+    host: str,
+    port: int | None = None,
+    *,
+    allow_loopback: bool = False,
+    allow_private: bool = False,
+) -> str:
+    """Resolve ``host`` and return one validated address to connect to.
+
+    All answers are validated before any connection is made. A hostname whose
+    answers include a prohibited address is rejected even when other answers
+    are public (fail closed), so a rebinding DNS response cannot select a
+    private destination. Callers must connect to the returned address while
+    keeping the original hostname for TLS SNI/verification.
+    """
+
+    normalized = str(host).strip("[]")
+    literal = None
+    try:
+        literal = ipaddress.ip_address(normalized)
+    except ValueError:
+        literal = None
+
+    if literal is not None:
+        addresses: tuple[str, ...] = (str(literal),)
+    else:
+        try:
+            infos = socket.getaddrinfo(normalized, port, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            raise InvalidEndpointError(
+                "Provider host could not be resolved; refusing to connect.",
+                detail=type(exc).__name__,
+            ) from exc
+        addresses = tuple(dict.fromkeys(str(info[4][0]) for info in infos))
+
+    if not addresses:
+        raise InvalidEndpointError(
+            "Provider host resolved to no addresses; refusing to connect."
+        )
+
+    # Loopback is permitted only when the caller configured a literal loopback
+    # host. A public-looking name that resolves to 127.0.0.1 stays forbidden.
+    loopback_allowed = bool(allow_loopback and is_loopback_hostname(normalized))
+    for address in addresses:
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise InvalidEndpointError(
+                "Provider host resolved to an unparseable address; refusing to connect.",
+                detail="unparseable-address",
+            ) from exc
+        if parsed.is_loopback:
+            if loopback_allowed:
+                continue
+            raise InvalidEndpointError(
+                "Provider host resolved to a loopback address; refusing to connect."
+            )
+        if not allow_private and address_is_forbidden(address):
+            raise InvalidEndpointError(
+                "Provider host resolved to a private or special-purpose address; "
+                "set OGX_ALLOW_PRIVATE_PROVIDER_ENDPOINTS=1 to opt in explicitly."
+            )
+    return addresses[0]

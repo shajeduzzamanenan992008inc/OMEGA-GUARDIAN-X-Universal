@@ -81,14 +81,15 @@ class HostRegistry:
         with self._registry.transaction() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO hosts (
-                    host_id, host_type, provider, host_identifier, status,
-                    metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    host_id, host_type, provider, host_identifier, display_name,
+                    status, metadata, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(host.host_id),
                 host.host_type.value,
                 host.provider.value,
                 host.normalized_identifier,
+                host.display_name,
                 host.status.value,
                 json.dumps(host.metadata),
                 host.created_at.isoformat(),
@@ -295,10 +296,9 @@ class HostRegistry:
         pid = UUID(project_id) if isinstance(project_id, str) else project_id
         hid = UUID(host_id) if isinstance(host_id, str) else host_id
         
-        # Verify both exist
-        from ..registry import get_registry
-        registry = get_registry()
-        registry.get_project(pid)
+        # Verify both exist against this registry instance (which may be a
+        # temporary/tenant database, not the process-wide default).
+        self._registry.get_project(pid)
         self.get_host(hid)
         
         with self._registry.transaction() as conn:
@@ -341,9 +341,6 @@ class HostRegistry:
         hid = UUID(host_id) if isinstance(host_id, str) else host_id
         conn = self._registry._get_connection()
         
-        from ..registry import get_registry
-        registry = get_registry()
-        
         rows = conn.execute("""
             SELECT p.* FROM projects p
             JOIN project_hosts ph ON p.project_id = ph.project_id
@@ -353,7 +350,7 @@ class HostRegistry:
         projects = []
         for row in rows:
             try:
-                projects.append(registry._row_to_project(row))
+                projects.append(self._registry._row_to_project(row))
             except Exception:
                 pass
         
@@ -577,11 +574,12 @@ class HostRegistry:
         caps = CAPABILITY_MATRIX.get_all_capabilities(row["host_type"])
         supported = [cap for cap, status in caps.items() if status == "supported"]
         
+        keys = row.keys() if hasattr(row, "keys") else []
         return {
             "host_id": row["host_id"],
             "host_type": row["host_type"],
             "provider": row["provider"],
-            "display_name": row["display_name"],
+            "display_name": row["display_name"] if "display_name" in keys else "",
             "normalized_identifier": row["host_identifier"],
             "status": row["status"],
             "metadata": json.loads(row["metadata"]) if row["metadata"] else {},

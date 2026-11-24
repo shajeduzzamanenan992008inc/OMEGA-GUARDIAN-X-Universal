@@ -91,8 +91,22 @@ class RegistryV2:
         conn = self._get_connection()
         with conn:
             self._create_schema(conn)
+            self._ensure_host_columns(conn)
             self._ensure_schema_version(conn)
         self._initialized = True
+
+    @staticmethod
+    def _ensure_host_columns(conn: sqlite3.Connection) -> None:
+        """Add columns introduced after the initial hosts table (idempotent)."""
+
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(hosts)")}
+        additions = {
+            "display_name": "TEXT DEFAULT ''",
+            "last_seen_at": "TEXT DEFAULT ''",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE hosts ADD COLUMN {name} {declaration}")
     
     def _create_schema(self, conn: sqlite3.Connection) -> None:
         """Create database tables and indexes."""
@@ -156,6 +170,8 @@ class RegistryV2:
                 host_type TEXT NOT NULL,
                 provider TEXT DEFAULT '',
                 host_identifier TEXT DEFAULT '',
+                display_name TEXT DEFAULT '',
+                last_seen_at TEXT DEFAULT '',
                 status TEXT DEFAULT 'unknown',
                 metadata TEXT DEFAULT '{}',
                 created_at TEXT NOT NULL,

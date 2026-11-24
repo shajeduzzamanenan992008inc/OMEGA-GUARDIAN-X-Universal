@@ -10,12 +10,13 @@ The network call is injectable so unit tests update no real endpoints.
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
+import ssl
 import time
 from functools import partial
 import urllib.error
-import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
@@ -28,7 +29,7 @@ from .errors import (
     TransportError,
     error_for_status,
 )
-from .security import redact, validate_request_url
+from .security import redact, resolve_pinned_address, validate_request_url
 
 RequestFn = Callable[[str, str, Mapping[str, str], bytes | None, float], "HttpResponse"]
 
@@ -63,6 +64,34 @@ class HttpResponse:
         return self.body.decode("utf-8", "replace")
 
 
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection that dials a pre-validated address.
+
+    The original hostname is kept for the ``Host`` header, SNI and certificate
+    verification, so pinning the address does not weaken TLS identity checks.
+    """
+
+    def __init__(self, host: str, port: int, *, pinned_address: str, timeout: float) -> None:
+        context = ssl.create_default_context()
+        super().__init__(host, port, timeout=timeout, context=context)
+        self._pinned_address = pinned_address
+
+    def connect(self) -> None:  # noqa: D102
+        sock = socket.create_connection((self._pinned_address, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Plain-HTTP connection that dials a pre-validated address."""
+
+    def __init__(self, host: str, port: int, *, pinned_address: str, timeout: float) -> None:
+        super().__init__(host, port, timeout=timeout)
+        self._pinned_address = pinned_address
+
+    def connect(self) -> None:  # noqa: D102
+        self.sock = socket.create_connection((self._pinned_address, self.port), self.timeout)
+
+
 def _urllib_request(
     method: str,
     url: str,
@@ -71,35 +100,53 @@ def _urllib_request(
     timeout: float,
     *,
     max_bytes: int | None = None,
+    allow_loopback_http: bool = False,
+    allow_private_network: bool = False,
 ) -> HttpResponse:
-    request = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
-    opener = urllib.request.build_opener(_NoRedirect)
-    # Read at most one byte past the configured limit. Reading the whole body
-    # first would let a hostile endpoint exhaust memory before the size check.
+    """Perform one request against a validated, pinned destination.
+
+    DNS is resolved once, every answer is validated, and the socket is opened
+    to that exact address. This removes the validation/connection TOCTOU window
+    that a second, independent DNS lookup would reintroduce.
+    """
+
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        raise ProviderError("Provider request URL must be an absolute http(s) URL.")
+    host = parsed.hostname
+    port = parsed.port or (443 if scheme == "https" else 80)
+    address = resolve_pinned_address(
+        host,
+        port,
+        allow_loopback=bool(allow_loopback_http or scheme == "https"),
+        allow_private=allow_private_network,
+    )
+
+    # At most one byte past the limit, so a hostile body cannot exhaust memory
+    # before the size check in HttpTransport.send.
     limit = max_bytes + 1 if max_bytes is not None else None
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    connection: http.client.HTTPConnection
+    if scheme == "https":
+        connection = _PinnedHTTPSConnection(host, port, pinned_address=address, timeout=timeout)
+    else:
+        connection = _PinnedHTTPConnection(host, port, pinned_address=address, timeout=timeout)
     try:
-        with opener.open(request, timeout=timeout) as response:
-            return HttpResponse(
-                status=int(response.status),
-                headers=dict(response.headers),
-                body=response.read(limit) if limit is not None else response.read(),
-                url=response.geturl(),
-            )
-    except urllib.error.HTTPError as exc:
-        payload = (exc.read(limit) if limit is not None else exc.read()) if exc.fp else b""
+        connection.request(method, path, body=body, headers=dict(headers))
+        response = connection.getresponse()
+        payload = response.read(limit) if limit is not None else response.read()
         return HttpResponse(
-            status=int(exc.code),
-            headers=dict(exc.headers or {}),
+            status=int(response.status),
+            headers={key: value for key, value in response.getheaders()},
             body=payload,
-            url=getattr(exc, "url", url),
+            url=url,
         )
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Refuse redirects so a credential can never follow a 30x to another host."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
-        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
+    finally:
+        connection.close()
 
 
 class HttpTransport:
@@ -125,7 +172,12 @@ class HttpTransport:
             raise ValueError("max_response_bytes must be between 1 KiB and 64 MiB.")
         if not 0 <= max_retries <= 5:
             raise ValueError("max_retries must be between 0 and 5.")
-        self._request_fn = request_fn or partial(_urllib_request, max_bytes=int(max_response_bytes))
+        self._request_fn = request_fn or partial(
+            _urllib_request,
+            max_bytes=int(max_response_bytes),
+            allow_loopback_http=allow_loopback_http,
+            allow_private_network=allow_private_network,
+        )
         self.timeout = float(timeout)
         self.max_response_bytes = int(max_response_bytes)
         self.max_retries = int(max_retries)
@@ -213,7 +265,14 @@ class HttpTransport:
             self.request_count += 1
             try:
                 response = self._request_fn(verb, target, request_headers, payload, self.timeout)
-            except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as exc:
+            except (
+                urllib.error.URLError,
+                socket.timeout,
+                TimeoutError,
+                ConnectionError,
+                OSError,
+                http.client.HTTPException,
+            ) as exc:
                 if not write and attempt < self.max_retries:
                     self._sleep(self._backoff(attempt, None))
                     attempt += 1
@@ -232,6 +291,13 @@ class HttpTransport:
                     status=response.status,
                     correlation_id=cid,
                     detail=f"{len(response.body)} bytes > {self.max_response_bytes}",
+                )
+
+            if 300 <= response.status < 400:
+                raise ProviderError(
+                    f"{provider or self.describe} returned a redirect; refusing to follow it.",
+                    provider=provider,
+                    correlation_id=cid,
                 )
 
             if response.status >= 400:

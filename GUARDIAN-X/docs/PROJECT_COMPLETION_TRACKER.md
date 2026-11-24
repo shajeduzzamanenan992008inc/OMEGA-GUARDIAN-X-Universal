@@ -157,3 +157,28 @@ feature status.
 
 `READY_FOR_RELEASE_REVIEW` — locally verified, with the blockers and residual
 risks recorded in `docs/FINAL_PROJECT_COMPLETION_REPORT.md`.
+
+## Release-readiness hardening (2026-11-24)
+
+Starting commit `c441f01`. Tests below were executed in this pass.
+
+| ID | Task | Status | Evidence |
+| --- | --- | --- | --- |
+| RR-1 | Connection-time DNS validation and IP pinning | IMPLEMENTED_AND_TESTED | `security.resolve_pinned_address`, pinned connections; 11 network tests |
+| RR-2 | Transport redirect refusal | IMPLEMENTED_AND_TESTED | 3xx raises before body handling; test |
+| RR-3 | Hash-chained audit + verification CLI | IMPLEMENTED_AND_TESTED | `platform/audit.py`, `ogx platform audit`; 8 tests |
+| RR-4 | Host registry defects (display_name, last_seen_at) | IMPLEMENTED_AND_TESTED | schema + additive migration; `tests/test_host_contract.py` |
+| RR-5 | Host registry injection bug | IMPLEMENTED_AND_TESTED | `link_project_host` uses injected registry |
+| RR-6 | Host contract suite | IMPLEMENTED_AND_TESTED (registry/metadata) | 12 tests; lifecycle still NOT IMPLEMENTED |
+| RR-7 | Repository identity ports/IPv6 | IMPLEMENTED_AND_TESTED | `tests/test_identity_ports.py` (8 tests) |
+| RR-8 | Shared provider contract suite | IMPLEMENTED_AND_TESTED (mock) | `tests/test_provider_contract.py` (30 tests) |
+| RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 409 passed, 12 skipped |
+| RR-10 | Drop-in suite after changes | IMPLEMENTED_AND_TESTED | 245 tests, OK (9 skipped) |
+| RR-11 | Wheel/drop-in rebuild and install | IMPLEMENTED_AND_TESTED | 164-entry wheel; 290-file drop-in |
+| RR-12 | Hosted CI | BLOCKED | no push/run URL |
+| RR-13 | Live provider verification | BLOCKED | no credentials/accounts |
+| RR-14 | Cross-platform 3.11–3.13 / Linux / macOS | UNVERIFIED | Windows 3.15.2 only |
+| RR-15 | Audit immutability beyond hash chain | UNSUPPORTED | no signing/anchor |
+| RR-16 | Proxy/egress policy, allowlist, certificate pinning | UNSUPPORTED | documented residual |
+
+Final decision for this pass: see `docs/FINAL_RELEASE_READINESS_REPORT.md`.
