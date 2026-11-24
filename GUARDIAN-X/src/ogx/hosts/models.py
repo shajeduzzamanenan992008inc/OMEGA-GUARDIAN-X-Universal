@@ -55,7 +55,13 @@ class WorkspaceType(str, Enum):
 
 
 class HostStatus(str, Enum):
-    """Host availability status."""
+    """Host availability status.
+
+    ``REGISTERED`` means a record exists; it does not mean a live session.
+    """
+    REGISTERED = "registered"
+    DISCONNECTED = "disconnected"
+    FAILED = "failed"
     ACTIVE = "active"
     INACTIVE = "inactive"
     DEGRADED = "degraded"

@@ -84,9 +84,12 @@ from .hosts import (
     LocalFilesystemProvider, LocalGitProvider, GitHubProvider,
     HostType, ProviderType, HostCapability, CapabilityStatus,
 )
+from .hosts.lifecycle import ACTIVE_STATES, HostLifecycleError, get_session_manager
 from .intelligence import AnalysisOptions, ProjectIntelligenceEngine
 from .intelligence.integration import resolve_registered_project
 from .intelligence.reports import render_markdown, render_terminal
+
+from uuid import uuid4
 
 BANNER = "OMEGA GUARDIAN X — Universal Repository Intelligence"
 GLOBAL_CONFIG = """# OMEGA GUARDIAN X global configuration
@@ -1196,14 +1199,23 @@ def cmd_host_status(args: argparse.Namespace) -> int:
         capabilities = host_registry.get_host_capabilities(args.host_id)
         supported = host_registry.get_host_supported_capabilities(args.host_id)
         requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
-        
+
+        manager = get_session_manager()
+        sessions = [s for s in manager.list_sessions(args.host_id) if s.state in ACTIVE_STATES]
+        session = sessions[-1] if sessions else None
+        live = session.to_dict() if session is not None else None
+        effective = manager.effective_capabilities(session.session_id) if session is not None else None
+
         if args.json:
             _json_print({
                 "host_id": host["host_id"],
                 "display_name": host["display_name"],
                 "host_type": host["host_type"],
                 "provider": host["provider"],
-                "status": host["status"],
+                "persisted_status": host["status"],
+                "status": session.state.value if session is not None else host["status"],
+                "live_session": live,
+                "effective_capabilities": effective,
                 "capabilities": capabilities,
                 "supported": supported,
                 "requires_auth": requires_auth,
@@ -1211,7 +1223,8 @@ def cmd_host_status(args: argparse.Namespace) -> int:
         else:
             print(f"Host: {host['display_name']} ({host['host_id']})")
             print(f"  Type: {host['host_type']} (provider: {host['provider']})")
-            print(f"  Status: {host['status']}")
+            print(f"  Persisted status: {host['status']}")
+            print(f"  Live state: {session.state.value if session is not None else 'no live session'}")
             print(f"  Supported Capabilities: {', '.join(supported) if supported else 'none'}")
             print(f"  Requires Auth: {', '.join(requires_auth) if requires_auth else 'none'}")
         return 0
@@ -1260,6 +1273,13 @@ def cmd_host_register(args: argparse.Namespace) -> int:
         
         host_type = HostType(args.type)
         provider = ProviderType(args.provider)
+
+        if host_type in (HostType.LOCAL_FILESYSTEM, HostType.LOCAL_GIT) and not args.identifier:
+            print(
+                f"A {host_type.value} host requires --identifier pointing at its root directory.",
+                file=sys.stderr,
+            )
+            return 2
         
         host = host_registry.register_host(
             host_id=uuid4(),
@@ -1286,6 +1306,136 @@ def cmd_host_register(args: argparse.Namespace) -> int:
     except (OSError, ValueError, Exception) as exc:
         print(f"Host registration failed: {exc}", file=sys.stderr)
         return 2
+
+
+def _host_error(exc: BaseException, action: str) -> int:
+    if isinstance(exc, KeyError):
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    if isinstance(exc, ValueError):
+        print(f"Invalid host or session value: {exc}", file=sys.stderr)
+        return 2
+    print(f"Host {action} failed: {exc}", file=sys.stderr)
+    return 1
+
+
+def _new_host_session(host_id: str, root: str | None):
+    manager = get_session_manager()
+    session = manager.create_session(host_id, root=root)
+    manager.connect(session.session_id)
+    return manager, session
+
+
+def cmd_host_connect(args: argparse.Namespace) -> int:
+    """Connect a host in this process."""
+    try:
+        manager, session = _new_host_session(args.host_id, args.root)
+        payload = session.to_dict()
+        payload.update(manager.effective_capabilities(session.session_id))
+        if args.json:
+            _json_print(payload)
+        else:
+            print(f"Connected host session {session.session_id}")
+            print(f"  Host: {session.host_id} [{session.host_type}]")
+            print(f"  State: {session.state.value}")
+            print(f"  Root: {session.config.root}")
+            print("  Note: sessions are process-local; this one ends when the command exits.")
+        return 0
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "connect")
+
+
+def cmd_host_disconnect(args: argparse.Namespace) -> int:
+    """Disconnect live sessions for a host (idempotent)."""
+    try:
+        manager = get_session_manager()
+        sessions = manager.list_sessions(args.host_id)
+        if not sessions:
+            if args.json:
+                _json_print({"host_id": args.host_id, "disconnected": [], "note": "no live session"})
+            else:
+                print(f"No live session for host {args.host_id} in this process.")
+            return 0
+        disconnected = []
+        for session in sessions:
+            manager.disconnect(session.session_id)
+            disconnected.append(str(session.session_id))
+        if args.json:
+            _json_print({"host_id": args.host_id, "disconnected": disconnected})
+        else:
+            print(f"Disconnected {len(disconnected)} session(s) for host {args.host_id}.")
+        return 0
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "disconnect")
+
+
+def cmd_host_health(args: argparse.Namespace) -> int:
+    """Run an adapter-specific health check, probing the host if needed."""
+    try:
+        manager = get_session_manager()
+        sessions = [s for s in manager.list_sessions(args.host_id)
+                    if s.state.value in {"connected", "degraded"}]
+        created = None
+        if sessions:
+            session = sessions[-1]
+        else:
+            manager, session = _new_host_session(args.host_id, args.root)
+            created = session
+        result = manager.health(session.session_id)
+        if created is not None:
+            manager.disconnect(created.session_id)
+        if args.json:
+            _json_print(result)
+        else:
+            health = result["health"]
+            print(f"Host health: {health['state']}")
+            print(f"  Host: {args.host_id}")
+            print(f"  Checked: {health['checked_at']}")
+            for issue in health["issues"]:
+                print(f"  Issue: {issue}")
+        return 0 if result["health"]["state"] == "healthy" else 1
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "health check")
+
+
+def cmd_host_recover(args: argparse.Namespace) -> int:
+    """Recover a failed/degraded session, or establish one if absent."""
+    try:
+        manager = get_session_manager()
+        sessions = manager.list_sessions(args.host_id)
+        if sessions:
+            session = sessions[-1]
+            try:
+                manager.connect(session.session_id)
+            except HostLifecycleError:
+                session = manager.recover(session.session_id, attempts=args.attempts)
+        else:
+            manager, session = _new_host_session(args.host_id, args.root)
+        if args.json:
+            _json_print(session.to_dict())
+        else:
+            print(f"Host recovered: {session.host_id} -> {session.state.value}")
+        return 0
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "recover")
+
+
+def cmd_host_sessions(args: argparse.Namespace) -> int:
+    """List live sessions in this process."""
+    try:
+        manager = get_session_manager()
+        sessions = [s for s in manager.list_sessions(args.host_id) if s.state in ACTIVE_STATES]
+        payload = [session.to_dict() for session in sessions]
+        if args.json:
+            _json_print({"sessions": payload, "process_local": True})
+        elif not payload:
+            print("No live host sessions in this process.")
+        else:
+            for item in payload:
+                print(f"  {item['session_id']}  {item['host_id']}  [{item['host_type']}]  {item['state']}")
+        return 0
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "session listing")
 
 
 def _requires_email_approval() -> bool:
@@ -2694,9 +2844,43 @@ def build_parser() -> argparse.ArgumentParser:
     host_register.add_argument("--type", required=True, choices=[t.value for t in HostType], help="Host type")
     host_register.add_argument("--provider", required=True, choices=[p.value for p in ProviderType], help="Provider type")
     host_register.add_argument("--name", required=True, help="Display name")
-    host_register.add_argument("--identifier", help="Normalized identifier")
+    host_register.add_argument("--identifier", help="Normalized identifier/root path for local hosts")
     host_register.add_argument("--json", action="store_true", help="Print result JSON")
     host_register.set_defaults(func=cmd_host_register)
+
+    host_inspect = host_sub.add_parser("inspect", help="Inspect a host (alias of show)")
+    host_inspect.add_argument("host_id", help="Host UUID")
+    host_inspect.add_argument("--json", action="store_true", help="Print full host JSON")
+    host_inspect.set_defaults(func=cmd_host_show)
+
+    host_connect = host_sub.add_parser("connect", help="Connect a host for this process")
+    host_connect.add_argument("host_id", help="Host UUID")
+    host_connect.add_argument("--root", help="Override the configured root path")
+    host_connect.add_argument("--json", action="store_true")
+    host_connect.set_defaults(func=cmd_host_connect)
+
+    host_disconnect = host_sub.add_parser("disconnect", help="Disconnect live sessions for a host")
+    host_disconnect.add_argument("host_id", help="Host UUID")
+    host_disconnect.add_argument("--json", action="store_true")
+    host_disconnect.set_defaults(func=cmd_host_disconnect)
+
+    host_health = host_sub.add_parser("health", help="Check adapter-specific host health")
+    host_health.add_argument("host_id", help="Host UUID")
+    host_health.add_argument("--root", help="Override the configured root path")
+    host_health.add_argument("--json", action="store_true")
+    host_health.set_defaults(func=cmd_host_health)
+
+    host_recover = host_sub.add_parser("recover", help="Recover or establish a host session")
+    host_recover.add_argument("host_id", help="Host UUID")
+    host_recover.add_argument("--root", help="Override the configured root path")
+    host_recover.add_argument("--attempts", type=int, default=2, help="Bounded recovery attempts (1-5)")
+    host_recover.add_argument("--json", action="store_true")
+    host_recover.set_defaults(func=cmd_host_recover)
+
+    host_sessions = host_sub.add_parser("sessions", help="List live host sessions in this process")
+    host_sessions.add_argument("--host", dest="host_id", help="Filter by host UUID")
+    host_sessions.add_argument("--json", action="store_true")
+    host_sessions.set_defaults(func=cmd_host_sessions)
 
     host_discover = host_sub.add_parser("discover", help="Discover repositories on a provider (read-only)")
     host_discover.add_argument("--provider", required=True, choices=_git_provider_choices())

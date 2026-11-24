@@ -3,6 +3,7 @@ name: GitHub Configuration Validation
 on:
   push:
     paths:
+      - ".github/workflows/**"
       - "GUARDIAN-X/.github/**"
       - "GUARDIAN-X/devkit/agents/**"
       - "GUARDIAN-X/devkit/health/**"
@@ -11,6 +12,7 @@ on:
       - "GUARDIAN-X/SECURITY.md"
   pull_request:
     paths:
+      - ".github/workflows/**"
       - "GUARDIAN-X/.github/**"
       - "GUARDIAN-X/devkit/agents/**"
       - "GUARDIAN-X/devkit/health/**"

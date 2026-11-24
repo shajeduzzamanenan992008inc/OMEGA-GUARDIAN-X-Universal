@@ -75,6 +75,48 @@ has no runtime dependencies, and never imports the analyzed project.
 | `ogx platform {status,capabilities,repo,pr}` | Provider engine status, matrix, read and approval-gated writes |
 | `ogx provider` / `ogx host` / `ogx remote` / `ogx repository` / `ogx workspace` | Compatibility surfaces |
 
+#### `ogx host`
+
+Local-only host lifecycle (read-only hosts; write/exec/branch/remote are
+unsupported):
+
+| Command | Purpose |
+| --- | --- |
+| `ogx host register --type local_filesystem --identifier <id> --root <path>` | Register a read-only local filesystem host; root may not be empty |
+| `ogx host register --type local_git --identifier <id> --root <path>` | Register a read-only local Git host; root must be a Git repository |
+| `ogx host list` | List registered hosts (status, not live) |
+| `ogx host connect <id>` | Connect and validate the host | | Returns 0 on success; non-zero on failure |
+| `ogx host disconnect <id>` | Disconnect the live session (idempotent while disconnected) |
+| `ogx host health <id>` | Run the adapter health check | | Returns 0 when healthy |
+| `ogx host recover <id> [--attempts N]` | Bounded read-only recovery (1–5 attempts, default 3) |
+| `ogx host sessions` | List live sessions | | Process-local; empty after disconnect/restart |
+| `ogx host sessions --json` | Live sessions as JSON |
+| `ogx host status <id>` | Status (live state + coarse persisted status) |
+| `ogx host status <id> --json` | Status as JSON |
+| `ogx host inspect <id>` | Inspect a registered host |
+| `ogx host inspect <id> --json` | Inspect as JSON |
+
+Exit codes: `0` success, non-zero on failure. Errors are printed to stderr.
+
+Truths about capability reporting:
+
+- `ogx host inspect ... --json` and `ogx platform capabilities --for-host ...`
+  return the adapter-reported capabilities when the session is connected/
+  degraded, and `unavailable` otherwise.
+- Registration does not mark a host `active`; new registrations start at
+  `registered`.
+- `connected` is never persisted; a restart drops sessions.
+
+### Discovery
+
+| Command | Purpose |
+| --- | --- |
+| `ogx host discover <host_id>` | Discover repositories/projects on a host (read-only) |
+
+For the implemented local filesystem host, `ogx host discover` delegates to
+the adapter's `discover_projects()`, which runs project-root discovery against
+the configured host root. The command is read-only.
+
 ### Governance and execution
 
 | Command | Purpose |

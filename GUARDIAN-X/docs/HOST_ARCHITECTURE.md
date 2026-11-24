@@ -11,8 +11,8 @@ roadmap claim.
 
 | Host | Category | Status |
 | --- | --- | --- |
-| Local filesystem | local | PARTIALLY_IMPLEMENTED — registry/metadata contract passes; lifecycle untested |
-| Local Git repository | local | PARTIALLY_IMPLEMENTED — registry/metadata contract passes; lifecycle untested |
+| Local filesystem | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/exec/branch ops unsupported |
+| Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
 | GitHub | git host | UNVERIFIED shim over the canonical provider engine |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); no host contract suite |
 | GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |
@@ -84,6 +84,49 @@ not overridden is not supported. See `docs/PROVIDER_ARCHITECTURE.md`.
 
 ## 6. Security boundaries
 
+### 6a. Host session lifecycle (November 2026)
+
+This milestone adds a real, synchronous, process-local host session lifecycle:
+
+- **Manager** (`src/ogx/hosts/lifecycle.py`): `HostSessionManager` with 12 states,
+  validated transitions, one live session per host ID, locked operations, bounded
+  health/recovery, shutdown/disposal, list and `effective_capabilities`.
+- **Persistence**: only coarse status (`registered` / `disconnected`) is written;
+  `connected` is never persisted. Sessions are process-local; a restart drops them.
+- **Audit**: session/health/recovery events flow to the platform operations audit
+  log via a configured sink (default: `platform.operations.append_audit`).
+- **CLI** (`src/ogx/cli.py`): `host connect/disconnect/health/recover/sessions/inspect`
+  plus enhanced `host status` with the live state; registration requires `--identifier`
+  for local hosts.
+
+Operational local hosts:
+
+- `src/ogx/hosts/adapters/filesystem_runtime.py` — scoped read-only local-filesystem
+  host (list, read, metadata, discover) with strict containment, symlink-escape
+  rejection and bounded reads/listings.
+- `src/ogx/hosts/adapters/git_runtime.py` — read-only local-Git host (metadata,
+  exists, file, tree, branches, tags, commits, history) using safe
+  `subprocess.run` with a bounded timeout and no remote/write commands.
+- `src/ogx/hosts/adapters/runtime_factory.py` — adapter factory for
+  `local_filesystem` and `local_git`.
+
+Test evidence: lifecycle 13, filesystem 16 (3 skipped), Git 21, CLI 6 — all pass.
+Canonical suite 465 passed; drop-in suite 245 passed.
+
+Truths that hold despite the `OPERATIONAL` labels:
+
+- These local hosts are **read-only**. No host adapter here supports writes,
+  execution, push/branch operations, or remote/network operations.
+- `effective_capabilities()` returns the adapter's reported values only while
+  connected/degraded; otherwise every declared capability is `unavailable`.
+- Registration does **not** mark a host `active`; new registrations start at
+  `registered`.
+
+See `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
+`docs/LOCAL_GIT_HOST.md`, `docs/HOST_HEALTH_AND_RECOVERY.md`.
+
+## 7. Security boundaries
+
 - Host access is read-only by default; remote writes require a validated plan,
   a capability check, explicit `approved=True` and an audit event.
 - Credentials are read per provider from its own environment variables and are
@@ -95,7 +138,8 @@ not overridden is not supported. See `docs/PROVIDER_ARCHITECTURE.md`.
 - No host adapter may expose the host Docker socket or the user home directory
   to analyzed code.
 
-## 7. Contract suite required before an operational claim
+## 7. Capability negotiation
+## 8. Contract suite required before an operational claim
 
 Each host adapter must pass the same suite:
 
@@ -113,9 +157,10 @@ Each host adapter must pass the same suite:
 12. no credential leakage in errors or logs
 
 Until that suite exists and passes, host support must be reported as
-PARTIALLY_IMPLEMENTED or UNVERIFIED — never as complete.
+PARTIALLY_IMPLEMENTED, OPERATIONAL with documented limits, or UNVERIFIED — never
+as complete if it overstates the evidence.
 
-## 8. Adding a host
+## 9. Adding a host
 
 1. Implement `HostProvider` (and `RepositoryProvider`/`WorkspaceProvider` as
    applicable) in `ogx/hosts/adapters/` or delegate to a verified platform

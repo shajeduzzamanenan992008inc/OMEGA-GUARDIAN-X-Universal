@@ -54,10 +54,10 @@ feature status.
 | ID | Task | Status | Evidence / blocker |
 | --- | --- | --- | --- |
 | P3-1 | HostProvider/RepositoryProvider/WorkspaceProvider interfaces | IMPLEMENTED_AND_TESTED | `hosts/interfaces.py` |
-| P3-2 | Local filesystem + local Git adapters | PARTIALLY_IMPLEMENTED | adapters exist; no contract suite |
-| P3-3 | Host registration/persistence | IMPLEMENTED_AND_TESTED | `ogx host register/list`; Registry V2 |
-| P3-4 | Host contract suite for every adapter | UNSUPPORTED | no host contract test file exists |
-| P3-5 | Host switching/reconnect/failover | UNSUPPORTED | not implemented end-to-end |
+| P3-2 | Local filesystem + local Git adapters | IMPLEMENTED_AND_TESTED (read-only) | `hosts/adapters/filesystem_runtime.py`, `git_runtime.py`; 37 adapter tests (FS 16/3, Git 21) |
+| P3-3 | Host registration/persistence | IMPLEMENTED_AND_TESTED | `ogx host register/list`; Registry V2; registration starts `registered` |
+| P3-4 | Host contract suite for every adapter | UNVERIFIED | host contract suite exists (12 tests); read-only local hosts are operational for read/health/recovery, not for writes/branch/remote |
+| P3-5 | Host switching/reconnect/failover | UNSUPPORTED | sessions are process-local; no cross-process failover |
 | P3-6 | Cloud/remote workspace hosts | DESCRIPTOR_ONLY | `platform/families.py` |
 
 ## Phase 4 — Drive-independent identity
@@ -120,7 +120,7 @@ feature status.
 
 | ID | Task | Status | Evidence |
 | --- | --- | --- | --- |
-| P10-1 | Canonical suite | IMPLEMENTED_AND_TESTED | `python -m pytest -q` → 340 passed, 11 skipped |
+| P10-1 | Canonical suite | IMPLEMENTED_AND_TESTED | `python -m pytest -q` → 465 passed, 15 skipped |
 | P10-2 | Drop-in suite | IMPLEMENTED_AND_TESTED | `PYTHONPATH=core python -m unittest discover -s _dev/tests` → 245 tests, OK (9 skipped) |
 | P10-3 | Python 3.11/3.12/3.13 execution | UNVERIFIED locally | only CPython 3.15.2 available; matrix configured in CI |
 | P10-4 | Linux/macOS execution | UNVERIFIED locally | configured in CI, never run hosted |
@@ -129,9 +129,10 @@ feature status.
 
 | ID | Task | Status | Evidence / blocker |
 | --- | --- | --- | --- |
-| P11-1 | Correct workflow paths and `working-directory: GUARDIAN-X` | IMPLEMENTED_NOT_FULLY_TESTED | YAML parsed locally; no hosted run |
+| P11-1 | Correct workflow paths and `working-directory: GUARDIAN-X` | IMPLEMENTED_NOT_FULLY_TESTED | YAML parsed locally; no hosted run; root config-validation now also triggers on `.github/workflows/**` |
 | P11-2 | Python 3.11–3.13 matrix, packaging/drop-in/profile jobs | IMPLEMENTED_NOT_FULLY_TESTED | `.github/workflows/ci.yml` |
 | P11-3 | Hosted CI result | BLOCKED | no push/authorization; no run URL exists |
+| P11-4 | Root vs nested `.github/workflows` not confused | DOCUMENTED | root `../.github/workflows` is active; `GUARDIAN-X/.github/workflows` is inert |
 
 ## Phase 12 — Documentation
 

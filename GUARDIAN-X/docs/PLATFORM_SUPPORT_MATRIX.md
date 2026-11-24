@@ -85,16 +85,22 @@ Self-hosted instances are configured with an explicit API base.
 ## Host engine status
 
 The host engine is not a provider family and is not shown above. Current state
-(`docs/HOST_CONTRACT_VERIFICATION.md`):
+(`docs/HOST_ARCHITECTURE.md`, `docs/HOST_SESSION_LIFECYCLE.md`):
 
 | Host | Status |
 | --- | --- |
-| Local filesystem | PARTIALLY_IMPLEMENTED — registry/metadata contract passes (12 tests); no session/read/health lifecycle |
-| Local Git | PARTIALLY_IMPLEMENTED — same limits |
+| Local filesystem | OPERATIONAL (read-only) — session lifecycle, scoped reads, health/recovery and CLI implemented and tested; writes/exec/push/branch are unsupported |
+| Local Git | OPERATIONAL (read-only) — session lifecycle, repo reads, health/recovery and CLI implemented and tested; writes/branch/remote are unsupported |
 | GitHub | UNVERIFIED as a host (provider engine is mock-verified) |
 | Cloud/remote workspaces | DESCRIPTOR_ONLY |
 
-No host is operational; `ogx host list` is empty on a fresh state directory.
+In a fresh state directory, `ogx host list` is empty until a host is registered
+with `--identifier`; registration starts the host at `registered` (not active).
+
+`OPERATIONAL (read-only)` is truthful: these hosts do connect, read, report
+health, recover and run through the CLI, but they do not support writes,
+execution, branch operations or any remote/network access. They are not
+operational for any mutating operation.
 
 ## Verification meaning
 

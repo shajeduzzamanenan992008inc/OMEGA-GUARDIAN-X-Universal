@@ -77,13 +77,20 @@ Residual (open):
 - sandbox not executed locally;
 - no live security testing or independent penetration test.
 
-## 5. Host validation
+## 5. Host validation (host lifecycle milestone)
 
-A contract suite exists and passes 12 tests for the registry and the local
-adapters' metadata/capability/access surface. It does **not** cover connect,
-read, disconnect, health, reconnection or failover, and those operations are not
-implemented. **No host is operational.** `ogx host list` is empty on a fresh
-state directory.
+A host contract suite exists and passes 12 tests for the registry and the local
+adapters' metadata/capability/access surface. In addition, the host lifecycle
+milestone implemented a real session lifecycle, two operational read-only local
+hosts, health/recovery, and a CLI, with dedicated tests (13 + 16/3 + 21 + 6).
+
+Operational means: connect, read, health, recover and CLI flow work and are
+tested. It does **not** mean write/exec/push/branch support; local hosts are
+read-only and the capability matrix is honest about that. Sessions are process-
+local and `connected` is never persisted.
+
+`ogx host list` is empty on a fresh state directory until a host is registered
+with `--identifier`; registration starts the host at `registered` (not active).
 
 ## 6. Provider validation
 
@@ -106,6 +113,10 @@ GUARDIAN-X`, a Python 3.11/3.12/3.13 matrix and pinned action SHAs.
 **No hosted run exists; CI is UNVERIFIED.** PyYAML is unavailable in this
 interpreter, so the workflows were inspected rather than parsed in this pass.
 
+Root `config-validation.yml` now also triggers on `.github/workflows/**`, so
+root workflow edits run the validator; the nested `GUARDIAN-X/.github/workflows`
+copies are inert (GitHub does not execute workflows from a nested `.github`).
+
 ## 9. Cross-platform results
 
 Executed: Windows + CPython 3.15.2 (outside the declared 3.11–3.13 range).
@@ -126,7 +137,8 @@ Not done: sdist, signing, provenance, reproducibility guarantee, SBOM artifact.
 ## 11. Remaining risks
 
 - Live provider behavior and error payloads unknown.
-- Host lifecycle absent; local hosts only partially usable.
+- Local hosts are read-only; write/exec/push/branch ops are unsupported by design.
+- Sessions are process-local; no session persistence or daemon.
 - Heuristic scanner may miss or misclassify issues.
 - Audit integrity is limited as described above.
 - Alpha API may change before 1.0.

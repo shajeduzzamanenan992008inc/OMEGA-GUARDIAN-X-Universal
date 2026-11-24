@@ -54,10 +54,11 @@ Full detail: `docs/PROJECT_COMPLETION_BASELINE.md`.
 | Runtime dependencies | none (`dependencies = []`) |
 | Build requirement | `setuptools>=77` |
 | Working tree at report start | clean (verified with `git status --porcelain`) |
-| This pass | 11 documentation files added, 0 source files changed |
+| This pass | documentation update + lifecycle + adapters + CLI; tests run after |
 
-The 11 documents added in this pass are uncommitted at the time of writing.
-They are documentation only; the build and tests are unaffected.
+This report was prepared for the 0.8.0a1 completion commit and does not yet
+reflect the host lifecycle milestone; see `docs/PROJECT_COMPLETION_TRACKER.md`
+and `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`.
 
 ## 4. Architecture changes
 
@@ -108,19 +109,29 @@ Residual risks (must not be described as solved):
 - sandbox isolation was not exercised locally (no Docker run);
 - no live provider security testing, no independent penetration test.
 
-## 6. Host implementation status
+## 6. Host implementation status (host lifecycle milestone)
+
+Local filesystem and local Git hosts are **operational (read-only)**: they
+connect, read, report health, recover, and run through the CLI; they do **not**
+support writes, execution, branch or remote operations. The capability matrix and
+the `OPERATIONAL` labels in this report are honest about that.
 
 | Host | Status |
 | --- | --- |
-| Local filesystem | PARTIALLY_IMPLEMENTED — adapter exists, no contract suite |
-| Local Git | PARTIALLY_IMPLEMENTED — adapter exists, no contract suite |
+| Local filesystem | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
+| Local Git | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
 | GitHub | UNVERIFIED shim over the provider engine |
 | GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS CodeCommit | provider-verified (mocked/static); no host contract suite |
 | Codespaces/Gitpod/Docker/Kubernetes/remote SSH | DESCRIPTOR_ONLY |
 | SourceHut | DESCRIPTOR_ONLY |
 
-`ogx host list` → `No hosts registered.` No host is declared operational.
-There is no host failover, reconnection or host-switch test.
+`ogx host list` is empty on a fresh state directory until a host is registered
+with `--identifier`; registration starts the host at `registered` (not active).
+Sessions are process-local; `connected` is never persisted.
+
+Test evidence: canonical suite 465 passed, 15 skipped; drop-in 245 passed;
+filesystem runtime 16 passed / 3 skipped; Git runtime 21 passed;
+CLI lifecycle 6 passed.
 
 ## 7. Provider implementation status
 
@@ -182,7 +193,7 @@ machine.
 
 | Platform | Python | Result |
 | --- | --- | --- |
-| Windows (win32) | CPython 3.15.2 | 340 passed, 11 skipped; drop-in 245 tests, 9 skipped |
+| Windows (win32) | CPython 3.15.2 | 465 passed, 15 skipped; drop-in 245 tests, 9 skipped |
 | Linux | 3.11–3.13 | NOT EXECUTED (configured in CI only) |
 | macOS | 3.11–3.13 | NOT EXECUTED (configured in CI only) |
 | Windows | 3.11–3.13 | NOT EXECUTED (3.15.2 used) |
@@ -221,23 +232,23 @@ reproducibility, publishing any artifact.
 
 ## 14. Files created (this pass)
 
-Documentation only, under `GUARDIAN-X/docs/`:
-
-1. `PROJECT_COMPLETION_BASELINE.md`
-2. `PROJECT_COMPLETION_TRACKER.md`
-3. `FINAL_PROJECT_COMPLETION_REPORT.md`
-4. `CORE_CONTRACTS.md`
-5. `DEPENDENCY_BOUNDARIES.md`
-6. `PROJECT_IDENTITY.md`
-7. `HOST_ARCHITECTURE.md`
-8. `API_REFERENCE.md`
-9. `INSTALLATION.md`
-10. `RELEASE_GUIDE.md`
-11. `TROUBLESHOOTING.md`
+- `docs/HOST_LIFECYCLE_REPOSITORY_INSPECTION.md`
+- `docs/HOST_LIFECYCLE_ARCHITECTURE.md`
+- `docs/HOST_SESSION_LIFECYCLE.md`
+- `docs/LOCAL_FILESYSTEM_HOST.md`
+- `docs/LOCAL_GIT_HOST.md`
+- `docs/HOST_HEALTH_AND_RECOVERY.md`
+- `docs/HOST_LIFECYCLE_CI_VALIDATION.md`
+- `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`
 
 ## 15. Files modified (this pass)
 
-None. No source, test, build or CI file was changed in this pass.
+- `docs/HOST_ARCHITECTURE.md` — added host lifecycle section.
+- `docs/PLATFORM_SUPPORT_MATRIX.md` — updated host engine status.
+- `.github/workflows/config-validation.yml` — added `.github/workflows/**` to
+  push/pull_request path triggers.
+- `src/ogx/cli.py` — added missing `uuid4` import; sessions command filters
+  to live sessions.
 
 ## 16. Files deleted
 
@@ -248,9 +259,16 @@ None. No source, test, build or CI file was changed in this pass.
   `0.7.1a1` wheel. Justification: one authoritative implementation per
   subsystem and no stale release artifacts.
 
-## 17. Tests added
+## 17. Tests added or updated
 
-This pass added no tests (documentation only). Earlier in the completion pass:
+Host lifecycle milestone tests (all pass):
+
+- `tests/test_host_lifecycle.py` — 13 passed.
+- `tests/test_host_filesystem_runtime.py` — 16 passed, 3 skipped.
+- `tests/test_host_git_runtime.py` — 21 passed.
+- `tests/test_host_cli_lifecycle.py` — 6 passed (fixed `uuid4` import failure).
+
+Unchanged completion-pass tests:
 
 - `tests/test_discovery_config_toml.py` — stdlib TOML writer regression;
 - `tests/test_transport_bounds.py` — bounded response read;

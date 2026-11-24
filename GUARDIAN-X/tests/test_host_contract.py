@@ -54,7 +54,8 @@ def test_registration_and_retrieval(host_registry):
     fetched = hosts.get_host(host_id)
     assert fetched["host_id"] == str(host_id)
     assert fetched["host_type"] == "local_filesystem"
-    assert fetched["status"] == "active"
+    # Registration is not operational state; a live session is required.
+    assert fetched["status"] == "registered"
     assert isinstance(fetched["capabilities"], list)
 
 
