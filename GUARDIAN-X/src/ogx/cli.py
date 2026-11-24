@@ -18,34 +18,12 @@ from .envfile import (
 from .detector import detect_project
 from .reports import write_json, write_markdown, write_sarif
 from .scanner import scan_repository
-def _load_project_integration():
-    """Load the tracked project-folder integration module explicitly.
-
-    ``ogx/integration/`` is a separate (contract-verification) package that
-    shadows the historical ``ogx/integration.py`` module. The project-folder
-    workflow used by ``ogx integrate`` lives in the module, so it is loaded by
-    path under a private name to keep both APIs available.
-    """
-
-    import importlib.util
-
-    module_name = "ogx._project_integration"
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-    spec = importlib.util.spec_from_file_location(module_name, Path(__file__).with_name("integration.py"))
-    if spec is None or spec.loader is None:
-        raise ImportError("Project integration module is unavailable.")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-_project_integration = _load_project_integration()
-apply_integration = _project_integration.apply_integration
-integration_status = _project_integration.integration_status
-plan_integration = _project_integration.plan_integration
-remove_integration = _project_integration.remove_integration
+from .project_integration import (
+    apply_integration,
+    integration_status,
+    plan_integration,
+    remove_integration,
+)
 from .inventory import build_inventory
 from .architecture import analyze_architecture, architecture_mermaid
 from .sbom import generate_sbom

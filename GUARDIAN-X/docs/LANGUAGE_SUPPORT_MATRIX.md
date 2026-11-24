@@ -1,5 +1,7 @@
 # Language and Technology Support Matrix — 0.7.1a1
 
+> **Document status:** historical 0.7.1a1 matrix. Current release: 0.8.0a1; current verification is in `docs/TEST_RESULTS.md`.
+
 This matrix describes the **50 spec-driven technology engines** plus the dedicated Android engine. It is a capability declaration, not a certification of semantic depth.
 
 ## Reading the columns

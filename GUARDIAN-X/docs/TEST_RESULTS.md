@@ -1,77 +1,64 @@
-# OGX 0.7.1a1 Validation Results
+# OGX 0.8.0a1 validation results
 
-Local validation performed in the build workspace on 2026-11-08 and re-run on 2026-11-14 after the universal engine work:
+These are the results actually observed for the current working tree. They are
+not a claim about hosted CI or about platforms that were not exercised.
 
-- `python -m compileall -q core _dev/tests` — passed.
-- `PYTHONPATH=core python -m unittest discover -s _dev/tests` — 134 tests passed, 9 skipped, 0 failures.
-- The 40 new universal-layer tests (`test_engines.py`, `test_android_engine.py`, `test_pipeline.py`, `test_cli_universal.py`) pass: 17 + 7 + 8 + 8 tests; 2 symlink-oriented tests are skipped on Windows.
-- Package wheel built with `python -m pip wheel --no-deps --no-build-isolation . -w dist` — passed (`omega_guardian_x-0.7.1a1-py3-none-any.whl`, 87 archive entries, 176,338 bytes).
-- Built wheel installed into an isolated target directory; `ogx --version`, `ogx engines list` and engine registry import smoke checks — passed.
-- Wheel archive inspection — verified inclusion of enterprise schema, email adapters, approval workflow, governance operating model, `ogx.engines` package and the new pipeline/workspace/findings/rules modules.
-- Universal engine registry — 51 unique engine IDs (1 Android + 50 technology engines), all reporting `static-read-only` and `execution_performed: false`.
-- Universal fixture run (`ogx analyze`) — 14 engines detected (Android, Python, JavaScript, TypeScript, Go, Rust, Kotlin, TOML, JSON, XML, YAML, Dockerfile, Kubernetes, Java), 18 findings, external JSON+Markdown reports, and all 12 fixture files unchanged by SHA-256 before/after.
-- Android fixture run (`ogx android`) — manifest/Gradle/source checks produced 5 findings across 5 Android rules; build and test capabilities were `not_configured`, device operations `not_attempted`, `executed: false`, `build_ready: false`; no SDK, Gradle, adb, emulator or device command was run.
-- Report-path protection — reports are written only under external `OGX_HOME` state; symlinked report destinations are refused; source-tree files are not created or modified.
-- `.env` CLI, parser/configuration, schema-coverage and permissions tests remain in the full suite and pass.
-- Enterprise governance: six operating pillars, organization memberships, owner/admin privilege boundaries, last-owner protection, governance record permissions and status transitions.
-- Email approval ledger: code hashing, one-time use, expiry, invalid-attempt lockout, four-eyes separation, mail-delivery failure handling, exact action revalidation, request/event lifecycle, and requester-bound execution.
-- Brevo API request-shape test — passed with a mocked HTTPS transport; no real email was sent.
-- `.env` configuration: known-key allowlist, duplicate/malformed key rejection, no shell execution, no target-project auto-loading, environment precedence, symlink refusal, POSIX mode warning, private file creation and no-overwrite behavior — passed.
-- CLI `.env` initialization and validation through explicit `OGX_ENV_FILE` — passed.
-- `.env.example` is checked against every supported OGX runtime setting; no non-empty secret values are bundled — passed.
-- SMTP adapter tests — STARTTLS on 587 and implicit TLS on 465 verified using mocked transports; no real SMTP server was contacted.
-- Guardian audit: combined profile, inventory, architecture, compatibility, quality gates and maintenance recommendations.
-- Syntax checks: Python AST, JSON (excluding common JSONC files), TOML and XML project manifests.
-- Safe repair: dry-run, external before-image, preservation of existing `.gitignore` content, nested environment-file detection, tracked `.env` blocking, symlink blocking and invalid UTF-8 blocking.
-- Git upgrade workflow: offline non-repository handling, local bare remote branch comparison, confirmed ref-only fetch and unchanged working-tree status.
-- Cross-platform integration: Dependabot generation, Renovate configuration validation and preservation of existing user files.
-- Existing integration, scanner, SBOM, OSV request-shaping, enterprise prototype, skill validation, secret redaction, sandbox snapshot policy, debug triage and impact tests — passed.
+## Environment
 
-Not run / not established:
+- OS: Windows (Git Bash)
+- Python: CPython 3.15.2
+- Package under test: `omega-guardian-x` 0.8.0a1
+- Canonical source: `src/ogx`; drop-in: `core/ogx`
 
-- Real Brevo API key, verified sender or SMTP relay credentials were not supplied; end-to-end email delivery/inbox arrival was not tested. Bravo AI at bravo.ai is not treated as an outbound sender because its published email connections are read-only.
-- Ruff lint — the Ruff executable is not installed in this environment.
-- Real hosted GitHub/GitLab/Bitbucket/Gitea/Forgejo credentials or PR/MR lifecycle.
-- Renovate/Dependabot bot installation, schedule execution or package update PRs in a customer repository.
-- Real Docker image execution, container escape testing or Windows PowerShell installer/uninstaller validation.
-- Full application test/build execution across all supported languages; Guardian deliberately did not execute target project scripts.
-- Android build, unit test, instrumentation test, emulator and device execution — no Android SDK, Gradle, adb, sdkmanager or emulator is installed; capability states remain `not_configured`/`not_attempted`.
-- APK/AAB signature verification, binary-manifest decoding and on-device runtime behavior.
-- Full SAST/DAST, transitive dependency resolution, exhaustive CVE intelligence, runtime debugger, production SaaS, independent security audit or certification.
+## Commands and results
 
-The 134-test result is local unit/fixture evidence, not a claim of universal compatibility, exploitability proof, Android build verification, email delivery, production readiness or enterprise certification. The CLI/SQLite identity subjects remain caller-supplied in this alpha; production requires authenticated SSO/OIDC/SAML sessions and centralized service controls.
+| Check | Command (from `GUARDIAN-X`) | Result |
+|---|---|---|
+| Compile | `python -m compileall -q src core tests _dev/tests` | passed |
+| Canonical tests | `python -m pytest -q` | **340 passed, 11 skipped** |
+| Drop-in + architecture tests | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **245 tests, OK (9 skipped)** |
+| Version/structure | `python _dev/tools/sync_core_from_src.py --check` | passed |
+| Wheel build | `python -m pip wheel . --no-deps -w release` | passed |
+| Clean install | wheel installed into a fresh venv | passed |
+| CLI | `ogx --version`, `--help`, `providers list`, `platform status` | passed |
+| Drop-in | `PYTHONPATH=core python -m ogx --version`; `python init.py status` | passed |
+| Drop-in zip | `python _dev/tools/make_dist.py` | 279 files; no `src/`, tests, release, CI, env or database files |
+| Secrets | tracked files scanned for token/private-key shapes | only `.env.example` (placeholders); no real token hits outside tests/docs |
 
-## Milestone H re-validation (2026-11-24)
+## Skips
 
-Environment: Windows, Python 3.15, standard library only.
+All 20 skips are platform gates, not suppressed failures:
 
-- `PYTHONPATH=src python -m compileall -q src/ogx` - passed.
-- `PYTHONPATH=src python -m pytest tests -q` - **336 passed, 11 skipped, 0
-  failed** (111.8 s). Baseline before this milestone was 288 passed, 11 skipped;
-  the 48 new tests are all in `tests/test_platform_engine.py`.
-- New tests cover: capability-state truthfulness, per-provider normalization
-  (GitHub, GitLab, Bitbucket, Gitea/Forgejo, Azure DevOps, CodeCommit SigV4),
-  pagination (including foreign-host refusal), 401/403/429/5xx/timeout/
-  malformed/oversized handling, write-no-retry, SSRF and endpoint validation,
-  redaction, credential isolation, identity linking and duplicate prevention,
-  approval-gated writes with audit output, and CLI compatibility.
-- No test requires a real credential or performs network I/O; every provider
-  response comes from a local fake transport.
-- Packaging: `python -m pip wheel --no-deps --no-build-isolation . -w dist` -
-  passed (`omega_guardian_x-0.7.1a1-py3-none-any.whl`, 162 archive entries,
-  including 21 `ogx/platform` and 9 `ogx/integration` files).
-- Editable install into a fresh virtual environment -
-  `ogx --version` printed `ogx 0.7.1a1`.
-- Isolated install of the built wheel into an empty target directory -
-  `ogx --version`, `ogx providers list --json`, `ogx platform capabilities` and
-  `ogx host list` all ran from the installed copy.
+- POSIX file-mode checks (`chmod 600/644`) on Windows — 2 in the canonical suite.
+- Symlink creation (directory/file) unavailable on Windows — 9 in the canonical suite and 9 in the drop-in suite.
 
-Not established:
+They execute on the Linux CI matrix.
 
-- No real GitHub/GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS credential was
-  used; no live PR/MR was created.
-- SourceHut remains descriptor-only; no GraphQL endpoint was validated.
-- The 21 family providers (workspaces, CI/CD, project management, package
-  registries, cloud) perform no domain operation.
-- Rate-limit and retry behavior was verified against mocked responses, not a
-  live throttling service.
+## Provider registry
+
+28 descriptors:
+
+- **Verified (7):** GitHub, GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps
+  Repos, AWS CodeCommit. Supported capability counts range from 12 to 19
+  (identify, auth discovery, health, rate limit where implemented, pagination,
+  repository/branch/commit/file/tree reads, PR list/create, and issue
+  list/create/update where implemented).
+- **Descriptor-only (21):** AWS, Azure, Azure Pipelines, crates.io, Docker
+  workspace, GCP, GitHub Actions, GitHub Codespaces, GitLab CI, Gitpod,
+  Jenkins, Jira, Kubernetes workspace, Linear, Maven Central, npm, NuGet, PyPI,
+  remote SSH workspace, SourceHut, Trello. These advertise only identify,
+  auth-discovery and API-version metadata.
+
+Writes are limited to approval-gated pull/merge request and (where implemented)
+issue creation; delete, merge, push to protected branches, permission changes
+and deployment are not implemented. Host adapters exist (`local_filesystem`,
+`local_git`, GitHub compatibility shim) but the host registry starts empty and
+no independent host contract suite was executed.
+
+## Not verified
+
+- Hosted GitHub Actions run (no workflow run URL is available for this tree).
+- Python 3.11, 3.12 and 3.13 locally; Linux locally.
+- Ruby-based `_dev/tools/validate_config.rb` (Ruby is not installed here).
+- Real Brevo/SMTP inbox delivery (mocked transports only).
+- Any real provider API call or write (all provider tests use fake transports).

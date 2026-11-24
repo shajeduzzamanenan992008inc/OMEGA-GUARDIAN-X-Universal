@@ -1,5 +1,7 @@
 # OMEGA Shield (OGX) - universal plug-and-play shield & dev core
 
+**Version:** 0.8.0a1. The canonical installable package lives in `src/ogx`; `core/ogx` is the hand-maintained drop-in loaded by `init.py`.
+
 Drop **one folder** into the root of any project. **One entry point** (`init.py`). **Python 3.11+, standard library only** - no packages to install.
 
 ```
@@ -40,7 +42,7 @@ app = shield.ShieldMiddleware(app)       # WSGI;  shield.ShieldASGI(app) for ASG
 ```
 omega-shield/
 ├─ init.py  shield.toml  VERSION  README(.bn).md  LICENSE  SECURITY.md  CHANGELOG.md  AGENTS.md ...
-├─ core/ogx/   kernel · connectors · analysis · shield · devkit · governance · ecosystem · runtime · cli   (vendored, stdlib-only)
+├─ core/ogx/   kernel · connectors · analysis · shield · devkit · governance · ecosystem · runtime · cli   (hand-maintained drop-in, stdlib-only; not generated from src/ogx)
 ├─ guard/      gates/  policies/  runtime/
 ├─ devkit/     health/  observability/  agents/  runbooks/
 ├─ link/       templates/
@@ -53,9 +55,11 @@ Details: `docs/ARCHITECTURE.md` - integration: `docs/INTEGRATION.md` - runtime g
 * The scanner is heuristic (static rules, no data-flow analysis, no DAST). A clean scan is not proof of safety.
 * The runtime guard is defence in depth, **not a managed WAF**; multipart bodies are not inspected; the proxy is experimental (HTTP/1.1, no TLS/WebSocket/chunked requests).
 * Governance RBAC identities are not authenticated (local prototype).
-* Verified on Linux with Python 3.12. Windows and Python 3.11 are expected to work (no OS-specific code was added) but were not exercised here.
+* Locally verified for this working tree on Windows with CPython 3.15.2: 340 canonical-source tests passed (11 platform-gated skips), 245 drop-in tests passed (9 platform-gated skips), plus a clean wheel install and CLI smoke checks. Python 3.11/3.12/3.13 and Linux were not available locally; the CI matrix is configured but has not been executed here.
 
-Develop & test: `PYTHONPATH=core python -m unittest discover -s _dev/tests` - build the lean drop-in zip: `python _dev/tools/make_dist.py`.
+Develop & test (canonical source): `python -m pytest -q` - drop-in and architecture tests: `PYTHONPATH=core python -m unittest discover -s _dev/tests` - version/structure check: `python _dev/tools/sync_core_from_src.py --check` - build the lean drop-in zip: `python _dev/tools/make_dist.py`.
+
+CI lives only in the repository root `.github/workflows/` (the workflow uses `working-directory: GUARDIAN-X`). The nested `GUARDIAN-X/.github/` directory is reusable kit content and contains no active workflows.
 
 ## Universal provider engine (Milestone H)
 
@@ -84,6 +88,13 @@ Writes are limited to approval-gated pull/merge request creation
 (`ogx platform pr ... --confirm`) and are recorded in
 `<state_dir>/platform/audit.jsonl`. Deleting, merging, pushing to protected
 branches, changing permissions and deploying are not implemented.
+
+The registry exposes 28 descriptors: 7 verified Git-hosting adapters (GitHub,
+GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps Repos, AWS CodeCommit) and 21
+descriptor-only entries for CI/CD, project management, package registries and
+cloud/workspace providers. Descriptor-only entries advertise only
+identification, auth-discovery and API-version metadata; they are not
+operational integrations.
 
 Details: `docs/PROVIDER_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`,
 `docs/AUTHENTICATION.md`.

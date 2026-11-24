@@ -131,10 +131,9 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Compatibility bridge
 # ---------------------------------------------------------------------------
-# This package shadows the historical ``ogx/integration.py`` module of the same
-# name. The legacy module still owns the project-folder integration workflow used
-# by ``ogx integrate``. It is loaded explicitly under a private module name so
-# both APIs stay importable without duplicating code.
+# This package used to shadow a module of the same name. The project-folder
+# workflow now lives in the unambiguous ``ogx.project_integration`` module; the
+# package keeps re-exporting it for older imports without duplicating code.
 
 _LEGACY_EXPORTS = frozenset(
     {
@@ -147,26 +146,10 @@ _LEGACY_EXPORTS = frozenset(
         "remove_integration",
     }
 )
-_legacy_module = None
-
-
 def _load_legacy():
-    import importlib.util
-    import pathlib
-    import sys
+    from .. import project_integration
 
-    global _legacy_module
-    if _legacy_module is not None:
-        return _legacy_module
-    path = pathlib.Path(__file__).resolve().parent.parent / "integration.py"
-    spec = importlib.util.spec_from_file_location("ogx._legacy_integration", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Legacy integration module is unavailable: {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    _legacy_module = module
-    return module
+    return project_integration
 
 
 def __getattr__(name: str):

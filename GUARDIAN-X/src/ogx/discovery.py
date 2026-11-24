@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import threading
 from dataclasses import dataclass, field
@@ -217,8 +218,19 @@ class DiscoveryConfig:
                 "exclusions": root.exclusions,
             })
         
-        import tomli_w
-        config_path.write_text(tomli_w.dumps({"roots": roots_data}), encoding="utf-8")
+        # Write the small, fixed [[roots]] table ourselves: tomli_w is not a
+        # declared dependency and the package promises stdlib-only runtime.
+        lines: list[str] = []
+        for root in roots_data:
+            lines.append("[[roots]]")
+            lines.append(f"path = {json.dumps(str(root['path']), ensure_ascii=False)}")
+            lines.append(f"name = {json.dumps(str(root['name']), ensure_ascii=False)}")
+            lines.append(f"enabled = {'true' if root['enabled'] else 'false'}")
+            lines.append(f"max_depth = {int(root['max_depth'])}")
+            exclusions = ", ".join(json.dumps(str(item), ensure_ascii=False) for item in root["exclusions"])
+            lines.append(f"exclusions = [{exclusions}]")
+            lines.append("")
+        config_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     
     def get_enabled_roots(self) -> list[DiscoveryRoot]:
         """Get all enabled discovery roots."""

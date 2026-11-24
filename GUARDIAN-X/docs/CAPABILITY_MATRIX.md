@@ -1,5 +1,7 @@
 # OGX 0.7.1a1 Capability Matrix
 
+> **Document status:** historical 0.7.1a1 matrix. For the current provider engine use `docs/PLATFORM_SUPPORT_MATRIX.md`; current release evidence is in `docs/TEST_RESULTS.md`.
+
 Status: **Implemented** means code exists and has local automated tests; **Heuristic** means rule-based and incomplete; **Adapter foundation** means an interface/integration exists but does not provide the full lifecycle; **Not configured** means the implementation exists but the required local tool/SDK, manifest or test source is absent; **Unsupported** means no implementation for that operation; **Planned** means not shipped in this release. Engine reports use the exact status vocabulary `supported`, `partial`, `not_configured`, `unsupported` and `failed`.
 
 | Capability | Status | Notes |

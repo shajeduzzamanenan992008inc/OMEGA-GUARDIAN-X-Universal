@@ -1,5 +1,7 @@
 # OGX Product Roadmap
 
+> **Document status:** historical roadmap written against 0.7.1a1. Current release: 0.8.0a1; implementation evidence is in `docs/TEST_RESULTS.md`.
+
 Status reflects source code in **0.7.1a1**. Architecture ambitions are not implementation evidence.
 
 ## Universal engine layer — 0.7.1a1 (implemented and locally tested)

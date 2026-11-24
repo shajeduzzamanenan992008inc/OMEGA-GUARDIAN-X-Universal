@@ -1,6 +1,6 @@
 # OMEGA GUARDIAN X — Universal Enterprise Guardian
 
-**Release:** `0.7.1a1` · **Maturity:** Alpha · **Python:** 3.11+
+**Release:** `0.8.0a1` · **Maturity:** Alpha · **Python:** 3.11–3.13 (declared)
 
 A two-part project governance and repository intelligence kit:
 
@@ -8,6 +8,13 @@ A two-part project governance and repository intelligence kit:
 - **`GUARDIAN-X/`** — runnable local CLI engine: repository audit, stack detection, syntax/security heuristics, architecture inventory, safe repair preview, Git workflow, enterprise governance records and email-gated approvals.
 
 This is a local-first alpha, not a certified compliance product, production SaaS service or autonomous system that can safely repair every language and deploy changes without review.
+
+## Repository architecture
+
+- **Canonical source:** `GUARDIAN-X/src/ogx/` — packaged into the `omega-guardian-x` wheel and the `ogx` console script. Implementation changes belong here.
+- **Drop-in distribution:** `GUARDIAN-X/core/ogx/` — a hand-maintained, standard-library-only tree loaded by `GUARDIAN-X/init.py`. It uses a different internal layout and does not ship the provider engine.
+- **Consistency check:** `python GUARDIAN-X/_dev/tools/sync_core_from_src.py --check` verifies version agreement, required packages/modules, absence of nested duplicate trees, name collisions and packaging declarations. It never generates or deletes feature code.
+- **Tests:** `GUARDIAN-X/tests/` (canonical source, pytest) and `GUARDIAN-X/_dev/tests/` (drop-in plus architecture/distribution checks, unittest).
 
 ## Quick install
 
@@ -20,10 +27,11 @@ ogx --version
 ogx guardian audit "D:\Projects\MyProject"
 ```
 
-The standalone wheel is included in `GUARDIAN-X/release/` and can be installed with:
+Build a wheel without runtime dependencies, or install the generated wheel from `GUARDIAN-X/release/`:
 
 ```powershell
-python -m pip install .\release\omega_guardian_x-0.7.1a1-py3-none-any.whl
+python -m pip wheel . --no-deps -w release
+python -m pip install .\release\omega_guardian_x-0.8.0a1-py3-none-any.whl
 ```
 
 ## Private configuration (`.env`)
@@ -99,7 +107,16 @@ Read-only audits do not require email approval. Never enable `OGX_ALLOW_UNAPPROV
 
 ## Verification
 
-Local validation for this release: **80 unit tests passed**, Python compile check passed, wheel build passed, isolated wheel install and CLI/framework/database smoke checks passed. Brevo and SMTP transports were tested with mocked HTTP/SMTP clients; no real mail account or credentials were supplied, so real inbox delivery was not tested.
+Locally executed for this working tree (Windows, CPython 3.15.2):
+
+- Canonical source: `python -m pytest -q` — **340 passed, 11 skipped**.
+- Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **245 tests, OK (9 skipped)**.
+- Architecture and distribution checks (included in the suites) — 17 passed.
+- `python -m compileall -q src core tests _dev/tests` — passed.
+- Wheel `omega_guardian_x-0.8.0a1-py3-none-any.whl` — built, 163 files, no test/CI/source-tree leakage; installed into a clean venv; `ogx --version`, `--help`, `providers list` and `platform status` passed.
+- Drop-in zip — 279 files, no `src/`, tests, release material or CI; `init.py status` and `PYTHONPATH=core python -m ogx --version` passed.
+
+The skips are platform-gated POSIX permission/symlink tests on Windows (11 in the canonical suite, 9 in the drop-in suite); they run on the Linux CI matrix. Hosted GitHub Actions has **not** been executed for this working tree, and Python 3.11/3.12/3.13 were not available locally. Brevo and SMTP transports are tested with mocked HTTP/SMTP clients; no real inbox delivery was tested.
 
 ## Read before production use
 

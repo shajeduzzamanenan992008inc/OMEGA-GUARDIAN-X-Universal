@@ -199,3 +199,5 @@ Icon
 .directory
 .Trash-*
 .nfs*
+# Test-run artifacts (never commit captured output)
+results.txt

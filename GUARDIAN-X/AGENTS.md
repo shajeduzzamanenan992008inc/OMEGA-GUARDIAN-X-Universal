@@ -17,12 +17,13 @@ Never exaggerate implemented coverage; state limits honestly.
 10. The runtime guard is defence in depth, not a WAF: keep its claims, limits and defaults conservative; every new rule needs a positive AND a benign test.
 
 ## Architecture rules (enforced by `_dev/tests/test_architecture.py`)
+- `src/ogx/` is the canonical installable package (wheel + `ogx` CLI). `core/ogx/` is the hand-maintained drop-in distribution loaded by `init.py`; it has a different layout and does not ship the provider engine. Never assume editing one changes the other: run `python _dev/tools/sync_core_from_src.py --check` and both test suites.
 - Packages under `core/ogx/`: `kernel` -> `analysis` -> `shield` -> `devkit`/`governance` -> `cli`; `connectors` and `ecosystem` sit beside; `runtime` imports kernel only. Absolute imports only.
 - The core is standard-library only. Names/paths/exclusions come from `ogx.kernel.paths` - never hard-code them.
 - Configuration lives in the pillar folders (`guard/`, `devkit/`, `link/`), never inside `core/`.
 
 ## Engineering workflow
-- Python 3.11+. Run: `python -m compileall -q core _dev/tests` and `PYTHONPATH=core python -m unittest discover -s _dev/tests -v`.
+- Python 3.11+. Run: `python -m compileall -q src core tests _dev/tests`, `python -m pytest -q` (canonical source), and `PYTHONPATH=core python -m unittest discover -s _dev/tests -v` (drop-in).
 - Add tests for normal cases, malformed input, false positives, path traversal, symlinks and resource limits.
 - Findings need stable rule IDs (never renumber), severity rationale, confidence, safe evidence and a recommendation.
 - Keep resource use bounded; no unbounded parallelism.

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import socket
 import time
+from functools import partial
 import urllib.error
 import urllib.request
 import uuid
@@ -63,20 +64,29 @@ class HttpResponse:
 
 
 def _urllib_request(
-    method: str, url: str, headers: Mapping[str, str], body: bytes | None, timeout: float
+    method: str,
+    url: str,
+    headers: Mapping[str, str],
+    body: bytes | None,
+    timeout: float,
+    *,
+    max_bytes: int | None = None,
 ) -> HttpResponse:
     request = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
     opener = urllib.request.build_opener(_NoRedirect)
+    # Read at most one byte past the configured limit. Reading the whole body
+    # first would let a hostile endpoint exhaust memory before the size check.
+    limit = max_bytes + 1 if max_bytes is not None else None
     try:
         with opener.open(request, timeout=timeout) as response:
             return HttpResponse(
                 status=int(response.status),
                 headers=dict(response.headers),
-                body=response.read(),
+                body=response.read(limit) if limit is not None else response.read(),
                 url=response.geturl(),
             )
     except urllib.error.HTTPError as exc:
-        payload = exc.read() if exc.fp else b""
+        payload = (exc.read(limit) if limit is not None else exc.read()) if exc.fp else b""
         return HttpResponse(
             status=int(exc.code),
             headers=dict(exc.headers or {}),
@@ -115,7 +125,7 @@ class HttpTransport:
             raise ValueError("max_response_bytes must be between 1 KiB and 64 MiB.")
         if not 0 <= max_retries <= 5:
             raise ValueError("max_retries must be between 0 and 5.")
-        self._request_fn = request_fn or _urllib_request
+        self._request_fn = request_fn or partial(_urllib_request, max_bytes=int(max_response_bytes))
         self.timeout = float(timeout)
         self.max_response_bytes = int(max_response_bytes)
         self.max_retries = int(max_retries)

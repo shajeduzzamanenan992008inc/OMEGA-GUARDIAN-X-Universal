@@ -1,5 +1,7 @@
 # Product Requirements Document — OMEGA GUARDIAN X
 
+> **Document status:** historical requirements document for the 0.7.1a1 era. Current release: 0.8.0a1; see `README.md` and `docs/TEST_RESULTS.md`.
+
 **Product:** OMEGA GUARDIAN X (OGX)  
 **Edition target:** Universal / Professional / Business / Enterprise / Self-hosted / SaaS  
 **Current release:** 0.7.1a1 Guardian alpha with universal engine layer

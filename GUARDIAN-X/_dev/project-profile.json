@@ -30,7 +30,7 @@
       {
         "name": "compile",
         "command": [
-          "python3",
+          "python",
           "-m",
           "compileall",
           "-q",
@@ -42,7 +42,7 @@
       {
         "name": "unit-tests",
         "command": [
-          "python3",
+          "python",
           "-m",
           "unittest",
           "discover",

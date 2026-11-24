@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — release-readiness fixes (0.8.0a1)
+
+- Restored the PAP identity/manifest validators that commit `dbf8874` replaced with documentation-only constants while `identity.py` and `manifest_engine.py` still imported them. `import ogx` and the canonical test suite now collect again (340 passed).
+- Removed the accidental 125-file `core/ogx/core/ogx/` nested duplicate and replaced the destructive `sync_core_from_src.py` generator with a read-only version/structure checker. It no longer copies or deletes feature code and supports `--check` and `--dry-run`.
+- Architecture tests now validate both `src/ogx` and `core/ogx`: required packages/modules, no nested tree, no module/package collisions, import-time cycles, stdlib-only imports, version agreement, packaging declarations and clean imports of both packages. The `package == "core": continue` skip that hid the duplicate is gone.
+- Moved the legacy project-folder workflow to `ogx.project_integration` and kept compatibility re-exports in `ogx.integration`, removing the ambiguous module/package name collision.
+- Removed the undeclared `tomli_w` runtime dependency from discovery-root persistence; the fixed `[[roots]]` shape is now written with a stdlib serializer and covered by a regression test.
+- Bounded the real HTTP transport read to `max_response_bytes + 1`, preventing a hostile endpoint from exhausting memory before the size check; added a regression test.
+- Corrected CI paths to `working-directory: GUARDIAN-X`, added a Python 3.11/3.12/3.13 matrix, packaging, clean-install, drop-in and profile jobs, zero-collection guards, least-privilege permissions and pinned action commits. Corrected the config-validation workflow paths.
+- Changed the CI profile commands from `python3` to `python` so the declared Windows/macOS/Linux profile runs on a host without a `python3` alias; GitHub Actions resolves both to the setup-python interpreter.
+- Unified all version sources at `0.8.0a1`; removed stale captured test logs; the drop-in zip now excludes `src/`, tests, release material, CI, local env files and databases.
+
 ## Unreleased — Milestone G project intelligence
 
 - Added `ogx.intelligence`, a static read-only project intelligence engine with language, framework/technology, dependency, structure, entry-point, build-system, testing, documentation, configuration, architecture and engineering-health analyzers.

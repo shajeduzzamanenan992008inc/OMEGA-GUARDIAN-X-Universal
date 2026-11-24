@@ -2,6 +2,8 @@
 
 ## Scope and maturity
 
+> **Document status:** written for 0.7.1a1; the approval implementation is still a local prototype in 0.8.0a1. Current release evidence is in `docs/TEST_RESULTS.md`.
+
 Release `0.7.1a1` adds a local enterprise operating model, governance records, a one-time email approval ledger, and controlled execution for a small allowlist of project mutations. It is a single-machine/local-alpha control plane, **not** a production SaaS identity or workflow service. Do not represent this release as certified, fully autonomous or production-enterprise-ready.
 
 ## Six operating pillars

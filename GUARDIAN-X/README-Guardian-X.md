@@ -1,5 +1,7 @@
 # OMEGA GUARDIAN X (OGX) — Universal Software Intelligence
 
+> **Document status:** historical Guardian-alpha README describing 0.7.1a1. Current release: 0.8.0a1; see `README.md` and `docs/TEST_RESULTS.md`.
+
 **Release:** `0.7.1a1` (Guardian alpha — universal maintenance and governed upgrade workflows)  
 **Runtime:** Python 3.11+ · zero mandatory third-party runtime dependencies  
 **Deployment intent:** Local-first, self-hosted, cloud/hybrid-ready architecture  
