@@ -14,7 +14,7 @@ from typing import Any
 from .capabilities import Capability, CapabilityState, ProviderKind
 from .errors import CapabilityUnavailableError, ProviderError
 from .identity import link_repository_to_project
-from .operations import execute_pull_request, plan_pull_request
+from .operations import execute_pull_request, plan_pull_request, verify_audit
 from .registry import UniversalProviderRegistry, get_provider_registry
 
 
@@ -284,6 +284,22 @@ def cmd_platform_engine(args) -> int:
         if action == "capabilities":
             _print_json(registry.matrix(authenticated=False))
             return 0
+
+        if action == "audit":
+            report = verify_audit()
+            if getattr(args, "json", False):
+                _print_json(report)
+            else:
+                print("Platform audit integrity")
+                print(f"  log       : {report['path']}")
+                print(f"  valid     : {report['valid']}")
+                print(f"  records   : {report['records']} (chained {report['chained']}, unverified {report['unchained']})")
+                print(f"  head seq  : {report['seq']} {report['head']}")
+                for error in report["errors"]:
+                    print(f"  ERROR: {error}")
+                if report["unchained"]:
+                    print("  Note: unverified lines predate hash chaining; they are not integrity evidence.")
+            return 0 if report["valid"] else 1
 
         if action == "repo":
             adapter = registry.get(args.provider, environ=dict(os.environ))

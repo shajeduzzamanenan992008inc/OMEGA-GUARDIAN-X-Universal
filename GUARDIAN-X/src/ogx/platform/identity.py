@@ -29,7 +29,16 @@ def normalize_repository_url(url: str) -> str:
         parsed = urlsplit(text)
         if parsed.username or parsed.password:
             raise ValueError("Repository URLs must not embed credentials.")
-        host, path = parsed.hostname or "", parsed.path
+        host = parsed.hostname or ""
+        default_port = 443 if parsed.scheme == "https" else 80
+        if parsed.port is not None and parsed.port != default_port:
+            # A provider instance on a non-default port is a different
+            # endpoint, so the port is part of the normalized identity key.
+            # Bracket IPv6 literals to keep the host:port form unambiguous.
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            host = f"{host}:{parsed.port}"
+        path = parsed.path
     else:
         host, _, path = text.partition("/"), "", text.partition("/")[2]
     path = path.strip("/")

@@ -76,8 +76,11 @@ Contract status:
 
 - The interfaces exist and are importable.
 - Adapters present: `local_filesystem`, `local_git`, and a GitHub shim.
-- **No host contract test suite exists, so no adapter is declared operational.**
-  `ogx host list` reports `No hosts registered.` by default.
+- A shared host contract suite exists (`tests/test_host_contract.py`, 12 tests)
+  and passes for the registry and the local adapters' metadata/capability
+  surface. It does **not** cover connect/read/disconnect/health/recovery, so no
+  adapter is declared operational. `ogx host list` reports `No hosts
+  registered.` by default.
 - A host claim is valid only after that adapter passes the shared contract
   suite: identity, discovery, connect, health, read, list, metadata,
   capabilities, failure handling, permission handling, disconnect, recovery.

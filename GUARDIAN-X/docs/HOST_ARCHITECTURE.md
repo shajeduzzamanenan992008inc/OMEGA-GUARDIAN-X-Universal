@@ -2,15 +2,17 @@
 
 ## 1. Status statement
 
-**No host adapter is declared operational in `0.8.0a1`.** The interfaces,
-registry and local adapters exist, but a host may only be called operational
-after it passes the shared host contract suite — and that suite does not exist
-yet. This document records the real state, not a roadmap claim.
+**No host adapter is declared operational in `0.8.0a1`.** A shared host
+contract suite now exists (`tests/test_host_contract.py`, 12 tests) and passes
+for the registry plus the local adapters' metadata/capability surface. It does
+not yet cover connect/read/disconnect/health/recovery, because the adapters do
+not implement those operations. This document records the real state, not a
+roadmap claim.
 
 | Host | Category | Status |
 | --- | --- | --- |
-| Local filesystem | local | PARTIALLY_IMPLEMENTED — adapter exists, no contract suite |
-| Local Git repository | local | PARTIALLY_IMPLEMENTED — adapter exists, no contract suite |
+| Local filesystem | local | PARTIALLY_IMPLEMENTED — registry/metadata contract passes; lifecycle untested |
+| Local Git repository | local | PARTIALLY_IMPLEMENTED — registry/metadata contract passes; lifecycle untested |
 | GitHub | git host | UNVERIFIED shim over the canonical provider engine |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); no host contract suite |
 | GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |

@@ -81,3 +81,23 @@ Self-hosted instances are configured with an explicit API base.
 - Writes are limited to pull/merge request creation, always approval-gated.
 - No capability is claimed for deleting, merging, pushing to protected
   branches, changing permissions, or deploying.
+
+## Host engine status
+
+The host engine is not a provider family and is not shown above. Current state
+(`docs/HOST_CONTRACT_VERIFICATION.md`):
+
+| Host | Status |
+| --- | --- |
+| Local filesystem | PARTIALLY_IMPLEMENTED — registry/metadata contract passes (12 tests); no session/read/health lifecycle |
+| Local Git | PARTIALLY_IMPLEMENTED — same limits |
+| GitHub | UNVERIFIED as a host (provider engine is mock-verified) |
+| Cloud/remote workspaces | DESCRIPTOR_ONLY |
+
+No host is operational; `ogx host list` is empty on a fresh state directory.
+
+## Verification meaning
+
+`verified` means the adapter exists and passes deterministic mocked contract
+tests. It does **not** mean a live API call succeeded. No credentials were
+present during registry verification.

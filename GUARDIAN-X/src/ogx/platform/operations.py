@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .audit import append_chained, verify_chain
 from .base import ProviderAdapter
 from .capabilities import Capability
 from .errors import (
@@ -23,8 +24,6 @@ from .errors import (
     PermissionDeniedError,
 )
 from .models import OperationResult, WritePlan
-from .security import redact, redact_mapping
-
 _BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
 _PROTECTED = {"main", "master", "develop", "trunk"}
 
@@ -173,15 +172,18 @@ def audit_path() -> Path:
 
 
 def append_audit(event: dict[str, Any], *, path: Path | None = None) -> Path:
+    """Append one redacted, hash-chained audit record."""
+
     target = Path(path) if path is not None else audit_path()
-    if target.is_symlink():
-        raise ValueError("Platform audit log must not be a symlink.")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    safe = redact_mapping(event)
-    line = redact(json.dumps(safe, sort_keys=True, ensure_ascii=False))
-    with open(target, "a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    append_chained(target, event)
     return target
+
+
+def verify_audit(*, path: Path | None = None) -> dict[str, Any]:
+    """Verify the audit chain; see ``platform.audit.verify_chain`` for limits."""
+
+    target = Path(path) if path is not None else audit_path()
+    return verify_chain(target)
 
 
 def read_audit(*, limit: int = 100, path: Path | None = None) -> list[dict[str, Any]]:

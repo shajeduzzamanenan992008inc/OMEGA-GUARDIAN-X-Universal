@@ -56,7 +56,10 @@ ogx identity update .
 
 - `normalize_repository_url(url)` produces a credential-free, lowercase key:
   `host/path` with `.git` stripped. `git@host:path` and scheme URLs are
-  accepted; URLs with embedded userinfo are rejected.
+  accepted; URLs with embedded userinfo are rejected. A non-default explicit
+  port is part of the key (`git.example.com:8443/acme/repo`), while an explicit
+  default port (`:443` for HTTPS, `:80` for HTTP) normalizes away. IPv6
+  endpoints keep brackets and port (`[2001:db8::1]:8443/acme/repo`).
 - `deterministic_repository_id(provider_id, normalized)` uses a fixed namespace
   (`uuid5`) so the same repository yields the same row id in any process.
 - `link_repository_to_project(...)`:
