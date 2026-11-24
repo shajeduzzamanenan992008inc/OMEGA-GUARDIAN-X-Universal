@@ -56,3 +56,34 @@ Details: `docs/ARCHITECTURE.md` - integration: `docs/INTEGRATION.md` - runtime g
 * Verified on Linux with Python 3.12. Windows and Python 3.11 are expected to work (no OS-specific code was added) but were not exercised here.
 
 Develop & test: `PYTHONPATH=core python -m unittest discover -s _dev/tests` - build the lean drop-in zip: `python _dev/tools/make_dist.py`.
+
+## Universal provider engine (Milestone H)
+
+`src/ogx/platform/` is a provider-neutral engine for Git hosting, workspaces,
+CI/CD, project management, package registries and cloud platforms. It is
+standard-library only and reuses the existing registry, state directory and
+approval workflow.
+
+```bash
+ogx providers list                      # every registered provider and its state
+ogx providers inspect github            # declared capabilities and credential source
+ogx providers capabilities github       # per-capability states
+ogx platform status                     # engine-level summary
+ogx platform capabilities               # machine-readable capability matrix
+ogx host discover --provider github     # read-only repository discovery
+ogx remote inspect https://github.com/acme/demo --provider github
+ogx remote activate https://github.com/acme/demo --provider github
+```
+
+Capability states are `supported`, `partial`, `unsupported`, `requires_auth`,
+`requires_permission`, `requires_workspace`, `not_configured`, `unavailable`
+and `failed`. A capability is advertised as `supported` only when the adapter
+actually implements it; a missing capability is never reported as success.
+
+Writes are limited to approval-gated pull/merge request creation
+(`ogx platform pr ... --confirm`) and are recorded in
+`<state_dir>/platform/audit.jsonl`. Deleting, merging, pushing to protected
+branches, changing permissions and deploying are not implemented.
+
+Details: `docs/PROVIDER_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`,
+`docs/AUTHENTICATION.md`.

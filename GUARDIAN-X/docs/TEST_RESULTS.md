@@ -40,3 +40,38 @@ Not run / not established:
 - Full SAST/DAST, transitive dependency resolution, exhaustive CVE intelligence, runtime debugger, production SaaS, independent security audit or certification.
 
 The 134-test result is local unit/fixture evidence, not a claim of universal compatibility, exploitability proof, Android build verification, email delivery, production readiness or enterprise certification. The CLI/SQLite identity subjects remain caller-supplied in this alpha; production requires authenticated SSO/OIDC/SAML sessions and centralized service controls.
+
+## Milestone H re-validation (2026-11-24)
+
+Environment: Windows, Python 3.15, standard library only.
+
+- `PYTHONPATH=src python -m compileall -q src/ogx` - passed.
+- `PYTHONPATH=src python -m pytest tests -q` - **336 passed, 11 skipped, 0
+  failed** (111.8 s). Baseline before this milestone was 288 passed, 11 skipped;
+  the 48 new tests are all in `tests/test_platform_engine.py`.
+- New tests cover: capability-state truthfulness, per-provider normalization
+  (GitHub, GitLab, Bitbucket, Gitea/Forgejo, Azure DevOps, CodeCommit SigV4),
+  pagination (including foreign-host refusal), 401/403/429/5xx/timeout/
+  malformed/oversized handling, write-no-retry, SSRF and endpoint validation,
+  redaction, credential isolation, identity linking and duplicate prevention,
+  approval-gated writes with audit output, and CLI compatibility.
+- No test requires a real credential or performs network I/O; every provider
+  response comes from a local fake transport.
+- Packaging: `python -m pip wheel --no-deps --no-build-isolation . -w dist` -
+  passed (`omega_guardian_x-0.7.1a1-py3-none-any.whl`, 162 archive entries,
+  including 21 `ogx/platform` and 9 `ogx/integration` files).
+- Editable install into a fresh virtual environment -
+  `ogx --version` printed `ogx 0.7.1a1`.
+- Isolated install of the built wheel into an empty target directory -
+  `ogx --version`, `ogx providers list --json`, `ogx platform capabilities` and
+  `ogx host list` all ran from the installed copy.
+
+Not established:
+
+- No real GitHub/GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS credential was
+  used; no live PR/MR was created.
+- SourceHut remains descriptor-only; no GraphQL endpoint was validated.
+- The 21 family providers (workspaces, CI/CD, project management, package
+  registries, cloud) perform no domain operation.
+- Rate-limit and retry behavior was verified against mocked responses, not a
+  live throttling service.

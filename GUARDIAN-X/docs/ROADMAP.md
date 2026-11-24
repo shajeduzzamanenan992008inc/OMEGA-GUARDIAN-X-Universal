@@ -62,3 +62,28 @@ Status reflects source code in **0.7.1a1**. Architecture ambitions are not imple
 - [ ] Independent penetration test, legal review, EULA/DPA/privacy/support terms.
 - [ ] Customer support, vulnerability disclosure and incident-response processes.
 - [ ] Evidence-based certification only after independent audits.
+
+## Milestone H - Universal provider engine (implemented and locally tested)
+
+- [x] Provider-neutral contract with nine explicit capability states and
+      introspection-derived support claims.
+- [x] Registry of 28 providers: 7 verified Git hosting adapters and 21
+      descriptor-only family providers.
+- [x] Tier 1 adapters for GitHub, GitLab, Bitbucket, Gitea and Forgejo; Azure
+      DevOps and AWS CodeCommit (SigV4) in Tier 2.
+- [x] Bounded transport: timeouts, response caps, rate-limit handling with
+      `Retry-After`, no retry for unsafe writes, redirect refusal, host pinning.
+- [x] SSRF and endpoint validation, per-provider credential isolation, error-body
+      redaction and normalized error taxonomy.
+- [x] Repository/project identity linking with duplicate-ownership prevention.
+- [x] Approval-gated pull/merge request creation with an audit trail.
+- [x] CLI: `ogx providers list|inspect|capabilities`,
+      `ogx platform status|capabilities`, `ogx host discover`,
+      `ogx remote inspect|activate`.
+- [x] 48 deterministic mocked-provider tests; full suite 336 passed, 11 skipped.
+- [ ] SourceHut GraphQL contract validation (stays descriptor-only until then).
+- [ ] Operational workspaces, CI/CD, project-management, registry and cloud
+      adapters (currently descriptor-only).
+- [ ] Additional write operations: issues are implemented; labels, reviews,
+      checks and webhooks are not.
+- [ ] Real-credential integration runs against hosted services.

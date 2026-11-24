@@ -42,3 +42,29 @@ Full OS-level sandboxing for Windows without Docker, seccomp profile management,
 ## Reporting rule
 
 A pattern match is a lead, not proof. Findings must record rule, severity, confidence, location and evidence. OGX must redact values before persistence and say when analysis was incomplete. No report may claim that a project is secure or certified based solely on a clean heuristic scan.
+
+## Provider engine controls (Milestone H)
+
+- Credentials are read per provider from its own environment variables; a token
+  is never reused across providers, embedded in a URL, written to the registry,
+  or loaded from the analyzed project.
+- API bases must pass `validate_api_base`: HTTPS by default, no userinfo,
+  refusal of loopback/private/link-local/cloud-metadata hosts unless explicitly
+  opted in. Request and pagination hosts are pinned to the configured API host.
+- HTTP redirects are refused. Responses are size-capped. Read retries are
+  bounded and honor `Retry-After`; state-changing requests are never retried.
+- Provider error bodies are redacted (token shapes, `Authorization`, `Bearer`)
+  before display or persistence.
+- Every remote write requires a validated plan, a capability and permission
+  check, explicit approval, and an audit event at
+  `<state_dir>/platform/audit.jsonl`.
+- Destructive operations (delete, merge, protected-branch push, permission
+  change, deployment) are not implemented.
+- A capability that is not implemented reports `unsupported` or
+  `requires_auth`; it can never be reported as a successful operation.
+
+### Still not implemented for providers
+
+Vault/KMS-backed credentials, OAuth device or refresh flows, webhook signature
+verification, per-tenant provider quotas, and live production credential
+rotation.

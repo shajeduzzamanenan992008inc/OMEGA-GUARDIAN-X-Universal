@@ -27,3 +27,21 @@ Never exaggerate implemented coverage; state limits honestly.
 - Findings need stable rule IDs (never renumber), severity rationale, confidence, safe evidence and a recommendation.
 - Keep resource use bounded; no unbounded parallelism.
 - Update `docs/` and `CHANGELOG.md` when behaviour changes.
+
+## Provider engine rules (Milestone H)
+
+11. A capability may be advertised as `supported` only when the adapter class
+    overrides the corresponding method. Never hand-write a capability claim that
+    introspection would contradict.
+12. Provider credentials come from that provider's own environment variables.
+    Never reuse a token across providers, put one in a URL, or load one from the
+    analyzed project. Never persist secrets in the registry.
+13. Endpoints must pass `ogx.platform.security.validate_api_base`; HTTPS only,
+    no userinfo, no cloud-metadata or private-address targets without explicit
+    opt-in. Do not follow redirects or pagination links to a foreign host.
+14. Writes require a validated plan, explicit approval, a permission check and an
+    audit event. Never retry an unsafe write, and never auto-delete, merge, push
+    a protected branch, change permissions or deploy.
+15. New adapters need deterministic mocked-provider tests. Do not invent
+    endpoints for a provider whose API contract has not been validated: mark it
+    `descriptor_only` instead.

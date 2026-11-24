@@ -18,7 +18,34 @@ from .envfile import (
 from .detector import detect_project
 from .reports import write_json, write_markdown, write_sarif
 from .scanner import scan_repository
-from .integration import apply_integration, integration_status, plan_integration, remove_integration
+def _load_project_integration():
+    """Load the tracked project-folder integration module explicitly.
+
+    ``ogx/integration/`` is a separate (contract-verification) package that
+    shadows the historical ``ogx/integration.py`` module. The project-folder
+    workflow used by ``ogx integrate`` lives in the module, so it is loaded by
+    path under a private name to keep both APIs available.
+    """
+
+    import importlib.util
+
+    module_name = "ogx._project_integration"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+    spec = importlib.util.spec_from_file_location(module_name, Path(__file__).with_name("integration.py"))
+    if spec is None or spec.loader is None:
+        raise ImportError("Project integration module is unavailable.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_project_integration = _load_project_integration()
+apply_integration = _project_integration.apply_integration
+integration_status = _project_integration.integration_status
+plan_integration = _project_integration.plan_integration
+remove_integration = _project_integration.remove_integration
 from .inventory import build_inventory
 from .architecture import analyze_architecture, architecture_mermaid
 from .sbom import generate_sbom
@@ -1283,166 +1310,6 @@ def cmd_host_register(args: argparse.Namespace) -> int:
         return 2
 
 
-# ==================== Host Commands ====================
-
-def cmd_host_list(args: argparse.Namespace) -> int:
-    """List all registered hosts."""
-    try:
-        host_registry = get_host_registry()
-        host_type = args.type
-        provider = args.provider
-        status = None  # Not filtering by status for now
-        
-        hosts = host_registry.list_hosts(
-            host_type=host_type,
-            provider=provider,
-            status=status,
-            limit=100,
-            offset=0,
-        )
-        
-        if args.json:
-            _json_print({"hosts": hosts})
-        else:
-            if not hosts:
-                print("No hosts registered.")
-            for h in hosts:
-                caps = ", ".join(h.get("capabilities", [])[:5]) + ("..." if len(h.get("capabilities", [])) > 5 else "")
-                print(f"  {h['host_id']}  {h['display_name']}  [{h['host_type']}]  [{h['provider']}]  {h['status']}")
-                print(f"    Capabilities: {caps}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Host list failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_host_show(args: argparse.Namespace) -> int:
-    """Show detailed host information."""
-    try:
-        host_registry = get_host_registry()
-        host = host_registry.get_host(args.host_id)
-        
-        if args.json:
-            _json_print(host)
-        else:
-            print(f"Host: {host['display_name']} ({host['host_id']})")
-            print(f"  Type: {host['host_type']}")
-            print(f"  Provider: {host['provider']}")
-            print(f"  Identifier: {host['normalized_identifier']}")
-            print(f"  Status: {host['status']}")
-            print(f"  Capabilities: {', '.join(host.get('capabilities', [])) or 'none'}")
-            print(f"  Created: {host['created_at']}")
-            print(f"  Updated: {host['updated_at']}")
-        return 0
-    except KeyError as exc:
-        print(f"Host not found: {exc}", file=sys.stderr)
-        return 2
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Host show failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_host_status(args: argparse.Namespace) -> int:
-    """Show host status and health."""
-    try:
-        host_registry = get_host_registry()
-        host = host_registry.get_host(args.host_id)
-        
-        capabilities = host_registry.get_host_capabilities(args.host_id)
-        supported = host_registry.get_host_supported_capabilities(args.host_id)
-        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
-        
-        if args.json:
-            _json_print({
-                "host_id": host["host_id"],
-                "display_name": host["display_name"],
-                "host_type": host["host_type"],
-                "provider": host["provider"],
-                "status": host["status"],
-                "capabilities": capabilities,
-                "supported": supported,
-                "requires_auth": requires_auth,
-            })
-        else:
-            print(f"Host: {host['display_name']} ({host['host_id']})")
-            print(f"  Type: {host['host_type']} (provider: {host['provider']})")
-            print(f"  Status: {host['status']}")
-            print(f"  Supported Capabilities: {', '.join(supported) if supported else 'none'}")
-            print(f"  Requires Auth: {', '.join(requires_auth) if requires_auth else 'none'}")
-        return 0
-    except KeyError as exc:
-        print(f"Host not found: {exc}", file=sys.stderr)
-        return 2
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Host status failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_host_capabilities(args: argparse.Namespace) -> int:
-    """Show host capabilities."""
-    try:
-        host_registry = get_host_registry()
-        
-        capabilities = host_registry.get_host_capabilities(args.host_id)
-        supported = host_registry.get_host_supported_capabilities(args.host_id)
-        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
-        
-        if args.json:
-            _json_print({
-                "host_id": args.host_id,
-                "capabilities": capabilities,
-                "supported": supported,
-                "requires_auth": requires_auth,
-            })
-        else:
-            print(f"Capabilities for host {args.host_id}:")
-            for cap, status in sorted(capabilities.items()):
-                marker = "✓" if status == "supported" else ("!" if status == "requires_auth" else "✗")
-                print(f"  {marker} {cap}: {status}")
-        return 0
-    except KeyError as exc:
-        print(f"Host not found: {exc}", file=sys.stderr)
-        return 2
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Capabilities failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_host_register(args: argparse.Namespace) -> int:
-    """Register a new host."""
-    try:
-        host_registry = get_host_registry()
-        
-        host_type = HostType(args.type)
-        provider = ProviderType(args.provider)
-        
-        host = host_registry.register_host(
-            host_id=uuid4(),
-            host_type=host_type.value,
-            provider=provider.value,
-            display_name=args.name,
-            normalized_identifier=args.identifier or "",
-            metadata={},
-        )
-        
-        if args.json:
-            _json_print({
-                "host_id": str(host.host_id),
-                "display_name": host.display_name,
-                "host_type": host.host_type.value,
-                "provider": host.provider.value,
-                "normalized_identifier": host.normalized_identifier,
-            })
-        else:
-            print(f"Registered host: {host.display_name} ({host.host_id})")
-            print(f"  Type: {host.host_type.value}")
-            print(f"  Provider: {host.provider.value}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Host registration failed: {exc}", file=sys.stderr)
-        return 2
-
-
 def _requires_email_approval() -> bool:
     """Mutating commands are email-gated by default; explicit local break-glass is opt-in."""
     return os.environ.get("OGX_ALLOW_UNAPPROVED_WRITES", "0").strip().lower() not in {"1", "true", "yes"}
@@ -1878,27 +1745,9 @@ def cmd_repo(args: argparse.Namespace) -> int:
 
 
 def cmd_platform(args: argparse.Namespace) -> int:
-    try:
-        if args.platform_action == "repo":
-            client = ProviderClient(args.provider, args.url)
-            data = client.get_repository()
-            _json_print({k: data.get(k) for k in ("name", "full_name", "path_with_namespace", "slug", "html_url", "web_url", "default_branch", "private", "visibility", "description") if k in data})
-        elif args.platform_action == "pr":
-            if not args.confirm: raise PermissionError("Creating a Pull/Merge Request requires explicit --confirm.")
-            if _requires_email_approval():
-                queued = _queue_action_approval("platform.pr",
-                    {"provider": args.provider, "url": args.url, "title": args.title,
-                     "body": args.body, "head": args.head, "base": args.base},
-                    f"Create a {args.provider} Pull/Merge Request from '{args.head}' to '{args.base}' with the supplied title/body.",
-                    getattr(args, "requester_subject", None))
-                _print_approval_queued(queued)
-                return 0
-            client = ProviderClient(args.provider, args.url)
-            result = client.create_pull_request(args.title, args.body, args.head, args.base)
-            _json_print({k: result.get(k) for k in ("number", "iid", "id", "html_url", "web_url", "state", "title") if k in result})
-        return 0
-    except (OSError, ValueError, RuntimeError, PermissionError) as exc:
-        print(f"Platform operation failed: {exc}", file=sys.stderr); return 2
+    from .platform.cli_commands import cmd_platform_engine
+
+    return cmd_platform_engine(args)
 
 
 def cmd_osv_audit(args: argparse.Namespace) -> int:
@@ -2029,289 +1878,20 @@ def cmd_guardian(args: argparse.Namespace) -> int:
         return 2
 
 
-# ==================== Provider Commands ====================
+# ==================== Provider / Platform Commands ====================
+# Handlers live in ogx.platform.cli_commands; re-exported for the argument parser.
 
-def cmd_provider_list(args: argparse.Namespace) -> int:
-    """List all providers."""
-    try:
-        from .hosts import ProviderType, get_host_registry
-        
-        providers = [
-            {
-                "provider_id": f"provider-{p.value}",
-                "provider_type": p.value,
-                "display_name": p.value.capitalize(),
-                "status": "available",
-            }
-            for p in ProviderType
-            if p != ProviderType.LOCAL
-        ]
-        
-        if args.json:
-            _json_print({"providers": providers})
-        else:
-            if not providers:
-                print("No providers registered.")
-            for p in providers:
-                print(f"  {p['provider_id']}  {p['display_name']}  [{p['provider_type']}]")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Provider list failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_provider_show(args: argparse.Namespace) -> int:
-    """Show provider details."""
-    try:
-        from .hosts import ProviderType, get_host_registry
-        from uuid import UUID
-        
-        host_registry = get_host_registry()
-        
-        # Try to find provider by ID
-        try:
-            pid = UUID(args.provider_id)
-            # Search by host_id in registry
-            hosts = host_registry.list_hosts(provider=None)
-            provider = None
-            for h in hosts:
-                if h.get("host_id") == args.provider_id:
-                    provider = h
-                    break
-        except ValueError:
-            # Try by provider type name
-            hosts = host_registry.list_hosts(provider=args.provider_id)
-            provider = hosts[0] if hosts else None
-        
-        if not provider:
-            print(f"Provider not found: {args.provider_id}", file=sys.stderr)
-            return 2
-        
-        if args.json:
-            _json_print(provider)
-        else:
-            print(f"Provider: {provider.get('display_name', 'Unknown')} ({provider.get('host_id', args.provider_id)})")
-            print(f"  Type: {provider.get('host_type', 'unknown')}")
-            print(f"  Provider: {provider.get('provider', 'unknown')}")
-            print(f"  Status: {provider.get('status', 'unknown')}")
-            print(f"  Capabilities: {', '.join(provider.get('capabilities', [])) or 'none'}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Provider show failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_provider_status(args: argparse.Namespace) -> int:
-    """Show provider status."""
-    try:
-        from .hosts import ProviderType, get_host_registry
-        from uuid import UUID
-        
-        host_registry = get_host_registry()
-        
-        # Find provider
-        try:
-            pid = UUID(args.provider_id)
-            hosts = host_registry.list_hosts()
-            provider = next((h for h in hosts if h.get("host_id") == args.provider_id), None)
-        except ValueError:
-            hosts = host_registry.list_hosts(provider=args.provider_id)
-            provider = hosts[0] if hosts else None
-        
-        if not provider:
-            print(f"Provider not found: {args.provider_id}", file=sys.stderr)
-            return 2
-        
-        if args.json:
-            _json_print(provider)
-        else:
-            print(f"Provider: {provider.get('display_name', 'Unknown')} ({provider.get('host_id', args.provider_id)})")
-            print(f"  Status: {provider.get('status', 'unknown')}")
-            print(f"  Type: {provider.get('host_type', 'unknown')}")
-            print(f"  Provider: {provider.get('provider', 'unknown')}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Provider status failed: {exc}", file=sys.stderr)
-        return 2
-
-
-# ==================== Remote Commands ====================
-
-def cmd_remote_discover(args: argparse.Namespace) -> int:
-    """Discover remote repositories."""
-    try:
-        from .hosts import ProviderType, get_host_registry
-        from .connectors.providers import ProviderClient
-        import os
-        
-        host_registry = get_host_registry()
-        
-        # Find hosts for the provider
-        if args.provider:
-            provider_type = ProviderType(args.provider)
-            hosts = host_registry.list_hosts(provider=provider_type.value)
-        else:
-            # Discover from all providers
-            hosts = []
-            for p in ProviderType:
-                if p != ProviderType.LOCAL:
-                    hosts.extend(host_registry.list_hosts(provider=p.value))
-        
-        results = []
-        for host in hosts:
-            # Try to discover repositories from this host
-            if host.get("provider") in ["github", "gitlab", "bitbucket", "gitea", "forgejo"]:
-                try:
-                    token = os.environ.get(f"OGX_{host['provider'].upper()}_TOKEN")
-                    if token:
-                        client = ProviderClient(host["provider"], host.get("metadata", {}).get("api_base", ""))
-                        repos = client.list_repositories(args.owner, limit=args.limit)
-                        for repo in repos:
-                            repo["host_id"] = host["host_id"]
-                            results.append(repo)
-                except Exception as e:
-                    if not args.ignore_errors:
-                        print(f"Warning: Failed to discover from {host['display_name']}: {e}", file=sys.stderr)
-        
-        if args.json:
-            _json_print({"repositories": results, "count": len(results)})
-        else:
-            print(f"Discovered {len(results)} remote repositories:")
-            for r in results:
-                print(f"  {r.get('full_name', r.get('name', 'Unknown'))} [{r.get('provider', 'unknown')}]")
-                print(f"    URL: {r.get('html_url', r.get('url', 'Unknown'))}")
-                print(f"    Host: {r.get('host_id', 'Unknown')}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Remote discover failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_remote_inspect(args: argparse.Namespace) -> int:
-    """Inspect a remote repository."""
-    try:
-        from .hosts import ProviderType
-        from .connectors.providers import ProviderClient
-        import os
-        
-        if args.provider:
-            provider = args.provider
-        else:
-            # Try to detect from URL
-            from .connectors.git import detect_provider
-            provider = detect_provider(args.url)
-        
-        token = os.environ.get(f"OGX_{provider.upper()}_TOKEN")
-        if not token:
-            print(f"Error: No token for {provider}. Set OGX_{provider.upper()}_TOKEN", file=sys.stderr)
-            return 2
-        
-        client = ProviderClient(provider, args.url)
-        repo = client.get_repository()
-        
-        if args.json:
-            _json_print(repo)
-        else:
-            print(f"Repository: {repo.get('full_name', repo.get('name', 'Unknown'))}")
-            print(f"  Provider: {provider}")
-            print(f"  URL: {repo.get('html_url', repo.get('web_url', 'Unknown'))}")
-            print(f"  Default Branch: {repo.get('default_branch', 'Unknown')}")
-            print(f"  Private: {repo.get('private', repo.get('visibility', 'Unknown'))}")
-            print(f"  Description: {repo.get('description', 'None')}")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Remote inspect failed: {exc}", file=sys.stderr)
-        return 2
-
-
-def cmd_remote_activate(args: argparse.Namespace) -> int:
-    """Activate a remote repository (register in local registry)."""
-    try:
-        from .hosts import ProviderType, get_host_registry
-        from .connectors.providers import ProviderClient
-        from .registry import get_registry
-        from uuid import uuid4
-        import os
-        
-        if args.provider:
-            provider = args.provider
-        else:
-            from .connectors.git import detect_provider
-            provider = detect_provider(args.url)
-        
-        token = os.environ.get(f"OGX_{provider.upper()}_TOKEN")
-        if not token:
-            print(f"Error: No token for {provider}. Set OGX_{provider.upper()}_TOKEN", file=sys.stderr)
-            return 2
-        
-        client = ProviderClient(provider, args.url)
-        repo = client.get_repository()
-        
-        # Get or create host registry entry
-        host_registry = get_host_registry()
-        host = host_registry.find_host_by_identifier(repo.get("html_url", args.url))
-        if not host:
-            host_id = uuid4()
-            host = host_registry.register_host(
-                host_id=host_id,
-                host_type=provider.upper(),
-                provider=provider,
-                display_name=provider.capitalize(),
-                normalized_identifier=repo.get("html_url", args.url),
-                metadata={"api_base": client.api_base} if hasattr(client, 'api_base') else {},
-            )
-        else:
-            host_id = UUID(host["host_id"])
-        
-        # Register in main registry
-        registry = get_registry()
-        
-        # Find or create project
-        project_name = repo.get("full_name", repo.get("name", "Unknown"))
-        project = registry.find_project_by_identity(canonical_name=project_name)
-        if not project:
-            project_id = uuid4()
-            project = registry.register_project(
-                project_id=project_id,
-                canonical_name=project_name,
-                description=repo.get("description", ""),
-                identity_hash=f"remote:{provider}:{repo.get('id', '')}",
-            )
-        else:
-            project_id = project.project_id
-        
-        # Register repository
-        repo_id = uuid4()
-        repository = registry.register_repository(
-            repository_id=repo_id,
-            project_id=project_id,
-            provider=provider,
-            repository_url=repo.get("html_url", args.url),
-            normalized_repository_url=repo.get("full_name", repo.get("name", "")),
-            repository_name=repo.get("name", ""),
-            default_branch=repo.get("default_branch", ""),
-            visibility=repo.get("visibility", repo.get("private", "unknown")),
-        )
-        
-        # Link repository to host
-        host_registry.link_repository_host(repo_id, host_id, is_primary=True)
-        
-        if args.json:
-            _json_print({
-                "project_id": str(project_id),
-                "repository_id": str(repo_id),
-                "host_id": str(host_id),
-                "status": "activated",
-            })
-        else:
-            print(f"Activated remote repository:")
-            print(f"  Project: {project.canonical_name} ({project_id})")
-            print(f"  Repository: {repository.repository_name} ({repo_id})")
-            print(f"  Host: {host.get('display_name', 'Unknown')} ({host_id})")
-        return 0
-    except (OSError, ValueError, Exception) as exc:
-        print(f"Remote activate failed: {exc}", file=sys.stderr)
-        return 2
+from .platform.cli_commands import (  # noqa: E402
+    cmd_provider_list,
+    cmd_provider_show,
+    cmd_provider_status,
+    cmd_providers_capabilities,
+    cmd_providers_inspect,
+    cmd_providers_list,
+    cmd_remote_activate,
+    cmd_remote_discover,
+    cmd_remote_inspect,
+)
 
 
 # ==================== Repository Commands ====================
@@ -2353,7 +1933,10 @@ def cmd_repository_list(args: argparse.Namespace) -> int:
             projects = registry.list_projects()
             for p in projects:
                 repos.extend(registry.list_repositories(p.project_id))
-        
+
+        if getattr(args, "provider", None):
+            repos = [r for r in repos if r.provider == args.provider]
+
         if args.json:
             _json_print({
                 "repositories": [
@@ -2665,6 +2248,12 @@ def cmd_governance(args: argparse.Namespace) -> int:
         return 2
 
 
+def _git_provider_choices() -> tuple[str, ...]:
+    from .platform import ProviderKind, get_provider_registry
+
+    return tuple(d.provider_id for d in get_provider_registry().by_kind(ProviderKind.GIT_HOSTING))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ogx", description=BANNER)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -2974,14 +2563,19 @@ def build_parser() -> argparse.ArgumentParser:
     repo_push.add_argument("--requester-subject")
     repo_push.set_defaults(func=cmd_repo)
 
-    platform = sub.add_parser("platform", help="Use supported Git hosting APIs with environment-provided credentials")
+    platform = sub.add_parser("platform", help="Universal multi-platform status, capabilities and approval-gated operations")
     platform_sub = platform.add_subparsers(dest="platform_action", required=True)
+    platform_status = platform_sub.add_parser("status", help="Show the universal provider engine status")
+    platform_status.add_argument("--json", action="store_true")
+    platform_status.set_defaults(func=cmd_platform)
+    platform_caps = platform_sub.add_parser("capabilities", help="Print the machine-readable capability matrix")
+    platform_caps.set_defaults(func=cmd_platform)
     platform_repo = platform_sub.add_parser("repo")
-    platform_repo.add_argument("provider", choices=("github", "gitlab", "bitbucket", "gitea", "forgejo", "gitea-or-forgejo"))
+    platform_repo.add_argument("provider", choices=_git_provider_choices())
     platform_repo.add_argument("url")
     platform_repo.set_defaults(func=cmd_platform)
     platform_pr = platform_sub.add_parser("pr")
-    platform_pr.add_argument("provider", choices=("github", "gitlab", "bitbucket", "gitea", "forgejo", "gitea-or-forgejo"))
+    platform_pr.add_argument("provider", choices=_git_provider_choices())
     platform_pr.add_argument("url")
     platform_pr.add_argument("--title", required=True)
     platform_pr.add_argument("--body", default="Created by OMEGA GUARDIAN X after explicit user approval.")
@@ -3123,11 +2717,19 @@ def build_parser() -> argparse.ArgumentParser:
     host_register.add_argument("--json", action="store_true", help="Print result JSON")
     host_register.set_defaults(func=cmd_host_register)
 
+    host_discover = host_sub.add_parser("discover", help="Discover repositories on a provider (read-only)")
+    host_discover.add_argument("--provider", required=True, choices=_git_provider_choices())
+    host_discover.add_argument("--owner", help="Organization/workspace/group scope")
+    host_discover.add_argument("--limit", type=int, default=100)
+    host_discover.add_argument("--json", action="store_true")
+    host_discover.set_defaults(func=cmd_remote_discover)
+
     provider = sub.add_parser("provider", help="Manage providers")
     provider_sub = provider.add_subparsers(dest="provider_action", required=True)
     
     provider_list = provider_sub.add_parser("list", help="List all providers")
     provider_list.add_argument("--json", action="store_true", help="Print full provider list JSON")
+    provider_list.add_argument("--kind", choices=["git_hosting", "cloud_workspace", "cicd", "project_management", "package_registry", "cloud_infrastructure"])
     provider_list.set_defaults(func=cmd_provider_list)
     
     provider_show = provider_sub.add_parser("show", help="Show provider details")
@@ -3136,15 +2738,38 @@ def build_parser() -> argparse.ArgumentParser:
     provider_show.set_defaults(func=cmd_provider_show)
     
     provider_status = provider_sub.add_parser("status", help="Show provider status")
-    provider_status.add_argument("provider_id", help="Provider UUID")
+    provider_status.add_argument("provider_id", help="Provider identifier")
     provider_status.add_argument("--json", action="store_true", help="Print status JSON")
+    provider_status.add_argument("--check", action="store_true", help="Perform an authenticated health check (network)")
     provider_status.set_defaults(func=cmd_provider_status)
+
+    provider_caps = provider_sub.add_parser("capabilities", help="Show provider capabilities")
+    provider_caps.add_argument("provider_id")
+    provider_caps.add_argument("--json", action="store_true")
+    provider_caps.set_defaults(func=cmd_providers_capabilities)
+
+    providers = sub.add_parser("providers", help="Universal provider registry, inspection and capability matrix")
+    providers_sub = providers.add_subparsers(dest="providers_action", required=True)
+    providers_list = providers_sub.add_parser("list", help="List every registered provider")
+    providers_list.add_argument("--json", action="store_true")
+    providers_list.add_argument("--kind", choices=["git_hosting", "cloud_workspace", "cicd", "project_management", "package_registry", "cloud_infrastructure"])
+    providers_list.set_defaults(func=cmd_providers_list)
+    providers_inspect = providers_sub.add_parser("inspect", help="Inspect one provider and its declared capabilities")
+    providers_inspect.add_argument("provider_id")
+    providers_inspect.add_argument("--json", action="store_true")
+    providers_inspect.add_argument("--check", action="store_true", help="Perform an authenticated health check (network)")
+    providers_inspect.set_defaults(func=cmd_providers_inspect)
+    providers_caps = providers_sub.add_parser("capabilities", help="Show one provider's capabilities or the whole matrix")
+    providers_caps.add_argument("provider_id", nargs="?")
+    providers_caps.add_argument("--json", action="store_true")
+    providers_caps.add_argument("--all", action="store_true")
+    providers_caps.set_defaults(func=cmd_providers_capabilities)
 
     remote = sub.add_parser("remote", help="Manage remote repositories")
     remote_sub = remote.add_subparsers(dest="remote_action", required=True)
     
     remote_discover = remote_sub.add_parser("discover", help="Discover remote repositories")
-    remote_discover.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider to discover from")
+    remote_discover.add_argument("--provider", required=True, choices=_git_provider_choices(), help="Provider to discover from")
     remote_discover.add_argument("--owner", help="Repository owner/org")
     remote_discover.add_argument("--limit", type=int, default=100, help="Maximum results")
     remote_discover.add_argument("--json", action="store_true", help="Print results JSON")
@@ -3152,13 +2777,13 @@ def build_parser() -> argparse.ArgumentParser:
     
     remote_inspect = remote_sub.add_parser("inspect", help="Inspect a remote repository")
     remote_inspect.add_argument("url", help="Repository URL")
-    remote_inspect.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider type")
+    remote_inspect.add_argument("--provider", choices=_git_provider_choices(), help="Provider type")
     remote_inspect.add_argument("--json", action="store_true", help="Print result JSON")
     remote_inspect.set_defaults(func=cmd_remote_inspect)
     
     remote_activate = remote_sub.add_parser("activate", help="Activate a remote repository")
     remote_activate.add_argument("url", help="Repository URL")
-    remote_activate.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider type")
+    remote_activate.add_argument("--provider", choices=_git_provider_choices(), help="Provider type")
     remote_activate.add_argument("--json", action="store_true", help="Print result JSON")
     remote_activate.set_defaults(func=cmd_remote_activate)
 
@@ -3168,6 +2793,7 @@ def build_parser() -> argparse.ArgumentParser:
     repo_list = repo_sub.add_parser("list", help="List repositories")
     repo_list.add_argument("--project", help="Filter by project")
     repo_list.add_argument("--host", help="Filter by host")
+    repo_list.add_argument("--provider", help="Filter by provider id")
     repo_list.add_argument("--json", action="store_true", help="Print JSON")
     repo_list.set_defaults(func=cmd_repository_list)
     

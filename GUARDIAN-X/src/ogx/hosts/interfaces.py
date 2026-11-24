@@ -44,12 +44,10 @@ class RepositoryMetadata:
     pushed_at: Optional[str]
     clone_url: str
     ssh_url: str
-    ssh_url: str
     html_url: str
     size: int
     topics: List[str]
     license: Optional[str]
-    default_branch: str
     permissions: dict
     metadata: dict
 
@@ -115,47 +113,6 @@ class HostHealth:
     last_check: Optional[str] = None
     issues: List[str] = None
     details: dict = None
-
-
-class HostProvider(ABC):
-    """Base interface for host providers."""
-
-    @property
-    @abstractmethod
-    def host_type(self) -> str:
-        """Host type identifier."""
-        pass
-
-    @property
-    @abstractmethod
-    def provider_type(self) -> str:
-        """Provider type identifier."""
-        pass
-
-    @abstractmethod
-    async def identify_host(self, host_identifier: str) -> Optional[dict]:
-        """Identify and validate a host by its identifier."""
-        pass
-
-    @abstractmethod
-    async def inspect_host(self, host_id: str) -> dict:
-        """Inspect host details and health."""
-        pass
-
-    @abstractmethod
-    async def get_capabilities(self, host_id: str) -> dict:
-        """Get host capabilities."""
-        pass
-
-    @abstractmethod
-    async def check_health(self, host_id: str) -> dict:
-        """Check host health."""
-        pass
-
-    @abstractmethod
-    async def list_resources(self, host_id: str, resource_type: str) -> List[dict]:
-        """List resources (repositories, workspaces) on the host."""
-        pass
 
 
 class RepositoryProvider(ABC):
@@ -346,6 +303,3 @@ class HostProvider(ABC):
     async def get_provider_info(self) -> dict:
         """Get provider information."""
         pass
-
-
-from typing import AsyncIterator
