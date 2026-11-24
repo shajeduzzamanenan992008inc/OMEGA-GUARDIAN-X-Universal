@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Milestone G project intelligence
+
+- Added `ogx.intelligence`, a static read-only project intelligence engine with language, framework/technology, dependency, structure, entry-point, build-system, testing, documentation, configuration, architecture and engineering-health analyzers.
+- Added `ogx intelligence analyze` with project ID/name/path targeting, terminal/JSON/Markdown/both output, section filters, exclusions and bounded resource options. Reports are recomputed and external `both` artifacts are written only under `OGX_HOME`.
+- Added read-only identity and Registry V2 association: existing identity and workspace/project records are reused; intelligence never registers or duplicates a project.
+- Added evidence/confidence/limitation reporting, transparent indicator-coverage health scoring and secret-value-safe configuration reporting.
+- Added deterministic tests for models, ecosystems, monorepos, malformed manifests, generated/vendored files, limits, symlinks, identity relocation, registry association and CLI output.
+- Documentation: `docs/INTELLIGENCE_ENGINE.md`.
+
 ## 0.8.0a1 - plug-and-play shield & dev core
 
 Restructure (no change to scanner/report behaviour, rule ids or the `ogx` package/CLI names):

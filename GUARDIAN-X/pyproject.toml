@@ -29,14 +29,15 @@ dependencies = []
 ogx = "ogx.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "core"}
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-where = ["core"]
+where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "ogx.__version__" }
 
 [tool.setuptools.package-data]
-"ogx.governance" = ["schema.sql"]
+"ogx.enterprise" = ["schema.sql"]
 "ogx.ecosystem" = ["skillpacks/official/*/skill.json", "skillpacks/official/*/SKILL.md"]
+"ogx.hosts.adapters" = ["*.py"]

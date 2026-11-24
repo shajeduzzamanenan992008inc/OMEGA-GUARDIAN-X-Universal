@@ -74,6 +74,14 @@ from .discovery import (
     DiscoveryEngine, DiscoveryConfig, DiscoveryScope, DiscoveryRoot,
     DiscoveryStatus, discover_projects, discover_root, run_discovery_cycle,
 )
+from .hosts import (
+    HostRegistry, get_host_registry,
+    LocalFilesystemProvider, LocalGitProvider, GitHubProvider,
+    HostType, ProviderType, HostCapability, CapabilityStatus,
+)
+from .intelligence import AnalysisOptions, ProjectIntelligenceEngine
+from .intelligence.integration import resolve_registered_project
+from .intelligence.reports import render_markdown, render_terminal
 
 BANNER = "OMEGA GUARDIAN X — Universal Repository Intelligence"
 GLOBAL_CONFIG = """# OMEGA GUARDIAN X global configuration
@@ -412,6 +420,83 @@ def cmd_android(args: argparse.Namespace) -> int:
     print("No Gradle build, Android SDK tool, adb command, emulator, device or APK install was executed.")
     if args.strict and (summary["critical"] or summary["high"]):
         return 1
+    return 0
+
+
+def cmd_intelligence(args: argparse.Namespace) -> int:
+    """Run the read-only universal project intelligence analysis."""
+    try:
+        root = None
+        explicit_project_id = None
+        if getattr(args, "path", None):
+            root = _root(args.path)
+        elif getattr(args, "project", None):
+            projects = _load_projects()
+            if args.project not in projects:
+                raise ValueError(f"Unknown registered project: {args.project}. Run: ogx projects list")
+            root = _root(projects[args.project])
+        elif getattr(args, "target", None):
+            candidate = Path(args.target).expanduser()
+            if candidate.is_dir():
+                root = candidate.resolve()
+            else:
+                root, explicit_project_id, _ = resolve_registered_project(args.target)
+        else:
+            raise ValueError(
+                "Provide a project path, a registered project name or a registry project ID.")
+        if not root.is_dir():
+            raise ValueError(f"Project directory not found: {root}")
+        options = AnalysisOptions(
+            excludes=tuple(getattr(args, "exclude", None) or ()),
+            max_files=args.max_files,
+            max_depth=args.max_depth,
+            registry_lookup=not args.no_registry,
+        )
+        report = ProjectIntelligenceEngine().analyze(
+            root, options, project_id=explicit_project_id)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Intelligence analysis failed: {exc}", file=sys.stderr)
+        return 2
+
+    sections = None
+    requested = [name for name, enabled in (
+        ("languages", args.languages),
+        ("dependencies", args.dependencies),
+        ("architecture", args.architecture),
+        ("health", args.health),
+    ) if enabled]
+    if requested:
+        sections = requested
+
+    report_format = "json" if args.json else args.format
+    if report_format == "json":
+        _json_print(report.to_dict())
+        return 0
+    if report_format == "markdown":
+        print(render_markdown(report, sections))
+        return 0
+    if report_format == "both":
+        try:
+            report_dir = _prepare_report_dir(root)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            base = f"intelligence-{stamp}-{report.metadata.analysis_id}"
+            json_path = report_dir / f"{base}.json"
+            markdown_path = report_dir / f"{base}.md"
+            for destination in (json_path, markdown_path):
+                if destination.is_symlink():
+                    raise OSError(f"External report must not be a symlink: {destination}")
+            json_path.write_text(
+                json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8")
+            markdown_path.write_text(render_markdown(report), encoding="utf-8")
+        except (OSError, ValueError) as exc:
+            print(f"Could not write external intelligence report: {exc}", file=sys.stderr)
+            return 2
+        print(render_terminal(report, sections))
+        print(f"External JSON report: {json_path}")
+        print(f"External Markdown report: {markdown_path}")
+        return 0
+    print(render_terminal(report, sections))
     return 0
 
 
@@ -1038,6 +1123,326 @@ def cmd_activate(args: argparse.Namespace) -> int:
         return 2
 
 
+# ==================== Host Commands ====================
+
+def cmd_host_list(args: argparse.Namespace) -> int:
+    """List all registered hosts."""
+    try:
+        host_registry = get_host_registry()
+        host_type = args.type
+        provider = args.provider
+        status = None  # Not filtering by status for now
+        
+        hosts = host_registry.list_hosts(
+            host_type=host_type,
+            provider=provider,
+            status=status,
+            limit=100,
+            offset=0,
+        )
+        
+        if args.json:
+            _json_print({"hosts": hosts})
+        else:
+            if not hosts:
+                print("No hosts registered.")
+            for h in hosts:
+                caps = ", ".join(h.get("capabilities", [])[:5]) + ("..." if len(h.get("capabilities", [])) > 5 else "")
+                print(f"  {h['host_id']}  {h['display_name']}  [{h['host_type']}]  [{h['provider']}]  {h['status']}")
+                print(f"    Capabilities: {caps}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_show(args: argparse.Namespace) -> int:
+    """Show detailed host information."""
+    try:
+        host_registry = get_host_registry()
+        host = host_registry.get_host(args.host_id)
+        
+        if args.json:
+            _json_print(host)
+        else:
+            print(f"Host: {host['display_name']} ({host['host_id']})")
+            print(f"  Type: {host['host_type']}")
+            print(f"  Provider: {host['provider']}")
+            print(f"  Identifier: {host['normalized_identifier']}")
+            print(f"  Status: {host['status']}")
+            print(f"  Capabilities: {', '.join(host.get('capabilities', [])) or 'none'}")
+            print(f"  Created: {host['created_at']}")
+            print(f"  Updated: {host['updated_at']}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host show failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_status(args: argparse.Namespace) -> int:
+    """Show host status and health."""
+    try:
+        host_registry = get_host_registry()
+        host = host_registry.get_host(args.host_id)
+        
+        capabilities = host_registry.get_host_capabilities(args.host_id)
+        supported = host_registry.get_host_supported_capabilities(args.host_id)
+        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
+        
+        if args.json:
+            _json_print({
+                "host_id": host["host_id"],
+                "display_name": host["display_name"],
+                "host_type": host["host_type"],
+                "provider": host["provider"],
+                "status": host["status"],
+                "capabilities": capabilities,
+                "supported": supported,
+                "requires_auth": requires_auth,
+            })
+        else:
+            print(f"Host: {host['display_name']} ({host['host_id']})")
+            print(f"  Type: {host['host_type']} (provider: {host['provider']})")
+            print(f"  Status: {host['status']}")
+            print(f"  Supported Capabilities: {', '.join(supported) if supported else 'none'}")
+            print(f"  Requires Auth: {', '.join(requires_auth) if requires_auth else 'none'}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host status failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_capabilities(args: argparse.Namespace) -> int:
+    """Show host capabilities."""
+    try:
+        host_registry = get_host_registry()
+        
+        capabilities = host_registry.get_host_capabilities(args.host_id)
+        supported = host_registry.get_host_supported_capabilities(args.host_id)
+        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
+        
+        if args.json:
+            _json_print({
+                "host_id": args.host_id,
+                "capabilities": capabilities,
+                "supported": supported,
+                "requires_auth": requires_auth,
+            })
+        else:
+            print(f"Capabilities for host {args.host_id}:")
+            for cap, status in sorted(capabilities.items()):
+                marker = "✓" if status == "supported" else ("!" if status == "requires_auth" else "✗")
+                print(f"  {marker} {cap}: {status}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Capabilities failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_register(args: argparse.Namespace) -> int:
+    """Register a new host."""
+    try:
+        host_registry = get_host_registry()
+        
+        host_type = HostType(args.type)
+        provider = ProviderType(args.provider)
+        
+        host = host_registry.register_host(
+            host_id=uuid4(),
+            host_type=host_type.value,
+            provider=provider.value,
+            display_name=args.name,
+            normalized_identifier=args.identifier or "",
+            metadata={},
+        )
+        
+        if args.json:
+            _json_print({
+                "host_id": str(host.host_id),
+                "display_name": host.display_name,
+                "host_type": host.host_type.value,
+                "provider": host.provider.value,
+                "normalized_identifier": host.normalized_identifier,
+            })
+        else:
+            print(f"Registered host: {host.display_name} ({host.host_id})")
+            print(f"  Type: {host.host_type.value}")
+            print(f"  Provider: {host.provider.value}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host registration failed: {exc}", file=sys.stderr)
+        return 2
+
+
+# ==================== Host Commands ====================
+
+def cmd_host_list(args: argparse.Namespace) -> int:
+    """List all registered hosts."""
+    try:
+        host_registry = get_host_registry()
+        host_type = args.type
+        provider = args.provider
+        status = None  # Not filtering by status for now
+        
+        hosts = host_registry.list_hosts(
+            host_type=host_type,
+            provider=provider,
+            status=status,
+            limit=100,
+            offset=0,
+        )
+        
+        if args.json:
+            _json_print({"hosts": hosts})
+        else:
+            if not hosts:
+                print("No hosts registered.")
+            for h in hosts:
+                caps = ", ".join(h.get("capabilities", [])[:5]) + ("..." if len(h.get("capabilities", [])) > 5 else "")
+                print(f"  {h['host_id']}  {h['display_name']}  [{h['host_type']}]  [{h['provider']}]  {h['status']}")
+                print(f"    Capabilities: {caps}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_show(args: argparse.Namespace) -> int:
+    """Show detailed host information."""
+    try:
+        host_registry = get_host_registry()
+        host = host_registry.get_host(args.host_id)
+        
+        if args.json:
+            _json_print(host)
+        else:
+            print(f"Host: {host['display_name']} ({host['host_id']})")
+            print(f"  Type: {host['host_type']}")
+            print(f"  Provider: {host['provider']}")
+            print(f"  Identifier: {host['normalized_identifier']}")
+            print(f"  Status: {host['status']}")
+            print(f"  Capabilities: {', '.join(host.get('capabilities', [])) or 'none'}")
+            print(f"  Created: {host['created_at']}")
+            print(f"  Updated: {host['updated_at']}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host show failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_status(args: argparse.Namespace) -> int:
+    """Show host status and health."""
+    try:
+        host_registry = get_host_registry()
+        host = host_registry.get_host(args.host_id)
+        
+        capabilities = host_registry.get_host_capabilities(args.host_id)
+        supported = host_registry.get_host_supported_capabilities(args.host_id)
+        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
+        
+        if args.json:
+            _json_print({
+                "host_id": host["host_id"],
+                "display_name": host["display_name"],
+                "host_type": host["host_type"],
+                "provider": host["provider"],
+                "status": host["status"],
+                "capabilities": capabilities,
+                "supported": supported,
+                "requires_auth": requires_auth,
+            })
+        else:
+            print(f"Host: {host['display_name']} ({host['host_id']})")
+            print(f"  Type: {host['host_type']} (provider: {host['provider']})")
+            print(f"  Status: {host['status']}")
+            print(f"  Supported Capabilities: {', '.join(supported) if supported else 'none'}")
+            print(f"  Requires Auth: {', '.join(requires_auth) if requires_auth else 'none'}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host status failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_capabilities(args: argparse.Namespace) -> int:
+    """Show host capabilities."""
+    try:
+        host_registry = get_host_registry()
+        
+        capabilities = host_registry.get_host_capabilities(args.host_id)
+        supported = host_registry.get_host_supported_capabilities(args.host_id)
+        requires_auth = host_registry.get_host_requires_auth_capabilities(args.host_id)
+        
+        if args.json:
+            _json_print({
+                "host_id": args.host_id,
+                "capabilities": capabilities,
+                "supported": supported,
+                "requires_auth": requires_auth,
+            })
+        else:
+            print(f"Capabilities for host {args.host_id}:")
+            for cap, status in sorted(capabilities.items()):
+                marker = "✓" if status == "supported" else ("!" if status == "requires_auth" else "✗")
+                print(f"  {marker} {cap}: {status}")
+        return 0
+    except KeyError as exc:
+        print(f"Host not found: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Capabilities failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_host_register(args: argparse.Namespace) -> int:
+    """Register a new host."""
+    try:
+        host_registry = get_host_registry()
+        
+        host_type = HostType(args.type)
+        provider = ProviderType(args.provider)
+        
+        host = host_registry.register_host(
+            host_id=uuid4(),
+            host_type=host_type.value,
+            provider=provider.value,
+            display_name=args.name,
+            normalized_identifier=args.identifier or "",
+            metadata={},
+        )
+        
+        if args.json:
+            _json_print({
+                "host_id": str(host.host_id),
+                "display_name": host.display_name,
+                "host_type": host.host_type.value,
+                "provider": host.provider.value,
+                "normalized_identifier": host.normalized_identifier,
+            })
+        else:
+            print(f"Registered host: {host.display_name} ({host.host_id})")
+            print(f"  Type: {host.host_type.value}")
+            print(f"  Provider: {host.provider.value}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Host registration failed: {exc}", file=sys.stderr)
+        return 2
+
+
 def _requires_email_approval() -> bool:
     """Mutating commands are email-gated by default; explicit local break-glass is opt-in."""
     return os.environ.get("OGX_ALLOW_UNAPPROVED_WRITES", "0").strip().lower() not in {"1", "true", "yes"}
@@ -1624,6 +2029,519 @@ def cmd_guardian(args: argparse.Namespace) -> int:
         return 2
 
 
+# ==================== Provider Commands ====================
+
+def cmd_provider_list(args: argparse.Namespace) -> int:
+    """List all providers."""
+    try:
+        from .hosts import ProviderType, get_host_registry
+        
+        providers = [
+            {
+                "provider_id": f"provider-{p.value}",
+                "provider_type": p.value,
+                "display_name": p.value.capitalize(),
+                "status": "available",
+            }
+            for p in ProviderType
+            if p != ProviderType.LOCAL
+        ]
+        
+        if args.json:
+            _json_print({"providers": providers})
+        else:
+            if not providers:
+                print("No providers registered.")
+            for p in providers:
+                print(f"  {p['provider_id']}  {p['display_name']}  [{p['provider_type']}]")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Provider list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_provider_show(args: argparse.Namespace) -> int:
+    """Show provider details."""
+    try:
+        from .hosts import ProviderType, get_host_registry
+        from uuid import UUID
+        
+        host_registry = get_host_registry()
+        
+        # Try to find provider by ID
+        try:
+            pid = UUID(args.provider_id)
+            # Search by host_id in registry
+            hosts = host_registry.list_hosts(provider=None)
+            provider = None
+            for h in hosts:
+                if h.get("host_id") == args.provider_id:
+                    provider = h
+                    break
+        except ValueError:
+            # Try by provider type name
+            hosts = host_registry.list_hosts(provider=args.provider_id)
+            provider = hosts[0] if hosts else None
+        
+        if not provider:
+            print(f"Provider not found: {args.provider_id}", file=sys.stderr)
+            return 2
+        
+        if args.json:
+            _json_print(provider)
+        else:
+            print(f"Provider: {provider.get('display_name', 'Unknown')} ({provider.get('host_id', args.provider_id)})")
+            print(f"  Type: {provider.get('host_type', 'unknown')}")
+            print(f"  Provider: {provider.get('provider', 'unknown')}")
+            print(f"  Status: {provider.get('status', 'unknown')}")
+            print(f"  Capabilities: {', '.join(provider.get('capabilities', [])) or 'none'}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Provider show failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_provider_status(args: argparse.Namespace) -> int:
+    """Show provider status."""
+    try:
+        from .hosts import ProviderType, get_host_registry
+        from uuid import UUID
+        
+        host_registry = get_host_registry()
+        
+        # Find provider
+        try:
+            pid = UUID(args.provider_id)
+            hosts = host_registry.list_hosts()
+            provider = next((h for h in hosts if h.get("host_id") == args.provider_id), None)
+        except ValueError:
+            hosts = host_registry.list_hosts(provider=args.provider_id)
+            provider = hosts[0] if hosts else None
+        
+        if not provider:
+            print(f"Provider not found: {args.provider_id}", file=sys.stderr)
+            return 2
+        
+        if args.json:
+            _json_print(provider)
+        else:
+            print(f"Provider: {provider.get('display_name', 'Unknown')} ({provider.get('host_id', args.provider_id)})")
+            print(f"  Status: {provider.get('status', 'unknown')}")
+            print(f"  Type: {provider.get('host_type', 'unknown')}")
+            print(f"  Provider: {provider.get('provider', 'unknown')}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Provider status failed: {exc}", file=sys.stderr)
+        return 2
+
+
+# ==================== Remote Commands ====================
+
+def cmd_remote_discover(args: argparse.Namespace) -> int:
+    """Discover remote repositories."""
+    try:
+        from .hosts import ProviderType, get_host_registry
+        from .connectors.providers import ProviderClient
+        import os
+        
+        host_registry = get_host_registry()
+        
+        # Find hosts for the provider
+        if args.provider:
+            provider_type = ProviderType(args.provider)
+            hosts = host_registry.list_hosts(provider=provider_type.value)
+        else:
+            # Discover from all providers
+            hosts = []
+            for p in ProviderType:
+                if p != ProviderType.LOCAL:
+                    hosts.extend(host_registry.list_hosts(provider=p.value))
+        
+        results = []
+        for host in hosts:
+            # Try to discover repositories from this host
+            if host.get("provider") in ["github", "gitlab", "bitbucket", "gitea", "forgejo"]:
+                try:
+                    token = os.environ.get(f"OGX_{host['provider'].upper()}_TOKEN")
+                    if token:
+                        client = ProviderClient(host["provider"], host.get("metadata", {}).get("api_base", ""))
+                        repos = client.list_repositories(args.owner, limit=args.limit)
+                        for repo in repos:
+                            repo["host_id"] = host["host_id"]
+                            results.append(repo)
+                except Exception as e:
+                    if not args.ignore_errors:
+                        print(f"Warning: Failed to discover from {host['display_name']}: {e}", file=sys.stderr)
+        
+        if args.json:
+            _json_print({"repositories": results, "count": len(results)})
+        else:
+            print(f"Discovered {len(results)} remote repositories:")
+            for r in results:
+                print(f"  {r.get('full_name', r.get('name', 'Unknown'))} [{r.get('provider', 'unknown')}]")
+                print(f"    URL: {r.get('html_url', r.get('url', 'Unknown'))}")
+                print(f"    Host: {r.get('host_id', 'Unknown')}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Remote discover failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_remote_inspect(args: argparse.Namespace) -> int:
+    """Inspect a remote repository."""
+    try:
+        from .hosts import ProviderType
+        from .connectors.providers import ProviderClient
+        import os
+        
+        if args.provider:
+            provider = args.provider
+        else:
+            # Try to detect from URL
+            from .connectors.git import detect_provider
+            provider = detect_provider(args.url)
+        
+        token = os.environ.get(f"OGX_{provider.upper()}_TOKEN")
+        if not token:
+            print(f"Error: No token for {provider}. Set OGX_{provider.upper()}_TOKEN", file=sys.stderr)
+            return 2
+        
+        client = ProviderClient(provider, args.url)
+        repo = client.get_repository()
+        
+        if args.json:
+            _json_print(repo)
+        else:
+            print(f"Repository: {repo.get('full_name', repo.get('name', 'Unknown'))}")
+            print(f"  Provider: {provider}")
+            print(f"  URL: {repo.get('html_url', repo.get('web_url', 'Unknown'))}")
+            print(f"  Default Branch: {repo.get('default_branch', 'Unknown')}")
+            print(f"  Private: {repo.get('private', repo.get('visibility', 'Unknown'))}")
+            print(f"  Description: {repo.get('description', 'None')}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Remote inspect failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_remote_activate(args: argparse.Namespace) -> int:
+    """Activate a remote repository (register in local registry)."""
+    try:
+        from .hosts import ProviderType, get_host_registry
+        from .connectors.providers import ProviderClient
+        from .registry import get_registry
+        from uuid import uuid4
+        import os
+        
+        if args.provider:
+            provider = args.provider
+        else:
+            from .connectors.git import detect_provider
+            provider = detect_provider(args.url)
+        
+        token = os.environ.get(f"OGX_{provider.upper()}_TOKEN")
+        if not token:
+            print(f"Error: No token for {provider}. Set OGX_{provider.upper()}_TOKEN", file=sys.stderr)
+            return 2
+        
+        client = ProviderClient(provider, args.url)
+        repo = client.get_repository()
+        
+        # Get or create host registry entry
+        host_registry = get_host_registry()
+        host = host_registry.find_host_by_identifier(repo.get("html_url", args.url))
+        if not host:
+            host_id = uuid4()
+            host = host_registry.register_host(
+                host_id=host_id,
+                host_type=provider.upper(),
+                provider=provider,
+                display_name=provider.capitalize(),
+                normalized_identifier=repo.get("html_url", args.url),
+                metadata={"api_base": client.api_base} if hasattr(client, 'api_base') else {},
+            )
+        else:
+            host_id = UUID(host["host_id"])
+        
+        # Register in main registry
+        registry = get_registry()
+        
+        # Find or create project
+        project_name = repo.get("full_name", repo.get("name", "Unknown"))
+        project = registry.find_project_by_identity(canonical_name=project_name)
+        if not project:
+            project_id = uuid4()
+            project = registry.register_project(
+                project_id=project_id,
+                canonical_name=project_name,
+                description=repo.get("description", ""),
+                identity_hash=f"remote:{provider}:{repo.get('id', '')}",
+            )
+        else:
+            project_id = project.project_id
+        
+        # Register repository
+        repo_id = uuid4()
+        repository = registry.register_repository(
+            repository_id=repo_id,
+            project_id=project_id,
+            provider=provider,
+            repository_url=repo.get("html_url", args.url),
+            normalized_repository_url=repo.get("full_name", repo.get("name", "")),
+            repository_name=repo.get("name", ""),
+            default_branch=repo.get("default_branch", ""),
+            visibility=repo.get("visibility", repo.get("private", "unknown")),
+        )
+        
+        # Link repository to host
+        host_registry.link_repository_host(repo_id, host_id, is_primary=True)
+        
+        if args.json:
+            _json_print({
+                "project_id": str(project_id),
+                "repository_id": str(repo_id),
+                "host_id": str(host_id),
+                "status": "activated",
+            })
+        else:
+            print(f"Activated remote repository:")
+            print(f"  Project: {project.canonical_name} ({project_id})")
+            print(f"  Repository: {repository.repository_name} ({repo_id})")
+            print(f"  Host: {host.get('display_name', 'Unknown')} ({host_id})")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Remote activate failed: {exc}", file=sys.stderr)
+        return 2
+
+
+# ==================== Repository Commands ====================
+
+def cmd_repository_list(args: argparse.Namespace) -> int:
+    """List repositories."""
+    try:
+        from .registry import get_registry
+        from uuid import UUID
+        
+        registry = get_registry()
+        
+        repos = []
+        if args.project:
+            try:
+                pid = UUID(args.project)
+                project = registry.get_project(pid)
+                repos = registry.list_repositories(pid)
+            except ValueError:
+                project = registry.find_project_by_identity(canonical_name=args.project)
+                if project:
+                    repos = registry.list_repositories(project.project_id)
+        elif args.host:
+            try:
+                hid = UUID(args.host)
+                # We'd need to get repositories for this host from host registry
+                from .hosts import get_host_registry
+                host_registry = get_host_registry()
+                host_repos = host_registry.get_repositories_for_host(hid) if hasattr(host_registry, 'get_repositories_for_host') else []
+                for hr in host_repos:
+                    try:
+                        repos.append(registry.get_repository(hr["repository_id"]))
+                    except Exception:
+                        pass
+            except ValueError:
+                pass
+        else:
+            # List all
+            projects = registry.list_projects()
+            for p in projects:
+                repos.extend(registry.list_repositories(p.project_id))
+        
+        if args.json:
+            _json_print({
+                "repositories": [
+                    {
+                        "repository_id": str(r.repository_id),
+                        "project_id": str(r.project_id),
+                        "provider": r.provider,
+                        "repository_url": r.repository_url,
+                        "repository_name": r.repository_name,
+                        "default_branch": r.default_branch,
+                        "visibility": r.visibility,
+                    }
+                    for r in repos
+                ],
+                "count": len(repos),
+            })
+        else:
+            if not repos:
+                print("No repositories found.")
+            for r in repos:
+                print(f"  {r.repository_id}  {r.provider}  {r.repository_name or r.repository_url}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Repository list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_repository_show(args: argparse.Namespace) -> int:
+    """Show repository details."""
+    try:
+        from .registry import get_registry
+        from uuid import UUID
+        
+        registry = get_registry()
+        
+        try:
+            rid = UUID(args.repository_id)
+            repo = registry.get_repository(rid)
+        except ValueError:
+            # Try to find by name - not directly supported, need to search
+            print(f"Error: Repository ID must be a UUID", file=sys.stderr)
+            return 2
+        
+        if args.json:
+            _json_print({
+                "repository_id": str(repo.repository_id),
+                "project_id": str(repo.project_id),
+                "provider": repo.provider,
+                "repository_url": repo.repository_url,
+                "normalized_repository_url": repo.normalized_repository_url,
+                "repository_name": repo.repository_name,
+                "default_branch": repo.default_branch,
+                "visibility": repo.visibility,
+                "metadata": repo.metadata,
+                "created_at": repo.created_at.isoformat(),
+                "updated_at": repo.updated_at.isoformat(),
+            })
+        else:
+            print(f"Repository: {repo.repository_name or repo.repository_url}")
+            print(f"  ID: {repo.repository_id}")
+            print(f"  Project: {repo.project_id}")
+            print(f"  Provider: {repo.provider}")
+            print(f"  URL: {repo.repository_url}")
+            print(f"  Normalized: {repo.normalized_repository_url}")
+            print(f"  Default Branch: {repo.default_branch}")
+            print(f"  Visibility: {repo.visibility}")
+        return 0
+    except Exception as exc:
+        print(f"Repository show failed: {exc}", file=sys.stderr)
+        return 2
+
+
+# ==================== Workspace Commands ====================
+
+def cmd_workspace_list(args: argparse.Namespace) -> int:
+    """List workspaces."""
+    try:
+        from .registry import get_registry
+        from uuid import UUID
+        
+        registry = get_registry()
+        
+        workspaces = []
+        if args.project:
+            try:
+                pid = UUID(args.project)
+                workspaces = registry.list_workspaces(pid)
+            except ValueError:
+                project = registry.find_project_by_identity(canonical_name=args.project)
+                if project:
+                    workspaces = registry.list_workspaces(project.project_id)
+        elif args.host:
+            # Get workspaces for host via host registry
+            try:
+                hid = UUID(args.host)
+                from .hosts import get_host_registry
+                host_registry = get_host_registry()
+                host_workspaces = host_registry.get_workspaces_for_host(hid) if hasattr(host_registry, 'get_workspaces_for_host') else []
+                for hw in host_workspaces:
+                    try:
+                        workspaces.append(registry.get_workspace(hw["workspace_id"]))
+                    except Exception:
+                        pass
+            except ValueError:
+                pass
+        else:
+            # List all
+            projects = registry.list_projects()
+            for p in projects:
+                workspaces.extend(registry.list_workspaces(p.project_id))
+        
+        if args.json:
+            _json_print({
+                "workspaces": [
+                    {
+                        "workspace_id": str(w.workspace_id),
+                        "project_id": str(w.project_id),
+                        "repository_id": str(w.repository_id) if w.repository_id else None,
+                        "workspace_provider": w.workspace_provider,
+                        "workspace_type": w.workspace_type,
+                        "location_reference": w.location_reference,
+                        "normalized_location": w.normalized_location,
+                        "display_name": w.display_name,
+                        "status": w.status.value,
+                    }
+                    for w in workspaces
+                ],
+                "count": len(workspaces),
+            })
+        else:
+            if not workspaces:
+                print("No workspaces found.")
+            for w in workspaces:
+                print(f"  {w.workspace_id}  [{w.status.value}]  {w.location_reference}")
+        return 0
+    except (OSError, ValueError, Exception) as exc:
+        print(f"Workspace list failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_workspace_show(args: argparse.Namespace) -> int:
+    """Show workspace details."""
+    try:
+        from .registry import get_registry
+        from uuid import UUID
+        
+        registry = get_registry()
+        
+        try:
+            wid = UUID(args.workspace_id)
+            ws = registry.get_workspace(wid)
+        except ValueError:
+            print(f"Error: Workspace ID must be a UUID", file=sys.stderr)
+            return 2
+        
+        if args.json:
+            _json_print({
+                "workspace_id": str(ws.workspace_id),
+                "project_id": str(ws.project_id),
+                "repository_id": str(ws.repository_id) if ws.repository_id else None,
+                "workspace_provider": ws.workspace_provider,
+                "workspace_type": ws.workspace_type,
+                "location_reference": ws.location_reference,
+                "normalized_location": ws.normalized_location,
+                "display_name": ws.display_name,
+                "status": ws.status.value,
+                "last_seen_at": ws.last_seen_at.isoformat(),
+                "metadata": ws.metadata,
+                "created_at": ws.created_at.isoformat(),
+                "updated_at": ws.updated_at.isoformat(),
+            })
+        else:
+            print(f"Workspace: {ws.display_name or ws.location_reference}")
+            print(f"  ID: {ws.workspace_id}")
+            print(f"  Project: {ws.project_id}")
+            print(f"  Repository: {ws.repository_id or 'None'}")
+            print(f"  Provider: {ws.workspace_provider}")
+            print(f"  Type: {ws.workspace_type}")
+            print(f"  Location: {ws.location_reference}")
+            print(f"  Normalized: {ws.normalized_location}")
+            print(f"  Status: {ws.status.value}")
+            print(f"  Last Seen: {ws.last_seen_at.isoformat()}")
+        return 0
+    except Exception as exc:
+        print(f"Workspace show failed: {exc}", file=sys.stderr)
+        return 2
+
+
 def cmd_enterprise(args: argparse.Namespace) -> int:
     try:
         store = EnterpriseStore()
@@ -1800,6 +2718,34 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Limit to engine IDs; accepts repeated or comma-separated values")
     analyze.add_argument("--strict", action="store_true", help="Return 1 when high/critical findings exist")
     analyze.set_defaults(func=cmd_analyze)
+
+    intelligence = sub.add_parser(
+        "intelligence", help="Universal static project intelligence and engineering analysis")
+    intelligence_sub = intelligence.add_subparsers(dest="intelligence_action", required=True)
+    intelligence_analyze = intelligence_sub.add_parser(
+        "analyze", help="Analyze a project read-only; no code, build, test or package manager is executed")
+    intelligence_analyze.add_argument(
+        "target", nargs="?", default=None,
+        help="Registry project ID or canonical name (ignored when --path/--project is used)")
+    intelligence_analyze.add_argument("--path", help="Project root directory")
+    intelligence_analyze.add_argument("--project", help="Name of a registered project")
+    intelligence_analyze.add_argument(
+        "--format", choices=("terminal", "json", "markdown", "both"), default="terminal",
+        help="terminal output (default), stdout JSON/Markdown, or external JSON+Markdown artifacts")
+    intelligence_analyze.add_argument("--json", action="store_true", help="Alias for --format json")
+    intelligence_analyze.add_argument("--languages", action="store_true", help="Show only language findings (plus overview)")
+    intelligence_analyze.add_argument("--dependencies", action="store_true", help="Show only dependency findings (plus overview)")
+    intelligence_analyze.add_argument("--architecture", action="store_true", help="Show only architecture findings (plus overview)")
+    intelligence_analyze.add_argument("--health", action="store_true", help="Show only engineering health (plus overview)")
+    intelligence_analyze.add_argument("--exclude", action="append", metavar="DIR",
+                                      default=[], help="Additional directory name to exclude")
+    intelligence_analyze.add_argument("--max-files", type=int, default=12000,
+                                      help="Maximum indexed files (default: 12000)")
+    intelligence_analyze.add_argument("--max-depth", type=int, default=6,
+                                      help="Maximum bounded tree depth (default: 6)")
+    intelligence_analyze.add_argument("--no-registry", action="store_true",
+                                      help="Do not consult Registry V2 for identity association")
+    intelligence_analyze.set_defaults(func=cmd_intelligence)
 
     android = sub.add_parser("android", help="Run the dedicated Android static engine; no build/device execution")
     android.add_argument("path", nargs="?", default=None)
@@ -2145,15 +3091,107 @@ def build_parser() -> argparse.ArgumentParser:
     activate.add_argument("--json", action="store_true", help="Print activation results JSON")
     activate.set_defaults(func=cmd_activate)
 
+    host = sub.add_parser("host", help="Manage hosts")
+    host_sub = host.add_subparsers(dest="host_action", required=True)
+    
+    host_list = host_sub.add_parser("list", help="List all hosts")
+    host_list.add_argument("--json", action="store_true", help="Print full host list JSON")
+    host_list.add_argument("--type", help="Filter by host type")
+    host_list.add_argument("--provider", help="Filter by provider")
+    host_list.set_defaults(func=cmd_host_list)
+    
+    host_show = host_sub.add_parser("show", help="Show host details")
+    host_show.add_argument("host_id", help="Host UUID")
+    host_show.add_argument("--json", action="store_true", help="Print full host JSON")
+    host_show.set_defaults(func=cmd_host_show)
+    
+    host_status = host_sub.add_parser("status", help="Show host status and health")
+    host_status.add_argument("host_id", help="Host UUID")
+    host_status.add_argument("--json", action="store_true", help="Print status JSON")
+    host_status.set_defaults(func=cmd_host_status)
+    
+    host_capabilities = host_sub.add_parser("capabilities", help="Show host capabilities")
+    host_capabilities.add_argument("host_id", help="Host UUID")
+    host_capabilities.add_argument("--json", action="store_true", help="Print capabilities JSON")
+    host_capabilities.set_defaults(func=cmd_host_capabilities)
+    
+    host_register = host_sub.add_parser("register", help="Register a new host")
+    host_register.add_argument("--type", required=True, choices=[t.value for t in HostType], help="Host type")
+    host_register.add_argument("--provider", required=True, choices=[p.value for p in ProviderType], help="Provider type")
+    host_register.add_argument("--name", required=True, help="Display name")
+    host_register.add_argument("--identifier", help="Normalized identifier")
+    host_register.add_argument("--json", action="store_true", help="Print result JSON")
+    host_register.set_defaults(func=cmd_host_register)
+
+    provider = sub.add_parser("provider", help="Manage providers")
+    provider_sub = provider.add_subparsers(dest="provider_action", required=True)
+    
+    provider_list = provider_sub.add_parser("list", help="List all providers")
+    provider_list.add_argument("--json", action="store_true", help="Print full provider list JSON")
+    provider_list.set_defaults(func=cmd_provider_list)
+    
+    provider_show = provider_sub.add_parser("show", help="Show provider details")
+    provider_show.add_argument("provider_id", help="Provider UUID")
+    provider_show.add_argument("--json", action="store_true", help="Print provider JSON")
+    provider_show.set_defaults(func=cmd_provider_show)
+    
+    provider_status = provider_sub.add_parser("status", help="Show provider status")
+    provider_status.add_argument("provider_id", help="Provider UUID")
+    provider_status.add_argument("--json", action="store_true", help="Print status JSON")
+    provider_status.set_defaults(func=cmd_provider_status)
+
+    remote = sub.add_parser("remote", help="Manage remote repositories")
+    remote_sub = remote.add_subparsers(dest="remote_action", required=True)
+    
+    remote_discover = remote_sub.add_parser("discover", help="Discover remote repositories")
+    remote_discover.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider to discover from")
+    remote_discover.add_argument("--owner", help="Repository owner/org")
+    remote_discover.add_argument("--limit", type=int, default=100, help="Maximum results")
+    remote_discover.add_argument("--json", action="store_true", help="Print results JSON")
+    remote_discover.set_defaults(func=cmd_remote_discover)
+    
+    remote_inspect = remote_sub.add_parser("inspect", help="Inspect a remote repository")
+    remote_inspect.add_argument("url", help="Repository URL")
+    remote_inspect.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider type")
+    remote_inspect.add_argument("--json", action="store_true", help="Print result JSON")
+    remote_inspect.set_defaults(func=cmd_remote_inspect)
+    
+    remote_activate = remote_sub.add_parser("activate", help="Activate a remote repository")
+    remote_activate.add_argument("url", help="Repository URL")
+    remote_activate.add_argument("--provider", choices=[p.value for p in ProviderType if p != ProviderType.LOCAL], help="Provider type")
+    remote_activate.add_argument("--json", action="store_true", help="Print result JSON")
+    remote_activate.set_defaults(func=cmd_remote_activate)
+
+    repository = sub.add_parser("repository", help="Manage repositories")
+    repo_sub = repository.add_subparsers(dest="repository_action", required=True)
+    
+    repo_list = repo_sub.add_parser("list", help="List repositories")
+    repo_list.add_argument("--project", help="Filter by project")
+    repo_list.add_argument("--host", help="Filter by host")
+    repo_list.add_argument("--json", action="store_true", help="Print JSON")
+    repo_list.set_defaults(func=cmd_repository_list)
+    
+    repo_show = repo_sub.add_parser("show", help="Show repository details")
+    repo_show.add_argument("repository_id", help="Repository UUID")
+    repo_show.add_argument("--json", action="store_true", help="Print JSON")
+    repo_show.set_defaults(func=cmd_repository_show)
+
+    workspace = sub.add_parser("workspace", help="Manage workspaces")
+    ws_sub = workspace.add_subparsers(dest="workspace_action", required=True)
+    
+    ws_list = ws_sub.add_parser("list", help="List workspaces")
+    ws_list.add_argument("--project", help="Filter by project")
+    ws_list.add_argument("--host", help="Filter by host")
+    ws_list.add_argument("--json", action="store_true", help="Print JSON")
+    ws_list.set_defaults(func=cmd_workspace_list)
+    
+    ws_show = ws_sub.add_parser("show", help="Show workspace details")
+    ws_show.add_argument("workspace_id", help="Workspace UUID")
+    ws_show.add_argument("--json", action="store_true", help="Print JSON")
+    ws_show.set_defaults(func=cmd_workspace_show)
+
     enterprise = sub.add_parser("enterprise", help="Local tenant/organization data-model preview; not a SaaS server")
     enterprise_sub = enterprise.add_subparsers(dest="enterprise_action", required=True)
-    enterprise_init = enterprise_sub.add_parser("init", help="Initialize local enterprise SQLite schema")
-    enterprise_init.set_defaults(func=cmd_enterprise)
-    enterprise_org = enterprise_sub.add_parser("org-create", help="Create a local organization and initial owner identity")
-    enterprise_org.add_argument("--slug", required=True)
-    enterprise_org.add_argument("--name", required=True)
-    enterprise_org.add_argument("--owner-subject", required=True, help="External IdP subject; no password is stored")
-    enterprise_org.set_defaults(func=cmd_enterprise)
     enterprise_project = enterprise_sub.add_parser("project-add", help="Register project within an organization")
     enterprise_project.add_argument("--org", required=True)
     enterprise_project.add_argument("--name", required=True)

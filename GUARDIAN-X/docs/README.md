@@ -4,6 +4,7 @@
 |---|---|
 | `../README.md` / `../README.bn.md` | overview and quick start (English / Bangla) |
 | `ARCHITECTURE.md` | layers, dependency rule, zero-conflict contract |
+| `INTELLIGENCE_ENGINE.md` | static project intelligence: models, analyzers, evidence, CLI, limits |
 | `INTEGRATION.md` | drop-in, hooks, CI, embedding, link, removal |
 | `RUNTIME_GUARD.md` | firewall / validation / rate limit / access control: config, rules, limits |
 | `OBSERVABILITY.md` | logs, error tracking, debug utilities |
