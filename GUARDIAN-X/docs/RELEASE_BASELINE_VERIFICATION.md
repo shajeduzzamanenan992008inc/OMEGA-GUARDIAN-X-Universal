@@ -13,7 +13,7 @@ session before the hardening changes (except where marked "after").
 | # | Command | Exit | Result |
 | --- | --- | --- | --- |
 | 1 | `git status --porcelain` | 0 | clean |
-| 2 | `python -m pytest -q` | 0 | **340 passed, 11 skipped** (46.97 s) |
+| 2 | `python -m pytest -q` | 0 | **465 passed, 15 skipped** (86.74 s) at HEAD `e7e7686` (earlier baseline recorded 340 passed, 11 skipped at 46.97 s) |
 | 3 | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | 0 | **Ran 245 tests, OK (9 skipped)** (64.16 s) |
 | 4 | `python _dev/tools/sync_core_from_src.py --check` | 0 | versions `{VERSION: 0.8.0a1, src: 0.8.0a1, core: 0.8.0a1}`; structure agrees |
 | 5 | `python -m pip wheel . --no-deps --no-build-isolation -w <tmp>` | 0 | 163 entries, 390,734 bytes, SHA-256 `c9fdde03…ae0a` |

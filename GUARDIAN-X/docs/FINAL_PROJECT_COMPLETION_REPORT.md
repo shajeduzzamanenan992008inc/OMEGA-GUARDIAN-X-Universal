@@ -13,7 +13,7 @@ and an architecture/documentation set that matches the code.
 
 Locally executed evidence:
 
-- canonical suite: **340 passed, 11 skipped, 0 failed** (46.97 s);
+- canonical suite: **465 passed, 15 skipped, 0 failed** (86.74 s) at HEAD `e7e7686` on `main`; the 340/11 figure is the earlier completion-pass result and is retained for historical traceability. See `docs/PROJECT_COMPLETION_TRACKER.md` and the Milestone I.1 review (`docs/../docs/MILESTONE_I1_*.md` from the repository root).
 - drop-in suite: **245 tests, OK (9 skipped)** (64.16 s);
 - source/drop-in consistency check: **OK**;
 - wheel: **163 entries, 390,734 bytes**, correct SPDX metadata, installs and
@@ -121,7 +121,7 @@ the `OPERATIONAL` labels in this report are honest about that.
 | Local filesystem | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
 | Local Git | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
 | GitHub | UNVERIFIED shim over the provider engine |
-| GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS CodeCommit | provider-verified (mocked/static); no host contract suite |
+| GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS CodeCommit | provider-verified (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract; the full host session/health/read/disconnect/recovery lifecycle is still not implemented |
 | Codespaces/Gitpod/Docker/Kubernetes/remote SSH | DESCRIPTOR_ONLY |
 | SourceHut | DESCRIPTOR_ONLY |
 
@@ -294,7 +294,7 @@ ogx host list
 
 ## 19. Tests passed
 
-- Canonical suite: 340 passed.
+- Canonical suite: 465 passed, 15 skipped at HEAD `e7e7686`; the earlier completion pass recorded 340 passed, 11 skipped.
 - Drop-in suite: 245 passed (`Ran 245 tests`, `OK`).
 - Consistency check: OK.
 - Wheel build, venv install, import, CLI version, provider listing: exit 0.
@@ -331,7 +331,7 @@ Mocked/static tests do not establish live behavior.
 1. No hosted CI run; requires an authorized push and workflow execution.
 2. No independent security/legal/architecture review.
 3. No live provider credentials or approved live test accounts.
-4. No host contract suite; hosts cannot be declared operational.
+4. No full host session/health/read/disconnect/recovery lifecycle is implemented; local hosts are read-only and are not declared operational in that sense. A host contract suite does exist at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract for the local filesystem and local Git adapters.
 5. Ruby unavailable, so `validate_config.rb` was not run.
 6. Python 3.11–3.13 and Linux/macOS were not available locally.
 7. DNS-rebinding/TOCTOU hardening and immutable audit remain unimplemented.

@@ -15,7 +15,7 @@ not a claim about hosted CI or about platforms that were not exercised.
 | Check | Command (from `GUARDIAN-X`) | Result |
 |---|---|---|
 | Compile | `python -m compileall -q src core tests _dev/tests` | passed |
-| Canonical tests | `python -m pytest -q` | **340 passed, 11 skipped** |
+| Canonical tests | `python -m pytest -q` | **465 passed, 15 skipped** at HEAD `e7e7686` (earlier baseline recorded 340 passed, 11 skipped) |
 | Drop-in + architecture tests | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **245 tests, OK (9 skipped)** |
 | Version/structure | `python _dev/tools/sync_core_from_src.py --check` | passed |
 | Wheel build | `python -m pip wheel . --no-deps -w release` | passed |

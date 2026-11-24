@@ -24,7 +24,7 @@ feature status.
 
 | ID | Task | Status | Files | Tests | Evidence / blocker |
 | --- | --- | --- | --- | --- | --- |
-| P1-1 | Canonical package `src/ogx` with stdlib-only core | IMPLEMENTED_AND_TESTED | `src/ogx/**` | `_dev/tests/test_architecture.py` | 340 passed |
+| P1-1 | Canonical package `src/ogx` with stdlib-only core | IMPLEMENTED_AND_TESTED | `src/ogx/**` | `_dev/tests/test_architecture.py` | 465 passed, 15 skipped at HEAD `e7e7686` (earlier phase recorded 340 passed) |
 | P1-2 | Hand-maintained drop-in `core/ogx` consistent with canonical tree | IMPLEMENTED_AND_TESTED | `core/ogx/**` | `_dev/tests` (245 tests) | sync check OK |
 | P1-3 | Remove nested duplicate tree | IMPLEMENTED_AND_TESTED | deleted `core/ogx/core/**` (125 files) | architecture tests assert absence | — |
 | P1-4 | Replace destructive generator with read-only consistency checker | IMPLEMENTED_AND_TESTED | `_dev/tools/sync_core_from_src.py` | `--check` run | versions agree |
@@ -173,7 +173,7 @@ Starting commit `c441f01`. Tests below were executed in this pass.
 | RR-6 | Host contract suite | IMPLEMENTED_AND_TESTED (registry/metadata) | 12 tests; lifecycle still NOT IMPLEMENTED |
 | RR-7 | Repository identity ports/IPv6 | IMPLEMENTED_AND_TESTED | `tests/test_identity_ports.py` (8 tests) |
 | RR-8 | Shared provider contract suite | IMPLEMENTED_AND_TESTED (mock) | `tests/test_provider_contract.py` (30 tests) |
-| RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 409 passed, 12 skipped |
+| RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 465 passed, 15 skipped at HEAD `e7e7686` (earlier hardening pass recorded 409 passed, 12 skipped) |
 | RR-10 | Drop-in suite after changes | IMPLEMENTED_AND_TESTED | 245 tests, OK (9 skipped) |
 | RR-11 | Wheel/drop-in rebuild and install | IMPLEMENTED_AND_TESTED | 164-entry wheel; 290-file drop-in |
 | RR-12 | Hosted CI | BLOCKED | no push/run URL |

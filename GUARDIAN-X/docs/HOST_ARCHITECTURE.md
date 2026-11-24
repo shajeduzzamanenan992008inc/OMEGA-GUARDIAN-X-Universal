@@ -14,7 +14,7 @@ roadmap claim.
 | Local filesystem | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/exec/branch ops unsupported |
 | Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
 | GitHub | git host | UNVERIFIED shim over the canonical provider engine |
-| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); no host contract suite |
+| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract |
 | GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |
 | SourceHut | git host | DESCRIPTOR_ONLY |
 

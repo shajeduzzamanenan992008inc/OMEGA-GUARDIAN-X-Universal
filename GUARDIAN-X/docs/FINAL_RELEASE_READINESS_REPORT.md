@@ -21,9 +21,9 @@ features:
   project linking);
 - repository identity now preserves non-default ports and IPv6 endpoints.
 
-Executed evidence: **409 passed, 12 skipped, 0 failed**; drop-in **245 tests,
+Executed evidence: **465 passed, 15 skipped, 0 failed**; drop-in **245 tests,
 OK (9 skipped)**; wheel builds and installs; drop-in archive builds and runs;
-sync check passes.
+sync check passes. The 409/12 figure is the earlier hardening-pass result and is retained for historical traceability.
 
 Not established: hosted CI, live provider APIs, host lifecycle, Python
 3.11–3.13/Linux/macOS, independent review. Decision:
@@ -43,7 +43,7 @@ Not established: hosted CI, live provider APIs, host lifecycle, Python
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Canonical | `python -m pytest -q` | **409 passed, 12 skipped** (48.80 s) |
+| Canonical | `python -m pytest -q` | **465 passed, 15 skipped** (86.74 s) at HEAD `e7e7686` |
 | Drop-in | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **245 tests, OK (9 skipped)** (59.77 s) |
 | Compile | `python -m compileall -q src/ogx tests` | exit 0 |
 | Consistency | `sync_core_from_src.py --check` | OK |
