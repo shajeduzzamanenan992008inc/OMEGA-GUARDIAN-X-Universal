@@ -1,0 +1,21 @@
+{
+  "name": "ogx-autonomous-debugging-planner",
+  "version": "0.4.0a1",
+  "description": "Analyze logs and stack traces, form root-cause hypotheses and propose reproducible checks.",
+  "entrypoint": "SKILL.md",
+  "permissions": [
+    "read_project"
+  ],
+  "execution": "declarative",
+  "publisher": "OMEGA GUARDIAN X",
+  "trust": "official-source-bundle",
+  "inputs": [
+    "project_profile",
+    "evidence"
+  ],
+  "outputs": [
+    "findings",
+    "recommendations",
+    "verification_plan"
+  ]
+}

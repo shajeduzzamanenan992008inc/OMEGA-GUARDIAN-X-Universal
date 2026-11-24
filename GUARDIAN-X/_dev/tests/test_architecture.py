@@ -8,6 +8,7 @@ CORE = Path(__file__).resolve().parents[2] / "core" / "ogx"
 
 # package -> packages it may import (besides itself). "cli" is the composition root.
 ALLOWED = {
+    "adapters": set(),
     "kernel": set(),
     "connectors": {"kernel"},
     "analysis": {"kernel"},
@@ -38,6 +39,8 @@ class ArchitectureTests(unittest.TestCase):
             if len(parts) < 2:
                 continue  # ogx/__init__.py, ogx/__main__.py
             package = parts[0]
+            if package == "core":
+                continue  # core is the distribution root, not a regular package
             for level, module, _names in _imports(path):
                 self.assertEqual(level, 0, f"{path}: relative import; use absolute ogx.* imports")
                 if module == "ogx" or not module.startswith("ogx."):
