@@ -131,7 +131,7 @@ feature status.
 | --- | --- | --- | --- |
 | P11-1 | Correct workflow paths and `working-directory: GUARDIAN-X` | IMPLEMENTED_NOT_FULLY_TESTED | YAML parsed locally; no hosted run; root config-validation now also triggers on `.github/workflows/**` |
 | P11-2 | Python 3.11–3.13 matrix, packaging/drop-in/profile jobs | IMPLEMENTED_NOT_FULLY_TESTED | `.github/workflows/ci.yml` |
-| P11-3 | Hosted CI result | BLOCKED | no push/authorization; no run URL exists |
+| P11-3 | Hosted CI result | BLOCKED | runs exist for `757d6b6` but every job was refused before starting; GitHub annotation cites failed account payments / spending limit. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md` |
 | P11-4 | Root vs nested `.github/workflows` not confused | DOCUMENTED | root `../.github/workflows` is active; `GUARDIAN-X/.github/workflows` is inert |
 
 ## Phase 12 — Documentation
@@ -176,7 +176,7 @@ Starting commit `c441f01`. Tests below were executed in this pass.
 | RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 465 passed, 15 skipped at HEAD `e7e7686` (earlier hardening pass recorded 409 passed, 12 skipped) |
 | RR-10 | Drop-in suite after changes | IMPLEMENTED_AND_TESTED | 245 tests, OK (9 skipped) |
 | RR-11 | Wheel/drop-in rebuild and install | IMPLEMENTED_AND_TESTED | 164-entry wheel; 290-file drop-in |
-| RR-12 | Hosted CI | BLOCKED | no push/run URL |
+| RR-12 | Hosted CI | BLOCKED | hosted runs exist; all jobs refused at startup by account billing |
 | RR-13 | Live provider verification | BLOCKED | no credentials/accounts |
 | RR-14 | Cross-platform 3.11–3.13 / Linux / macOS | UNVERIFIED | Windows 3.15.2 only |
 | RR-15 | Audit immutability beyond hash chain | UNSUPPORTED | no signing/anchor |

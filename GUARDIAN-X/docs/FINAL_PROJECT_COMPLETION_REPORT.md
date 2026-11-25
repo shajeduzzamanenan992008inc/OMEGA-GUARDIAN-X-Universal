@@ -121,7 +121,7 @@ the `OPERATIONAL` labels in this report are honest about that.
 | Local filesystem | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
 | Local Git | OPERATIONAL (read-only) — session lifecycle, adapter, CLI, tests (13 + 16 + 21 + 6) |
 | GitHub | UNVERIFIED shim over the provider engine |
-| GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS CodeCommit | provider-verified (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract; the full host session/health/read/disconnect/recovery lifecycle is still not implemented |
+| GitLab/Bitbucket/Gitea/Forgejo/Azure DevOps/AWS CodeCommit | provider-verified (mocked/static); the host contract suite (`tests/test_host_contract.py`, 12 passed) covers only the registry/metadata contract. These adapters are not wired to the host session lifecycle; the session/health/read/disconnect/recovery lifecycle is implemented only for the two local hosts above. |
 | Codespaces/Gitpod/Docker/Kubernetes/remote SSH | DESCRIPTOR_ONLY |
 | SourceHut | DESCRIPTOR_ONLY |
 
@@ -212,6 +212,13 @@ SHAs.
 **No hosted run exists.** No push was authorized, no run URL exists, and no
 workflow result may be reported as passing.
 
+**Milestone I.3 update (2026-11-26):** hosted runs do exist for this
+repository. The three push-triggered workflows for `757d6b6` each concluded
+`failure` with zero executed steps. GitHub's check annotation states that the
+jobs were not started because recent account payments failed or the spending
+limit must be increased. No test, packaging or drop-in job ran, so no hosted
+result is established. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+
 ## 13. Packaging and release results
 
 | Check | Result |
@@ -229,6 +236,12 @@ workflow result may be reported as passing.
 
 Not done: artifact signing, provenance attestation, bit-for-bit
 reproducibility, publishing any artifact.
+
+**Milestone I.3 update (2026-11-26):** `GUARDIAN-X/LICENSE` is absent at
+`757d6b6`. The wheel still builds, but setuptools warns that the declared
+`license-files = ["LICENSE"]` pattern matches nothing and no license file is
+included in the wheel. Packaging success is separate from license compliance.
+See `../../docs/MILESTONE_I3_PACKAGING_REPORT.md`.
 
 ## 14. Files created (this pass)
 

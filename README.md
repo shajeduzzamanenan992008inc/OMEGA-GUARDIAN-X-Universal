@@ -113,10 +113,10 @@ Locally executed for this working tree (Windows, CPython 3.15.2):
 - Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **245 tests, OK (9 skipped)**.
 - Architecture and distribution checks (included in the suites) — 17 passed.
 - `python -m compileall -q src core tests _dev/tests` — passed.
-- Wheel `omega_guardian_x-0.8.0a1-py3-none-any.whl` — built, 163 files, no test/CI/source-tree leakage; installed into a clean venv; `ogx --version`, `--help`, `providers list` and `platform status` passed.
-- Drop-in zip — 279 files, no `src/`, tests, release material or CI; `init.py status` and `PYTHONPATH=core python -m ogx --version` passed.
+- Wheel `omega_guardian_x-0.8.0a1-py3-none-any.whl` — built, 167 files, no test/CI/source-tree leakage; installed into a clean venv; `ogx --version`, `--help`, `providers list`, `platform status` and `host list` passed. The build warns that the declared `LICENSE` file is absent, so no license file is bundled.
+- Drop-in zip — 324 files in this working tree (305 from a clean `757d6b6` checkout); it includes `omega-shield/GUARDIAN-X/.github/RELEASE_NOTES.md`, which the CI forbidden-path assertion rejects. `init.py status` passed.
 
-The skips are platform-gated tests on Windows (15 in the canonical suite — 12 symlink, 2 POSIX file-mode, 1 where Windows drive-relative rejection is covered by a separate test — and 9 in the drop-in suite); they execute on the Linux CI matrix. Hosted GitHub Actions has **not** been executed for this working tree, and Python 3.11/3.12/3.13 were not available locally. Brevo and SMTP transports are tested with mocked HTTP/SMTP clients; no real inbox delivery was tested.
+The skips are platform-gated tests on Windows (15 in the canonical suite — 12 symlink, 2 POSIX file-mode, 1 where Windows drive-relative rejection is covered by a separate test — and 9 in the drop-in suite); they execute on the Linux CI matrix. Hosted GitHub Actions has **not** executed a job for this working tree: push-triggered runs exist for `757d6b6`, but GitHub refused every job before it started because of account billing/spending limits. Python 3.11/3.12/3.13 were not available locally. Brevo and SMTP transports are tested with mocked HTTP/SMTP clients; no real inbox delivery was tested.
 
 ## Read before production use
 

@@ -28,7 +28,13 @@ Repository-level workflow directory: `.github/workflows/` (correct location).
 ## 3. What was executed
 
 - Files exist at the repository root and were inspected with `grep`.
-- **No workflow was executed.** Nothing was pushed; no hosted run URL exists.
+- **No workflow was executed in this pass.** Nothing was pushed in this pass.
+- **Milestone I.3 update (2026-11-26):** hosted runs do exist. For `757d6b6`
+  the three push workflows (`OGX CI`, `GitHub Configuration Validation`,
+  `OGX Code Security`) each concluded `failure` with zero executed steps.
+  GitHub's annotation states the jobs were not started because recent account
+  payments failed or the spending limit must be increased. No test, packaging
+  or drop-in job ran. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 - YAML parsing was **not** performed in this pass: PyYAML is unavailable in the
   current interpreter (`import yaml` fails). A previous pass parsed these files
   successfully, but that is historical, not current evidence.
@@ -37,7 +43,7 @@ Repository-level workflow directory: `.github/workflows/` (correct location).
 
 | Gap | Severity | Note |
 | --- | --- | --- |
-| No hosted CI result | High | Cannot claim CI passed |
+| Hosted CI blocked by account billing | High | Runs exist for `757d6b6`, but every job was refused before starting; no hosted result can be claimed |
 | Linux-only runners | Medium | Windows/macOS untested in CI |
 | Python 3.15 not in matrix | Low | Local verification used 3.15.2 only |
 | `dependency-review` requires GitHub Advanced Security | Medium | Availability unverified |
