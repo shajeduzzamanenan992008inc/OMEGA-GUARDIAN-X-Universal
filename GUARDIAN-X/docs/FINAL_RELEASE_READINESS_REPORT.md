@@ -113,6 +113,12 @@ GUARDIAN-X`, a Python 3.11/3.12/3.13 matrix and pinned action SHAs.
 **No hosted run exists; CI is UNVERIFIED.** PyYAML is unavailable in this
 interpreter, so the workflows were inspected rather than parsed in this pass.
 
+**Milestone I.3 update (2026-11-26):** hosted runs do exist for `757d6b6`.
+All three push workflows concluded `failure` with zero executed steps; GitHub
+annotated every job as not started because recent account payments failed or
+the spending limit must be increased. CI remains unverified because no job ran.
+See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+
 Root `config-validation.yml` now also triggers on `.github/workflows/**`, so
 root workflow edits run the validator; the nested `GUARDIAN-X/.github/workflows`
 copies are inert (GitHub does not execute workflows from a nested `.github`).
@@ -133,6 +139,11 @@ UNVERIFIED: Linux, macOS, Windows 3.11–3.13.
 | Drop-in | 290 files, required entry points present, 0 forbidden, `init.py status` exit 0 |
 
 Not done: sdist, signing, provenance, reproducibility guarantee, SBOM artifact.
+
+**Milestone I.3 update (2026-11-26):** the `LICENSE` file is absent from the
+tree. The wheel builds but carries no license file and setuptools reports
+`Pattern 'LICENSE' did not match any files.` The `License-Expression` metadata
+is still emitted. See `../../docs/MILESTONE_I3_PACKAGING_REPORT.md`.
 
 ## 11. Remaining risks
 
@@ -157,7 +168,7 @@ pass, artifact signing/reproducibility.
 | 1 | No hosted CI run/URL | High |
 | 2 | No independent security/architecture/legal review | High |
 | 3 | No live provider verification | Medium |
-| 4 | No operational host / lifecycle suite | Medium |
+| 4 | No operational cloud/remote host; only read-only local hosts | Medium |
 | 5 | Declared Python matrix and Linux/macOS unexecuted | Medium |
 | 6 | No artifact signing/provenance | Medium |
 | 7 | DNS policy lacks allowlist/proxy integration | Medium |

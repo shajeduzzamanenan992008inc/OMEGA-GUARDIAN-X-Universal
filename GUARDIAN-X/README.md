@@ -41,7 +41,7 @@ app = shield.ShieldMiddleware(app)       # WSGI;  shield.ShieldASGI(app) for ASG
 ## Layout
 ```
 omega-shield/
-├─ init.py  shield.toml  VERSION  README(.bn).md  LICENSE  SECURITY.md  CHANGELOG.md  AGENTS.md ...
+├─ init.py  shield.toml  VERSION  README(.bn).md  SECURITY.md  CHANGELOG.md  AGENTS.md ...  (LICENSE currently absent)
 ├─ core/ogx/   kernel · connectors · analysis · shield · devkit · governance · ecosystem · runtime · cli   (hand-maintained drop-in, stdlib-only; not generated from src/ogx)
 ├─ guard/      gates/  policies/  runtime/
 ├─ devkit/     health/  observability/  agents/  runbooks/

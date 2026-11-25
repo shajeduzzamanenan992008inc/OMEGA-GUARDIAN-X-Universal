@@ -70,8 +70,10 @@ operational in that sense.
 
 ## Not verified
 
-- Hosted GitHub Actions run. No run was executed or observed; the repository's
-  workflow-run API is not readable without credentials from this environment.
+- Hosted GitHub Actions execution. Runs exist for `757d6b6`, but every job was
+  refused before starting because of account billing/spending limits; no test,
+  packaging or drop-in job executed. See
+  `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 - Python 3.11, 3.12 and 3.13 locally; Linux locally.
 - Ruby-based `_dev/tools/validate_config.rb` (Ruby is not installed here).
 - Real Brevo/SMTP inbox delivery (mocked transports only).

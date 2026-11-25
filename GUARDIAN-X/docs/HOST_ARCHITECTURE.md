@@ -2,12 +2,13 @@
 
 ## 1. Status statement
 
-**No host adapter is declared operational in `0.8.0a1`.** A shared host
-contract suite now exists (`tests/test_host_contract.py`, 12 tests) and passes
-for the registry plus the local adapters' metadata/capability surface. It does
-not yet cover connect/read/disconnect/health/recovery, because the adapters do
-not implement those operations. This document records the real state, not a
-roadmap claim.
+**No cloud, remote or write-capable host adapter is declared operational in
+`0.8.0a1`.** The two local hosts are operational for their documented read-only
+surface: connect, read, health, recover and CLI operations are implemented and
+covered by dedicated suites. A shared host contract suite
+(`tests/test_host_contract.py`, 12 tests) covers the registry plus both local
+adapters' metadata/capability surface. This document records the real state,
+not a roadmap claim.
 
 | Host | Category | Status |
 | --- | --- | --- |
@@ -68,8 +69,9 @@ capabilities and provider info. Full signatures are in
   the project registry, never by path string.
 - Because project identity is path-independent (`docs/PROJECT_IDENTITY.md`), a
   host switch does not change `project_id` or `identity_hash`.
-- Host state persistence, reconnection and failure recovery are **not**
-  end-to-end verified. There is no automated failover.
+- In-process reconnection and bounded recovery are implemented and tested for
+  the two local hosts. Live session state is process-local: it is not persisted
+  across processes, and there is no automated cross-process failover.
 
 ## 5. Capability negotiation
 
@@ -82,9 +84,9 @@ report the limitation rather than returning an empty success.
 The provider engine derives capability truth by introspection: a method that is
 not overridden is not supported. See `docs/PROVIDER_ARCHITECTURE.md`.
 
-## 6. Security boundaries
+## 6. Host session lifecycle
 
-### 6a. Host session lifecycle (November 2026)
+### 6a. Implemented lifecycle (November 2026)
 
 This milestone adds a real, synchronous, process-local host session lifecycle:
 
@@ -138,7 +140,6 @@ See `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
 - No host adapter may expose the host Docker socket or the user home directory
   to analyzed code.
 
-## 7. Capability negotiation
 ## 8. Contract suite required before an operational claim
 
 Each host adapter must pass the same suite:

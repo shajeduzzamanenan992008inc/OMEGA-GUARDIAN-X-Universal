@@ -12,10 +12,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 # The drop-in contains init.py, core/, guard/, devkit/, link/, docs/ and the
 # shield metadata only. Tests, CI, release material, the installable src tree
-# and local secrets must never be shipped.
-EXCLUDE_TOP = {
-    "_dev", ".github", "pyproject.toml", ".git", "dist", "build", "release",
-    "tests", "src", ".pytest_cache",
+# and local secrets must never be shipped. Directory names are excluded at any
+# depth: a stray nested mirror such as GUARDIAN-X/.github/ is still repository
+# metadata, not drop-in content. This mirrors the archive policy asserted in
+# .github/workflows/ci.yml.
+EXCLUDE_TOP_FILES = {"pyproject.toml"}
+EXCLUDE_DIRS = {
+    "_dev", ".github", ".git", "build", "dist", "release", "tests", "src",
+    ".pytest_cache", "__pycache__",
 }
 EXCLUDE_NAMES = {".env", "results.txt"}
 EXCLUDE_SUFFIXES = {".pyc", ".whl", ".zip", ".db", ".sqlite", ".sqlite3"}
@@ -29,9 +33,11 @@ def main() -> int:
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(ROOT.rglob("*")):
             rel = path.relative_to(ROOT)
-            if path.is_dir() or rel.parts[0] in EXCLUDE_TOP:
+            if path.is_dir() or rel.parts[0] in EXCLUDE_TOP_FILES:
                 continue
-            if "__pycache__" in rel.parts or path.suffix in EXCLUDE_SUFFIXES:
+            if any(part in EXCLUDE_DIRS or part.endswith(".egg-info") for part in rel.parts):
+                continue
+            if path.suffix in EXCLUDE_SUFFIXES:
                 continue
             if path.name in EXCLUDE_NAMES or (path.name.startswith(".env.") and path.name != ".env.example"):
                 continue
