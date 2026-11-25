@@ -10,6 +10,8 @@ not a claim about hosted CI or about platforms that were not exercised.
 - Package under test: `omega-guardian-x` 0.8.0a1
 - Canonical source: `src/ogx`; drop-in: `core/ogx`
 
+Re-verified: 2026-11-25 at HEAD `d55cea3` (its parent `e7e7686` is the remote tip and `d55cea3` changes documentation only, so the code under test is identical to `e7e7686`).
+
 ## Commands and results
 
 | Check | Command (from `GUARDIAN-X`) | Result |
@@ -27,10 +29,14 @@ not a claim about hosted CI or about platforms that were not exercised.
 
 ## Skips
 
-All 20 skips are platform gates, not suppressed failures:
+All 24 skips (15 canonical, 9 drop-in) are platform gates, not suppressed
+failures:
 
 - POSIX file-mode checks (`chmod 600/644`) on Windows — 2 in the canonical suite.
-- Symlink creation (directory/file) unavailable on Windows — 9 in the canonical suite and 9 in the drop-in suite.
+- Symlink creation (directory/file) unavailable on Windows — 12 in the
+  canonical suite and 9 in the drop-in suite.
+- Windows drive-relative path rejection is covered by a separate test —
+  1 canonical skip.
 
 They execute on the Linux CI matrix.
 
@@ -52,12 +58,20 @@ They execute on the Linux CI matrix.
 Writes are limited to approval-gated pull/merge request and (where implemented)
 issue creation; delete, merge, push to protected branches, permission changes
 and deployment are not implemented. Host adapters exist (`local_filesystem`,
-`local_git`, GitHub compatibility shim) but the host registry starts empty and
-no independent host contract suite was executed.
+`local_git`, GitHub compatibility shim); the host registry starts empty on a
+fresh state directory, and the independent host contract suite
+`tests/test_host_contract.py` passes 12 tests.
+
+The local hosts are **read-only**. The session/health/read/disconnect/recovery
+lifecycle is implemented for them (Milestone H: `src/ogx/hosts/lifecycle.py`
+plus the filesystem and Git runtime adapters), but no host supports writes,
+execution, remote operations or branch operations, and none is declared
+operational in that sense.
 
 ## Not verified
 
-- Hosted GitHub Actions run (no workflow run URL is available for this tree).
+- Hosted GitHub Actions run. No run was executed or observed; the repository's
+  workflow-run API is not readable without credentials from this environment.
 - Python 3.11, 3.12 and 3.13 locally; Linux locally.
 - Ruby-based `_dev/tools/validate_config.rb` (Ruby is not installed here).
 - Real Brevo/SMTP inbox delivery (mocked transports only).

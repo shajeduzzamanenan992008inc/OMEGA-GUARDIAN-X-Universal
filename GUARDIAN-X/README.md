@@ -55,7 +55,7 @@ Details: `docs/ARCHITECTURE.md` - integration: `docs/INTEGRATION.md` - runtime g
 * The scanner is heuristic (static rules, no data-flow analysis, no DAST). A clean scan is not proof of safety.
 * The runtime guard is defence in depth, **not a managed WAF**; multipart bodies are not inspected; the proxy is experimental (HTTP/1.1, no TLS/WebSocket/chunked requests).
 * Governance RBAC identities are not authenticated (local prototype).
-* Locally verified for this working tree on Windows with CPython 3.15.2: 340 canonical-source tests passed (11 platform-gated skips), 245 drop-in tests passed (9 platform-gated skips), plus a clean wheel install and CLI smoke checks. Python 3.11/3.12/3.13 and Linux were not available locally; the CI matrix is configured but has not been executed here.
+* Locally verified for this working tree on Windows with CPython 3.15.2: 465 canonical-source tests passed (15 platform-gated skips) and 245 drop-in tests passed (9 platform-gated skips), plus a clean wheel install and CLI smoke checks. The earlier 340/11 completion-pass figure is retained only as history. Host lifecycle is implemented for two read-only local hosts; remote, SSH, Docker and Kubernetes hosts are not. Python 3.11/3.12/3.13 and Linux were not available locally; the CI matrix is configured but has not been executed here.
 
 Develop & test (canonical source): `python -m pytest -q` - drop-in and architecture tests: `PYTHONPATH=core python -m unittest discover -s _dev/tests` - version/structure check: `python _dev/tools/sync_core_from_src.py --check` - build the lean drop-in zip: `python _dev/tools/make_dist.py`.
 

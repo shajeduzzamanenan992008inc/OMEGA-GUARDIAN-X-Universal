@@ -1,7 +1,15 @@
 # OMEGA Shield (OGX) - universal plug-and-play shield & dev core
-# Milestone H release notes (branch-local, uncommitted)
+# Milestone H release notes (committed)
 #
-# Local note only — do not ship or commit unless the user asks.
+# Tracking status: this file is tracked and present at HEAD `e7e7686` and
+# carried into `d55cea3`. The earlier "branch-local, uncommitted / local only"
+# wording described the moment it was written, before the Milestone H work was
+# committed; it is superseded by this note. The figures below are the
+# in-window results for that pass, not a standing re-verified total.
+#
+# Re-verified 2026-11-25 by Milestone I.2 at the same tree: canonical
+# 465 passed / 15 skipped, drop-in 245 tests OK (9 skipped), host
+# lifecycle+adapter+CLI+contract 68 passed / 3 skipped. Hosted CI still not run.
 #
 # This pass implemented the Host Lifecycle & external validation milestone
 # as one agent. In-window verification:

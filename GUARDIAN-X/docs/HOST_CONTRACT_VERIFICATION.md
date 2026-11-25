@@ -3,6 +3,16 @@
 Date: 2026-11-24
 Suite: `tests/test_host_contract.py` — **12 tests, 12 passed**.
 
+> **Historical snapshot (Phase 3).** Section 3 records the state *before* the
+> Milestone H host lifecycle landed. The session lifecycle, health/recovery and
+> read-only local filesystem/Git hosts it lists as not implemented were
+> implemented afterwards and are covered by `tests/test_host_lifecycle.py`,
+> `tests/test_host_filesystem_runtime.py`, `tests/test_host_git_runtime.py` and
+> `tests/test_host_cli_lifecycle.py` (68 passed, 3 skipped). Sections 1 and 2
+> describe this suite's own scope and remain accurate. For current host status
+> use `docs/HOST_ARCHITECTURE.md` and
+> `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`.
+
 ## 1. What the suite covers
 
 | Contract area | Test |
