@@ -56,7 +56,7 @@ feature status.
 | P3-1 | HostProvider/RepositoryProvider/WorkspaceProvider interfaces | IMPLEMENTED_AND_TESTED | `hosts/interfaces.py` |
 | P3-2 | Local filesystem + local Git adapters | IMPLEMENTED_AND_TESTED (read-only) | `hosts/adapters/filesystem_runtime.py`, `git_runtime.py`; 37 adapter tests (FS 16/3, Git 21) |
 | P3-3 | Host registration/persistence | IMPLEMENTED_AND_TESTED | `ogx host register/list`; Registry V2; registration starts `registered` |
-| P3-4 | Host contract suite for every adapter | UNVERIFIED | host contract suite exists (12 tests); read-only local hosts are operational for read/health/recovery, not for writes/branch/remote |
+| P3-4 | Host contract suite for every adapter | UNVERIFIED | host contract suite exists (12 tests, registry/metadata); the read-only local hosts are operational for read/health/recovery after Milestone H, and not for writes/branch/remote. No contract suite covers the cloud/remote families |
 | P3-5 | Host switching/reconnect/failover | UNSUPPORTED | sessions are process-local; no cross-process failover |
 | P3-6 | Cloud/remote workspace hosts | DESCRIPTOR_ONLY | `platform/families.py` |
 
@@ -170,7 +170,7 @@ Starting commit `c441f01`. Tests below were executed in this pass.
 | RR-3 | Hash-chained audit + verification CLI | IMPLEMENTED_AND_TESTED | `platform/audit.py`, `ogx platform audit`; 8 tests |
 | RR-4 | Host registry defects (display_name, last_seen_at) | IMPLEMENTED_AND_TESTED | schema + additive migration; `tests/test_host_contract.py` |
 | RR-5 | Host registry injection bug | IMPLEMENTED_AND_TESTED | `link_project_host` uses injected registry |
-| RR-6 | Host contract suite | IMPLEMENTED_AND_TESTED (registry/metadata) | 12 tests; lifecycle still NOT IMPLEMENTED |
+| RR-6 | Host contract suite | IMPLEMENTED_AND_TESTED (registry/metadata) | 12 tests. At this hardening point the lifecycle was still NOT IMPLEMENTED; it was implemented later in Milestone H (68 host tests, 3 skipped, read-only local hosts only) |
 | RR-7 | Repository identity ports/IPv6 | IMPLEMENTED_AND_TESTED | `tests/test_identity_ports.py` (8 tests) |
 | RR-8 | Shared provider contract suite | IMPLEMENTED_AND_TESTED (mock) | `tests/test_provider_contract.py` (30 tests) |
 | RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 465 passed, 15 skipped at HEAD `e7e7686` (earlier hardening pass recorded 409 passed, 12 skipped) |

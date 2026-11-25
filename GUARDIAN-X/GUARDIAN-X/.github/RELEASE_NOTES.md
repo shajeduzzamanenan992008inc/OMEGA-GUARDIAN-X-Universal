@@ -1,5 +1,5 @@
 # OMEGA Shield (OGX) - universal plug-and-play shield & dev core
-# Milestone H release notes (branch-local, uncommitted mirrors)
+# Milestone H release notes (committed mirror)
 #
 # This pass implemented the Host Lifecycle & external validation milestone
 # as one agent. In-window verification:

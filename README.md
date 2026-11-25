@@ -109,14 +109,14 @@ Read-only audits do not require email approval. Never enable `OGX_ALLOW_UNAPPROV
 
 Locally executed for this working tree (Windows, CPython 3.15.2):
 
-- Canonical source: `python -m pytest -q` — **340 passed, 11 skipped**.
+- Canonical source: `python -m pytest -q` — **465 passed, 15 skipped** (reproduced 2026-11-25 on CPython 3.15.2, 77.82 s, exit 0). The earlier `340 passed, 11 skipped` completion-pass figure is kept as history only.
 - Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **245 tests, OK (9 skipped)**.
 - Architecture and distribution checks (included in the suites) — 17 passed.
 - `python -m compileall -q src core tests _dev/tests` — passed.
 - Wheel `omega_guardian_x-0.8.0a1-py3-none-any.whl` — built, 163 files, no test/CI/source-tree leakage; installed into a clean venv; `ogx --version`, `--help`, `providers list` and `platform status` passed.
 - Drop-in zip — 279 files, no `src/`, tests, release material or CI; `init.py status` and `PYTHONPATH=core python -m ogx --version` passed.
 
-The skips are platform-gated POSIX permission/symlink tests on Windows (11 in the canonical suite, 9 in the drop-in suite); they run on the Linux CI matrix. Hosted GitHub Actions has **not** been executed for this working tree, and Python 3.11/3.12/3.13 were not available locally. Brevo and SMTP transports are tested with mocked HTTP/SMTP clients; no real inbox delivery was tested.
+The skips are platform-gated tests on Windows (15 in the canonical suite — 12 symlink, 2 POSIX file-mode, 1 where Windows drive-relative rejection is covered by a separate test — and 9 in the drop-in suite); they execute on the Linux CI matrix. Hosted GitHub Actions has **not** been executed for this working tree, and Python 3.11/3.12/3.13 were not available locally. Brevo and SMTP transports are tested with mocked HTTP/SMTP clients; no real inbox delivery was tested.
 
 ## Read before production use
 

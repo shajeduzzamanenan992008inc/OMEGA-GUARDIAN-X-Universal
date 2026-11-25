@@ -13,7 +13,7 @@ and an architecture/documentation set that matches the code.
 
 Locally executed evidence:
 
-- canonical suite: **465 passed, 15 skipped, 0 failed** (86.74 s) at HEAD `e7e7686` on `main`; the 340/11 figure is the earlier completion-pass result and is retained for historical traceability. See `docs/PROJECT_COMPLETION_TRACKER.md` and the Milestone I.1 review (`docs/../docs/MILESTONE_I1_*.md` from the repository root).
+- canonical suite: **465 passed, 15 skipped, 0 failed** (86.74 s) at HEAD `e7e7686` on `main`; the 340/11 figure is the earlier completion-pass result and is retained for historical traceability. See `docs/PROJECT_COMPLETION_TRACKER.md` and the Milestone I.1 review (`../docs/MILESTONE_I1_*.md` from `GUARDIAN-X/`, i.e. the repository-root `docs/`, not `GUARDIAN-X/docs/`).
 - drop-in suite: **245 tests, OK (9 skipped)** (64.16 s);
 - source/drop-in consistency check: **OK**;
 - wheel: **163 entries, 390,734 bytes**, correct SPDX metadata, installs and
@@ -308,8 +308,9 @@ None observed in the commands above.
 
 ## 21. Tests skipped and reasons
 
-- 11 canonical skips: Windows platform gates for symlink creation and POSIX
-  file-mode checks.
+- 15 canonical skips (reproduced 2026-11-25): 12 for symlink and
+  directory-symlink creation, 2 for POSIX file-mode checks, and 1 where
+  Windows drive-relative path rejection is covered by a separate test.
 - 9 drop-in skips: the same platform gates.
 
 No skip was introduced or used to hide a failure. On Linux/macOS these are
@@ -331,7 +332,13 @@ Mocked/static tests do not establish live behavior.
 1. No hosted CI run; requires an authorized push and workflow execution.
 2. No independent security/legal/architecture review.
 3. No live provider credentials or approved live test accounts.
-4. No full host session/health/read/disconnect/recovery lifecycle is implemented; local hosts are read-only and are not declared operational in that sense. A host contract suite does exist at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract for the local filesystem and local Git adapters.
+4. No host is declared operational for writes, execution, remote operations
+   or branch operations. Two snapshots must not be conflated here: the Phase 3
+   state had only the registry/metadata contract (`tests/test_host_contract.py`,
+   12 passed) with no lifecycle; the later Milestone H work implemented the
+   session lifecycle, health/recovery and the read-only local filesystem and
+   Git hosts (68 host tests, 3 skipped). Live-latency health, cross-process
+   failover and remote/SSH/Docker/Kubernetes hosts remain unimplemented.
 5. Ruby unavailable, so `validate_config.rb` was not run.
 6. Python 3.11–3.13 and Linux/macOS were not available locally.
 7. DNS-rebinding/TOCTOU hardening and immutable audit remain unimplemented.

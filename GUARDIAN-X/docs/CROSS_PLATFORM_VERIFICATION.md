@@ -19,13 +19,15 @@ Date: 2026-11-24
 Python 3.15.2 is outside the declared classifier range. Passing on it is
 evidence that the code runs on a newer interpreter, not proof for 3.11–3.13.
 
-## 3. Skips (12 canonical, 9 drop-in)
+## 3. Skips (15 canonical, 9 drop-in)
 
 All skips are platform gates, not failures:
 
-- symlink creation unavailable on Windows without privileges;
-- POSIX file-mode assertions unavailable on Windows;
-- directory symlink tests unavailable.
+- symlink and directory-symlink creation unavailable on Windows without
+  privileges — 12 canonical, 9 drop-in;
+- POSIX file-mode assertions unavailable on Windows — 2 canonical;
+- Windows drive-relative path rejection covered by a separate test —
+  1 canonical.
 
 No test was weakened or removed to produce a pass. On Linux/macOS these are
 expected to execute; that expectation is unverified here.
