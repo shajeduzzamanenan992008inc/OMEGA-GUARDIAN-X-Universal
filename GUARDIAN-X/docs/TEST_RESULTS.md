@@ -73,7 +73,7 @@ operational in that sense.
 - Hosted GitHub Actions execution. Runs exist for `757d6b6`, but every job was
   refused before starting because of account billing/spending limits; no test,
   packaging or drop-in job executed. See
-  `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+  `MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 - Python 3.11, 3.12 and 3.13 locally; Linux locally.
 - Ruby-based `_dev/tools/validate_config.rb` (Ruby is not installed here).
 - Real Brevo/SMTP inbox delivery (mocked transports only).

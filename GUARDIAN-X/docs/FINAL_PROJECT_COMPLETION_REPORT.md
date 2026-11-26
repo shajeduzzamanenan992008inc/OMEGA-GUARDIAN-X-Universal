@@ -13,7 +13,7 @@ and an architecture/documentation set that matches the code.
 
 Locally executed evidence:
 
-- canonical suite: **465 passed, 15 skipped, 0 failed** (86.74 s) at HEAD `e7e7686` on `main`; the 340/11 figure is the earlier completion-pass result and is retained for historical traceability. See `docs/PROJECT_COMPLETION_TRACKER.md` and the Milestone I.1 review (`../docs/MILESTONE_I1_*.md` from `GUARDIAN-X/`, i.e. the repository-root `docs/`, not `GUARDIAN-X/docs/`).
+- canonical suite: **465 passed, 15 skipped, 0 failed** (86.74 s) at HEAD `e7e7686` on `main`; the 340/11 figure is the earlier completion-pass result and is retained for historical traceability. See `PROJECT_COMPLETION_TRACKER.md` and the Milestone I.1 review (`MILESTONE_I1_*.md` in this directory; commit `a004348` relocated these reports from the repository-root `docs/`).
 - drop-in suite: **245 tests, OK (9 skipped)** (64.16 s);
 - source/drop-in consistency check: **OK**;
 - wheel: **163 entries, 390,734 bytes**, correct SPDX metadata, installs and
@@ -217,7 +217,7 @@ repository. The three push-triggered workflows for `757d6b6` each concluded
 `failure` with zero executed steps. GitHub's check annotation states that the
 jobs were not started because recent account payments failed or the spending
 limit must be increased. No test, packaging or drop-in job ran, so no hosted
-result is established. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+result is established. See `MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 
 ## 13. Packaging and release results
 
@@ -241,7 +241,7 @@ reproducibility, publishing any artifact.
 `757d6b6`. The wheel still builds, but setuptools warns that the declared
 `license-files = ["LICENSE"]` pattern matches nothing and no license file is
 included in the wheel. Packaging success is separate from license compliance.
-See `../../docs/MILESTONE_I3_PACKAGING_REPORT.md`.
+See `MILESTONE_I3_PACKAGING_REPORT.md`.
 
 ## 14. Files created (this pass)
 

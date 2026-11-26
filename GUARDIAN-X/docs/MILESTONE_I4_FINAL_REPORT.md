@@ -1,5 +1,15 @@
 # Milestone I.4 — Final Report: Drop-in Packaging Hygiene
 
+> **Milestone I.5 correction (2026-11-26).** The `DROP_IN_VERIFIED` decision
+> still holds for the packaging defect, and the fix is committed in `06ffef4`
+> (HEAD/`origin/main` `a004348`). Limitation 4 below — "no archive-specific unit
+> test exists" — is resolved by `GUARDIAN-X/_dev/tests/test_make_dist.py`, a
+> 13-test suite that builds synthetic fixtures and asserts depth-independent
+> exclusions, `*.egg-info` exclusion, required runtime entries, the
+> `omega-shield/` prefix and deterministic ordering. Hosted CI and the wheel
+> remain unverified in this milestone. Current state:
+> `../../docs/MILESTONE_I5_FINAL_REPORT.md`.
+
 Date: 2026-11-26
 Decision: **DROP_IN_VERIFIED**
 
@@ -131,3 +141,30 @@ No test was added, removed, skipped, or weakened. The 15 canonical and 9 drop-in
 6. **No push, PR, merge, release, or commit occurred.** All changes remain uncommitted in the working tree.
 
 Decision: **DROP_IN_VERIFIED** (local packaging verification complete; hosted CI remains blocked by the account billing restriction and is not claimed as passed).
+
+## 11. Milestone I.5 status correction (2026-11-26)
+
+This table supersedes the corresponding statements in §1, §2, §5, §6, §8 and §9
+for the current repository state. The original sections remain as the dated I.4
+record.
+
+| Item | Status at `a004348` |
+|---|---|
+| Commit containing the fix | `06ffef44f179068d0b9b016d77b51c34e6bdb121` |
+| Current HEAD / `origin/main` | `a004348cd371fc1a42aefcaacf7e31b577026476`, 0 ahead / 0 behind |
+| Report location | Relocated from root `docs/` to `GUARDIAN-X/docs/` by `a004348` (0 content change) |
+| Archive regression test | `_dev/tests/test_make_dist.py`, 13 tests, OK |
+| Drop-in suite | 258 tests, OK (9 skipped), exit 0 |
+| Canonical suite | 465 passed, 15 skipped, exit 0 |
+| Clean-export archive | 326 entries, 0 forbidden hits, required entries present |
+| Working-tree archive | 326 entries, 0 forbidden hits, identical entry list to the clean export |
+| Refactor equivalence | I.5 `build_archive()` produces byte-identical output to the committed generator on the same export |
+| Archive install smoke | `init.py status` exit 0; `ogx --version` reports `0.8.0a1` |
+| Wheel | **NOT_RUN** in I.5; last verified in Milestone I.3 (167 files, clean-venv install) |
+| Hosted CI | **BLOCKED** — `gh` not installed; unauthenticated Actions API returned HTTP 403 rate limit; earlier runs were refused before start by the billing/spending-limit restriction |
+| Cross-platform | Windows 10 / CPython 3.15.2 only; Python 3.11–3.13, Linux and macOS **NOT_RUN** |
+| Remaining limitations | Stray nested mirror still tracked (no longer ships); ZIP bytes vary with extraction mtimes; LICENSE absent by user direction |
+
+Full evidence: `../../docs/MILESTONE_I5_BASELINE_REPORT.md`,
+`../../docs/MILESTONE_I5_REGRESSION_TEST_REPORT.md` and
+`../../docs/MILESTONE_I5_FINAL_REPORT.md`.

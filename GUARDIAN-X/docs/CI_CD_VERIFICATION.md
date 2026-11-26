@@ -34,7 +34,7 @@ Repository-level workflow directory: `.github/workflows/` (correct location).
   `OGX Code Security`) each concluded `failure` with zero executed steps.
   GitHub's annotation states the jobs were not started because recent account
   payments failed or the spending limit must be increased. No test, packaging
-  or drop-in job ran. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+  or drop-in job ran. See `MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 - YAML parsing was **not** performed in this pass: PyYAML is unavailable in the
   current interpreter (`import yaml` fails). A previous pass parsed these files
   successfully, but that is historical, not current evidence.
