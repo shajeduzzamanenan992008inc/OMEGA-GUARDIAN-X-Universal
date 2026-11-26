@@ -5,6 +5,19 @@ Baseline commit: `a004348cd371fc1a42aefcaacf7e31b577026476`
 Final commit observed: `a004348cd371fc1a42aefcaacf7e31b577026476` (no commit made)
 Milestone status: **PASS for the local acceptance criteria**; hosted CI **BLOCKED**
 
+> **Phase 0 correction (2026-11-26).** The I.5 changes described here were
+> committed after this report was written, in
+> `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f` ("chore: update repository files",
+> parent `a004348`), which is now HEAD and `origin/main`. `a004348` remains the
+> **execution baseline** for every measurement below; `36e56c0` is the
+> **delivery commit**. The statements in §1, §12 and §14 that no commit was made,
+> and the untracked-file list in §12, describe the I.5 session state only, not
+> the current repository. Phase 0 independently re-executed at `36e56c0`:
+> canonical 465 passed / 15 skipped, drop-in 258 tests OK (9 skipped), archive
+> suite 13 OK, clean-export archive 326 entries / 0 forbidden, wheel 167 entries
+> with a clean-venv install. See `docs/MASTER_BASELINE_AUDIT.md` and
+> `docs/PHASE_0_COMPLETION_REPORT.md`.
+
 ## 1. Summary
 
 The drop-in archive generator now has a dedicated regression suite. The stale

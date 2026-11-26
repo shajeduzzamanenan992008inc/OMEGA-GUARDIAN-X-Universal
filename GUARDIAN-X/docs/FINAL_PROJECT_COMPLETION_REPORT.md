@@ -4,6 +4,17 @@ OMEGA-GUARDIAN-X Universal — `0.8.0a1`
 Completion commit: `8647892dd9d16f648303533596df6df74dac9dad` (`main`)
 Report date: 2026-11-24
 
+> **Phase 0 baseline update (2026-11-26).** Current HEAD and `origin/main` are
+> `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f` (parent `a004348`), clean tree,
+> 0 ahead / 0 behind. `36e56c0` commits the Milestone I.5 work. This report
+> remains the dated 2026-11-24 completion record; its 245-test drop-in figure
+> and 163-entry wheel are historical. Phase 0 independently re-executed at
+> `36e56c0`: canonical 465 passed / 15 skipped, drop-in 258 tests OK
+> (9 skipped), archive suite 13 OK, clean-export archive 326 entries /
+> 0 forbidden, wheel 167 entries with a clean-venv install and CLI smoke.
+> Hosted CI, live providers, Python 3.11–3.13 and Linux/macOS remain
+> unverified. See `../../docs/MASTER_BASELINE_AUDIT.md`.
+
 ## 1. Executive summary
 
 The repository now has one canonical installable package, one verified

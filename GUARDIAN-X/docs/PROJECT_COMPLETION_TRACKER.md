@@ -1,6 +1,8 @@
 # Project Completion Tracker
 
 Updated: 2026-11-24, completion commit `8647892dd9d16f648303533596df6df74dac9dad`.
+Phase 0 baseline re-verified: 2026-11-26 at HEAD `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f`
+(see `../../docs/MASTER_BASELINE_AUDIT.md`).
 
 ## Status vocabulary
 
@@ -25,7 +27,7 @@ feature status.
 | ID | Task | Status | Files | Tests | Evidence / blocker |
 | --- | --- | --- | --- | --- | --- |
 | P1-1 | Canonical package `src/ogx` with stdlib-only core | IMPLEMENTED_AND_TESTED | `src/ogx/**` | `_dev/tests/test_architecture.py` | 465 passed, 15 skipped at HEAD `e7e7686` (earlier phase recorded 340 passed) |
-| P1-2 | Hand-maintained drop-in `core/ogx` consistent with canonical tree | IMPLEMENTED_AND_TESTED | `core/ogx/**` | `_dev/tests` (245 tests) | sync check OK |
+| P1-2 | Hand-maintained drop-in `core/ogx` consistent with canonical tree | IMPLEMENTED_AND_TESTED | `core/ogx/**` | `_dev/tests` (258 tests) | sync check OK |
 | P1-3 | Remove nested duplicate tree | IMPLEMENTED_AND_TESTED | deleted `core/ogx/core/**` (125 files) | architecture tests assert absence | — |
 | P1-4 | Replace destructive generator with read-only consistency checker | IMPLEMENTED_AND_TESTED | `_dev/tools/sync_core_from_src.py` | `--check` run | versions agree |
 | P1-5 | Unify version `0.8.0a1` | IMPLEMENTED_AND_TESTED | `VERSION`, both `__init__.py` | sync check | three sources agree |
@@ -121,7 +123,7 @@ feature status.
 | ID | Task | Status | Evidence |
 | --- | --- | --- | --- |
 | P10-1 | Canonical suite | IMPLEMENTED_AND_TESTED | `python -m pytest -q` → 465 passed, 15 skipped |
-| P10-2 | Drop-in suite | IMPLEMENTED_AND_TESTED | `PYTHONPATH=core python -m unittest discover -s _dev/tests` → 245 tests, OK (9 skipped) |
+| P10-2 | Drop-in suite | IMPLEMENTED_AND_TESTED | `PYTHONPATH=core python -m unittest discover -s _dev/tests` → 258 tests, OK (9 skipped) |
 | P10-3 | Python 3.11/3.12/3.13 execution | UNVERIFIED locally | only CPython 3.15.2 available; matrix configured in CI |
 | P10-4 | Linux/macOS execution | UNVERIFIED locally | configured in CI, never run hosted |
 
@@ -148,8 +150,8 @@ feature status.
 | ID | Task | Status | Evidence / blocker |
 | --- | --- | --- | --- |
 | P13-1 | SPDX license metadata + bundled LICENSE | IMPLEMENTED_AND_TESTED | wheel METADATA |
-| P13-2 | Wheel build and clean-venv install | IMPLEMENTED_AND_TESTED | 163 entries, 390,734 bytes; install/CLI exit 0 |
-| P13-3 | Drop-in archive build and smoke test | IMPLEMENTED_AND_TESTED | 280 files, `init.py status` exit 0 |
+| P13-2 | Wheel build and clean-venv install | IMPLEMENTED_AND_TESTED | Phase 0 at `36e56c0`: 167 entries, 402,363 bytes; install/CLI exit 0 (completion pass recorded 163 entries) |
+| P13-3 | Drop-in archive build and smoke test | IMPLEMENTED_AND_TESTED | Phase 0 at `36e56c0`: 326 files, 0 forbidden, `init.py status` exit 0 (completion pass recorded 280 files) |
 | P13-4 | Artifact checksums | PARTIALLY_IMPLEMENTED | SHA-256 computed manually; not published |
 | P13-5 | Signing / build provenance / reproducibility | UNSUPPORTED | no signing infrastructure; no bit-for-bit guarantee |
 | P13-6 | Publish a release | BLOCKED | requires explicit authorization |
@@ -174,12 +176,33 @@ Starting commit `c441f01`. Tests below were executed in this pass.
 | RR-7 | Repository identity ports/IPv6 | IMPLEMENTED_AND_TESTED | `tests/test_identity_ports.py` (8 tests) |
 | RR-8 | Shared provider contract suite | IMPLEMENTED_AND_TESTED (mock) | `tests/test_provider_contract.py` (30 tests) |
 | RR-9 | Full canonical suite after changes | IMPLEMENTED_AND_TESTED | 465 passed, 15 skipped at HEAD `e7e7686` (earlier hardening pass recorded 409 passed, 12 skipped) |
-| RR-10 | Drop-in suite after changes | IMPLEMENTED_AND_TESTED | 245 tests, OK (9 skipped) |
+| RR-10 | Drop-in suite after changes | IMPLEMENTED_AND_TESTED | 258 tests, OK (9 skipped) |
 | RR-11 | Wheel/drop-in rebuild and install | IMPLEMENTED_AND_TESTED | 164-entry wheel; 290-file drop-in |
 | RR-12 | Hosted CI | BLOCKED | hosted runs exist; all jobs refused at startup by account billing |
 | RR-13 | Live provider verification | BLOCKED | no credentials/accounts |
 | RR-14 | Cross-platform 3.11–3.13 / Linux / macOS | UNVERIFIED | Windows 3.15.2 only |
 | RR-15 | Audit immutability beyond hash chain | UNSUPPORTED | no signing/anchor |
 | RR-16 | Proxy/egress policy, allowlist, certificate pinning | UNSUPPORTED | documented residual |
+
+## Phase 0 baseline re-verification (2026-11-26)
+
+HEAD `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f` (parent `a004348`),
+`origin/main` 0 ahead / 0 behind, clean tree. `36e56c0` commits the Milestone
+I.5 work. Independently re-executed on Windows/CPython 3.15.2:
+
+| Check | Result |
+| --- | --- |
+| Canonical suite | 465 passed, 15 skipped, 90.58 s, exit 0 |
+| Drop-in suite | 258 tests, OK (9 skipped), 71.25 s, exit 0 |
+| Archive regression suite | 13 tests, OK, 2.14 s, exit 0 |
+| Compile / source-drop-in sync | exit 0 / OK (`0.8.0a1`) |
+| Clean-export drop-in archive | 326 entries, 0 forbidden, required entries present |
+| Wheel | 167 entries, clean-venv install, CLI smoke exit 0 |
+| Hosted CI | NOT VERIFIED — no hosted run observed or queried for `36e56c0` |
+| Python 3.11–3.13 / Linux / macOS | NOT RUN |
+
+This section supersedes the completion-pass packaging figures in P13-2 and
+P13-3. The release decision below is unchanged; hosted CI and cross-platform
+execution remain outstanding.
 
 Final decision for this pass: see `docs/FINAL_RELEASE_READINESS_REPORT.md`.

@@ -47,3 +47,10 @@ expected to execute; that expectation is unverified here.
 
 Cross-platform support is **PARTIALLY VERIFIED**: Windows on one interpreter
 version only. Linux and macOS remain UNVERIFIED until the hosted matrix runs.
+
+## 6. Phase 0 re-verification (2026-11-26)
+
+At HEAD `36e56c0` on Windows/CPython 3.15.2: canonical **465 passed, 15
+skipped** and drop-in **258 tests, OK (9 skipped)**. The executed-platform
+matrix above is unchanged: Linux, macOS and Python 3.11–3.13 remain
+UNVERIFIED, and no hosted run exists for `36e56c0`.

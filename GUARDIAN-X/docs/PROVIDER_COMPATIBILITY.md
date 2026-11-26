@@ -28,7 +28,7 @@ print(f"Warnings: {len(result.warnings)}")
 
 | Verdict | Meaning | Action |
 |---------|---------|--------|
-| `compatible` | Fully compliant, no issues | ✅ Ready for production |
+| `compatible` | Fully compliant, no issues | ✅ Contract-compatible (mocked contract suite; not a live-API or production-readiness claim) |
 | `compatible_with_limitations` | Compliant but has known limitations | ⚠️ Review limitations before use |
 | `incompatible` | Critical contract violations | ❌ Fix violations before use |
 | `not_verified` | Not yet evaluated | 🔄 Run verification |
@@ -116,7 +116,17 @@ test_result = harness.run_unit_tests()
 
 ## Provider Compatibility Matrix
 
-| Provider | Version | Verdict | Contract Version | Last Verified |
+> **Phase 0 correction (2026-11-26).** The matrix below is a historical
+> contract-verification template dated 2024-11-24, not a live-provider record.
+> Every adapter test in this repository uses mocked or fake transports, no
+> provider credential was present, and no provider API call was made. The
+> current registry has seven contract-verified adapters (GitHub, GitLab,
+> Bitbucket, Gitea, Forgejo, Azure DevOps Repos, AWS CodeCommit); Forgejo and
+> AWS CodeCommit are absent from this table. Read `compatible` as "passes the
+> mocked contract suite", never as production readiness. See
+> `../../docs/MASTER_BASELINE_AUDIT.md`.
+
+| Provider | Version | Verdict | Contract Version | Last Contract Verification |
 |----------|---------|---------|------------------|---------------|
 | GitHub | 1.0.0 | compatible | 1.0.0 | 2024-11-24 |
 | GitLab | 1.0.0 | compatible | 1.0.0 | 2024-11-24 |

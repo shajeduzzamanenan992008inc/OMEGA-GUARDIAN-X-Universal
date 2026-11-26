@@ -6,6 +6,16 @@ Hardening commit: `1d0989f` (`fix(security): pin validated provider destinations
 Date: 2026-11-24
 Branch: `main`
 
+> **Phase 0 baseline update (2026-11-26).** Current HEAD and `origin/main` are
+> `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f` (parent `a004348`), clean tree,
+> 0 ahead / 0 behind. This remains the dated 2026-11-24 readiness record; its
+> 245-test drop-in figure is historical. Phase 0 re-executed at `36e56c0`:
+> canonical 465 passed / 15 skipped, drop-in 258 tests OK (9 skipped), archive
+> suite 13 OK, clean-export archive 326 entries / 0 forbidden, wheel 167
+> entries with a clean-venv install. The decision below is unchanged:
+> **READY_FOR_RELEASE_REVIEW**, not production-ready. See
+> `../../docs/MASTER_BASELINE_AUDIT.md`.
+
 ## 1. Executive summary
 
 This pass fixed verified runtime and security defects rather than adding
