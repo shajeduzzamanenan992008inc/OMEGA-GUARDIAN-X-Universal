@@ -17,7 +17,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from ogx.runtime.access import ip_in
 from ogx.runtime.engine import Shield
@@ -57,22 +57,20 @@ class Upstream:
         return self.host if self.port == default else f"{self.host}:{self.port}"
 
 
+def _has_forbidden_chars(value: str) -> bool:
+    return any(ord(ch) <= 0x20 or ord(ch) == 0x7F for ch in value)
+
+
 def _validated_origin_target(target: str) -> str:
-    """Return a strictly normalized HTTP origin-form target or reject ambiguous URL forms."""
+    """Validate and reconstruct a strict HTTP/1.1 origin-form request target."""
     if not isinstance(target, str) or not target:
         raise ValueError("request target must be a non-empty string")
 
-    # Check the raw prefix before urlsplit: it can collapse triple-leading slashes.
+    # Reject protocol-relative or ambiguous prefixes before URL parsing.
     if target.startswith("//"):
         raise ValueError("network-path request target is not allowed")
 
-    # Reject characters that urlsplit may strip or HTTP parsers may interpret
-    # differently, plus fragments and backslashes that can confuse intermediaries.
-    if (
-        any(ord(char) <= 0x20 or ord(char) == 0x7F for char in target)
-        or "\\" in target
-        or "#" in target
-    ):
+    if _has_forbidden_chars(target) or "\\" in target or "#" in target:
         raise ValueError("request target contains forbidden characters")
 
     try:
@@ -88,8 +86,7 @@ def _validated_origin_target(target: str) -> str:
     ):
         raise ValueError("origin-form request target required")
 
-    # Check repeatedly decoded path semantics so encoded authority prefixes,
-    # backslashes, and control characters cannot bypass the origin-form checks.
+    # Iteratively decode percent-encoding to detect disguised authority/traversal/control sequences.
     decoded_path = parsed.path
     for _ in range(4):
         next_path = unquote(decoded_path)
@@ -100,24 +97,23 @@ def _validated_origin_target(target: str) -> str:
     if (
         decoded_path.startswith("//")
         or "\\" in decoded_path
-        or any(ord(char) <= 0x20 or ord(char) == 0x7F for char in decoded_path)
+        or _has_forbidden_chars(decoded_path)
     ):
         raise ValueError("ambiguous request path")
 
-    # Reconstruct clean path and query to break taint flow and prevent injection
-    clean_path = "/" + "/".join(
+    safe_segments = [
         quote(segment, safe="-._~!$&'()*+,;=:@")
         for segment in parsed.path.lstrip("/").split("/")
-    )
-    if clean_path.startswith("//"):
+    ]
+    safe_path = "/" + "/".join(safe_segments)
+    if safe_path.startswith("//"):
         raise ValueError("ambiguous reconstructed request path")
 
     if "?" in target:
-        query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        clean_query = urlencode(query_pairs, doseq=True)
-        return f"{clean_path}?{clean_query}"
+        safe_query = quote(parsed.query, safe="-._~!$&'()*+,;=:@/?")
+        return f"{safe_path}?{safe_query}"
 
-    return clean_path
+    return safe_path
 
 
 def parse_upstream(value: str) -> Upstream:
@@ -270,7 +266,6 @@ def make_handler(
             self._forward(method, target, headers, body, decision, request)
 
         def _forward(self, method, target, headers, body, decision, request) -> None:
-            # Re-validate origin target at the forwarding boundary for static analyzers
             try:
                 safe_target = _validated_origin_target(target)
             except ValueError:
@@ -326,7 +321,6 @@ def make_handler(
                 )
 
             try:
-                # Reconstructed origin-form path bound strictly to pre-validated upstream host/port
                 conn.putrequest(
                     method,
                     safe_target,
