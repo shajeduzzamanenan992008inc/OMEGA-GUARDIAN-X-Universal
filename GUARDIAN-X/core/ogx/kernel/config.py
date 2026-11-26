@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,23 @@ class ScanConfig:
     excludes: list[str] = field(default_factory=lambda: DEFAULT_EXCLUDES.copy())
     max_files: int = 12000
     max_file_bytes: int = 2_000_000
+
+
+STATE_KEY_SLUG_FALLBACK = "project"
+_UNSAFE_SLUG_CHARS = re.compile(r"[^a-z0-9._-]+")
+
+
+def state_key_slug(name: str) -> str:
+    """Return the deterministic, case-folded directory slug for a project name.
+
+    Mirrors ``src/ogx/config.py::state_key_slug``: the state key is
+    ``<slug>-<digest>`` with ``digest = sha256(str(path.resolve()).casefold())``.
+    Folding the slug keeps a case-only path difference (``alpha/project`` vs
+    ``alpha/PROJECT``) on one directory name for case-sensitive filesystems.
+    The slug is cosmetic; the digest is the identity.
+    """
+    folded = _UNSAFE_SLUG_CHARS.sub("-", str(name).casefold())
+    return folded.strip(".-") or STATE_KEY_SLUG_FALLBACK
 
 
 def state_dir() -> Path:

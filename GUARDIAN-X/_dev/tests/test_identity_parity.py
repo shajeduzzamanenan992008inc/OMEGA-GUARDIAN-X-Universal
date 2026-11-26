@@ -21,6 +21,7 @@ Reference: GUARDIAN-X/docs/UNIVERSAL_RELOCATION_IDENTITY_DESIGN.md sections 11.2
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -204,6 +205,56 @@ class DropinStateKeyTests(unittest.TestCase):
         second = self._state_home(self.base / "two" / "project", "ogx_p0_state_f")
         self.assertEqual(first.name.split("-")[0], "project")
         self.assertNotEqual(first, second)
+
+    def test_case_only_difference_in_the_leaf_folder_collides(self):
+        # Linux regression: the digest was case-folded but the slug was not, so
+        # `project-<d>` and `PROJECT-<d>` were siblings on case-sensitive disks.
+        first = self._state_home(self.base / "alpha" / "project", "ogx_p0_state_g")
+        second = self._state_home(self.base / "alpha" / "PROJECT", "ogx_p0_state_h")
+        self.assertEqual(first, second)
+        self.assertEqual(first.name, second.name)
+
+    def test_case_only_difference_in_a_parent_folder_collides(self):
+        first = self._state_home(self.base / "alpha" / "project", "ogx_p0_state_i")
+        second = self._state_home(self.base / "ALPHA" / "project", "ogx_p0_state_j")
+        self.assertEqual(first, second)
+        self.assertEqual(first.name, second.name)
+
+    def test_unicode_case_folding_collides(self):
+        first = self._state_home(self.base / "stra\u00dfe", "ogx_p0_state_k")
+        second = self._state_home(self.base / "STRASSE", "ogx_p0_state_l")
+        self.assertEqual(first, second)
+
+    def test_distinct_names_remain_distinct(self):
+        first = self._state_home(self.base / "alpha" / "project", "ogx_p0_state_m")
+        second = self._state_home(self.base / "alpha" / "project2", "ogx_p0_state_n")
+        self.assertNotEqual(first, second)
+        self.assertNotEqual(first.name, second.name)
+
+    def test_repeated_calls_are_deterministic(self):
+        host = self.base / "Alpha" / "Project"
+        module = _load_init_module(host, "ogx_p0_state_deterministic")
+        first = module.state_home()
+        self.assertEqual(module.state_home(), first)
+        self.assertEqual(module.state_home(), first)
+
+    def test_state_home_name_is_the_folded_slug_plus_the_twelve_hex_digest(self):
+        host = self.base / "Alpha" / "Project"
+        home = self._state_home(host, "ogx_p0_state_shape")
+        digest = hashlib.sha256(str(host.resolve()).casefold().encode("utf-8")).hexdigest()[:12]
+        self.assertEqual(home.name, f"project-{digest}")
+        self.assertEqual(len(home.name.rsplit("-", 1)[-1]), 12)
+
+    def test_canonical_and_dropin_derivations_agree_on_the_same_key(self):
+        """Parity evidence: one casefolded digest, one folded slug, only the
+        documented truncation length (16 vs 12 hex) differs."""
+        host = self.base / "alpha" / "Project"
+        home = self._state_home(host, "ogx_p0_state_parity")
+        canonical_digest = hashlib.sha256(
+            str(host.resolve()).casefold().encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(home.name, f"project-{canonical_digest[:12]}")
+        self.assertTrue(canonical_digest.startswith(home.name.rsplit("-", 1)[-1]))
 
 
 class DropinStateIsolationTests(unittest.TestCase):

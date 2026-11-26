@@ -15,11 +15,38 @@ Contents:
 ├── config.toml
 ├── projects.json
 └── projects/
-    └── <safe-project-name>-<canonical-path-hash>/
+    └── <casefolded-project-name>-<canonical-path-hash>/
         └── reports/
             ├── scan-<timestamp>-<id>.json
             └── scan-<timestamp>-<id>.md
 ```
+
+### State-key normalization
+
+A project's external state directory name is `<slug>-<digest>`, computed by one
+documented rule (`src/ogx/config.py::state_key_slug`, mirrored by the drop-in):
+
+- `digest = sha256(str(path.resolve()).casefold())[:16]` for the canonical
+distribution and `[:12]` for the drop-in. The digest is the identity.
+- `slug` is `str(name).casefold()` with every character outside
+  `a-z 0-9 . _ -` replaced by `-`, then `.` and `-` stripped from both ends;
+  an empty result becomes `project`.
+
+`str.casefold()` (not `str.lower()`) is used for both parts so the slug and the
+digest always agree: `straße` folds with `STRASSE`, and `Ä` with `ä`. Folding
+the slug is what keeps `alpha/project` and `alpha/PROJECT` on one directory name
+on case-sensitive filesystems; on Windows and default macOS the two spellings
+were already one directory. The slug is cosmetic and lossy for non-ASCII names
+(`café` and `cafè` share the slug `caf`), so the digest alone separates genuinely
+different projects. Redundant separators, `.` segments and trailing separators
+are removed by `Path.resolve()` before hashing.
+
+Compatibility note: the slug is now lower case. On Windows/macOS nothing
+visible changes because the filesystem already folds case. On case-sensitive
+filesystems a project whose folder name contains upper-case letters gets a new
+lower-case report directory; the previous mixed-case directory is left in place
+and its reports stay readable - rename it to the new name (or delete it, since
+reports are regenerable) if you want the old path back.
 
 `config.toml` contains global scan limits and exclusions:
 
