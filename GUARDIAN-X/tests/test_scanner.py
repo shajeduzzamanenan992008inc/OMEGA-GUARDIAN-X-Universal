@@ -14,8 +14,9 @@ class ScannerTests(unittest.TestCase):
     def test_secret_value_is_redacted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            # Build a disposable credential at runtime; never commit a live-looking key.
-            secret = "sample_" + secrets.token_hex(16)
+            # codeql[py/clear-text-storage] justification: runtime-generated synthetic value for
+            # regression testing the scanner's redaction behavior. No real credential is committed.
+            secret = secrets.token_hex(16)
             (root / "app.py").write_text(f'API_KEY = "{secret}"\n', encoding="utf-8")
             report = scan_repository(root)
             hits = [f for f in report.findings if f.rule_id == "OGX-SEC-001"]
