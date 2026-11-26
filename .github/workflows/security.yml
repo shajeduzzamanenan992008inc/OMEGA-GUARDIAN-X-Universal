@@ -29,6 +29,9 @@ jobs:
         with:
           languages: python
           queries: security-extended
+          # Scope the analysis: shipping code is scanned in full, while the
+          # synthetic credential fixtures under the test trees are excluded.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@d2aacf54c2fbc910db8d7ec338fdb54ea48c692d # v3
