@@ -1,5 +1,18 @@
 # Milestone I.4 — Archive Integrity Verification
 
+> **Milestone I.5 correction (2026-11-26).** The generator fix is no longer
+> uncommitted: it is in `06ffef4`, and HEAD/`origin/main` are `a004348`. From a
+> clean `a004348` export the committed generator produces **326 entries** and
+> **0** forbidden-path hits (observed SHA-256
+> `21ebccb43d330264892bfdf9bc1f0abecb566057fa2c91c70850a8125e9ba7ee`; a second
+> export produced `403f683d…` with the same entries, because ZIP headers record
+> extraction mtimes). The 304-entry figure below is the I.4
+> measurement at `757d6b6`, before the I.3/I.4 reports themselves were committed
+> into `docs/` (they now ship as 98 `omega-shield/docs/` entries). Overlaying the
+> I.5 `build_archive()` refactor onto the same export reproduces the identical
+> 326-entry list and byte-identical SHA-256. See
+> `../../docs/MILESTONE_I5_REGRESSION_TEST_REPORT.md`.
+
 Date: 2026-11-26
 Branch: `main`
 HEAD: `757d6b6c519a30487a3bd46db30011ece30b1bdb`

@@ -23,16 +23,15 @@ EXCLUDE_DIRS = {
 }
 EXCLUDE_NAMES = {".env", "results.txt"}
 EXCLUDE_SUFFIXES = {".pyc", ".whl", ".zip", ".db", ".sqlite", ".sqlite3"}
-VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
-def main() -> int:
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "dist" / f"omega-shield-{VERSION}-dropin.zip"
+def build_archive(root: Path, out: Path) -> int:
+    """Write the drop-in zip for ``root`` to ``out`` and return the entry count."""
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(ROOT.rglob("*")):
-            rel = path.relative_to(ROOT)
+        for path in sorted(root.rglob("*")):
+            rel = path.relative_to(root)
             if path.is_dir() or rel.parts[0] in EXCLUDE_TOP_FILES:
                 continue
             if any(part in EXCLUDE_DIRS or part.endswith(".egg-info") for part in rel.parts):
@@ -43,6 +42,13 @@ def main() -> int:
                 continue
             archive.write(path, Path("omega-shield") / rel)
             count += 1
+    return count
+
+
+def main() -> int:
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "dist" / f"omega-shield-{version}-dropin.zip"
+    count = build_archive(ROOT, out)
     print(f"wrote {out} ({count} files)")
     return 0
 

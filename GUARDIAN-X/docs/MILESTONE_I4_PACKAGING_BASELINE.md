@@ -1,5 +1,14 @@
 # Milestone I.4 — Packaging Baseline
 
+> **Milestone I.5 correction (2026-11-26).** This report was written against
+> `757d6b6` while the generator fix was still uncommitted. The fix landed in
+> `06ffef4` (`06ffef44f179068d0b9b016d77b51c34e6bdb121`); the current HEAD and
+> `origin/main` are `a004348` (`a004348cd371fc1a42aefcaacf7e31b577026476`).
+> Commit `a004348` then relocated the Milestone I.3/I.4 reports from the
+> repository-root `docs/` into this directory with no content change. The
+> pre-fix measurements below are preserved as the dated record of the I.4 pass;
+> current measurements are in `../../docs/MILESTONE_I5_BASELINE_REPORT.md`.
+
 Date: 2026-11-26
 Repository root: `D:/FTP/OMEGA-GUARDIAN-X-Universal`
 Branch: `main`

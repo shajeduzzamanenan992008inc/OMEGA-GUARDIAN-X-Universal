@@ -131,7 +131,7 @@ feature status.
 | --- | --- | --- | --- |
 | P11-1 | Correct workflow paths and `working-directory: GUARDIAN-X` | IMPLEMENTED_NOT_FULLY_TESTED | YAML parsed locally; no hosted run; root config-validation now also triggers on `.github/workflows/**` |
 | P11-2 | Python 3.11–3.13 matrix, packaging/drop-in/profile jobs | IMPLEMENTED_NOT_FULLY_TESTED | `.github/workflows/ci.yml` |
-| P11-3 | Hosted CI result | BLOCKED | runs exist for `757d6b6` but every job was refused before starting; GitHub annotation cites failed account payments / spending limit. See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md` |
+| P11-3 | Hosted CI result | BLOCKED | runs exist for `757d6b6` but every job was refused before starting; GitHub annotation cites failed account payments / spending limit. See `MILESTONE_I3_CI_EVIDENCE_REPORT.md` |
 | P11-4 | Root vs nested `.github/workflows` not confused | DOCUMENTED | root `../.github/workflows` is active; `GUARDIAN-X/.github/workflows` is inert |
 
 ## Phase 12 — Documentation

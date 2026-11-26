@@ -117,7 +117,7 @@ interpreter, so the workflows were inspected rather than parsed in this pass.
 All three push workflows concluded `failure` with zero executed steps; GitHub
 annotated every job as not started because recent account payments failed or
 the spending limit must be increased. CI remains unverified because no job ran.
-See `../../docs/MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
+See `MILESTONE_I3_CI_EVIDENCE_REPORT.md`.
 
 Root `config-validation.yml` now also triggers on `.github/workflows/**`, so
 root workflow edits run the validator; the nested `GUARDIAN-X/.github/workflows`
@@ -143,7 +143,7 @@ Not done: sdist, signing, provenance, reproducibility guarantee, SBOM artifact.
 **Milestone I.3 update (2026-11-26):** the `LICENSE` file is absent from the
 tree. The wheel builds but carries no license file and setuptools reports
 `Pattern 'LICENSE' did not match any files.` The `License-Expression` metadata
-is still emitted. See `../../docs/MILESTONE_I3_PACKAGING_REPORT.md`.
+is still emitted. See `MILESTONE_I3_PACKAGING_REPORT.md`.
 
 ## 11. Remaining risks
 
