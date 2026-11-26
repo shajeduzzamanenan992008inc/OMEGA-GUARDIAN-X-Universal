@@ -116,18 +116,41 @@ def project_for_repository(provider_id: str, repository_url: str, *, registry: A
 
 
 def assert_relocation_safe(project_id: uuid.UUID | str, *, registry: Any = None) -> dict[str, Any]:
-    """Report identity invariants that must hold after a workspace relocation."""
+    """Check identity invariants *and* workspace resolution after relocation.
+
+    A green identity report alone does not prove the workspace still resolves,
+    so every registered workspace location is checked on disk. Missing
+    locations are reported, never repaired silently.
+    """
+
+    from pathlib import Path
 
     registry = registry or _registry()
     project = registry.get_project(uuid.UUID(str(project_id)))
     repositories = registry.list_repositories(project.project_id)
     workspaces = registry.list_workspaces(project.project_id)
+
+    workspace_reports = []
+    for workspace in workspaces:
+        location = workspace.normalized_location or workspace.location_reference
+        resolved = Path(location) if location else None
+        workspace_reports.append(
+            {
+                "workspace_id": str(workspace.workspace_id),
+                "status": workspace.status.value,
+                "location": location,
+                "exists": bool(resolved and resolved.exists()),
+            }
+        )
+
     return {
         "project_id": str(project.project_id),
         "identity_hash": project.identity_hash,
         "canonical_name": project.canonical_name,
         "repository_count": len(repositories),
         "workspace_count": len(workspaces),
+        "workspaces": workspace_reports,
+        "workspace_paths_resolve": all(item["exists"] for item in workspace_reports),
         "relocation_independent": True,
         "note": "Workspace locations may change; project_id and identity_hash do not.",
     }

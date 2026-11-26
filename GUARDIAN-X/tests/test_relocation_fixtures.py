@@ -219,18 +219,36 @@ class IdentityAbsentTests(unittest.TestCase):
 
 
 class MissingSurfaceTests(unittest.TestCase):
-    """RX-08/09/11/15-17/20-22: the required command surface does not exist yet."""
+    """RX-08/09/11/15-17/20-22: the required command surface does not exist yet.
+
+    DOCUMENTED COMPATIBILITY DECISION (post-P0): ``identity explain``,
+    ``identity fork`` and the ``relocate`` domain were implemented during the
+    consolidated completion work, so the three assertions that recorded their
+    *absence* are inverted here into assertions that they exist and work.
+    The P0 fixtures under ``_dev/fixtures`` are left untouched: they record the
+    P0 baseline as historical evidence, and the completion report records this
+    decision explicitly. No golden identity vector changed.
+    """
 
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
-        self.root = Path(self._temp.name) / "project"
+        self.base = Path(self._temp.name)
+        self.root = self.base / "project"
         self.root.mkdir()
+        self._create_identity()
 
     def tearDown(self):
         self._temp.cleanup()
 
     def _run_cli(self, *arguments: str) -> subprocess.CompletedProcess:
-        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1"}
+        # Keep CLI state inside the temporary directory: a test must never
+        # write into the developer's real OGX state root.
+        env = {
+            **os.environ,
+            "PYTHONPATH": str(ROOT / "src"),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "OGX_HOME": str(self.base / "state"),
+        }
         return subprocess.run(
             [sys.executable, "-m", "ogx", *arguments],
             cwd=str(ROOT),
@@ -241,19 +259,32 @@ class MissingSurfaceTests(unittest.TestCase):
             check=False,
         )
 
-    def test_identity_fork_is_not_a_command(self):
-        result = self._run_cli("identity", "fork", str(self.root))
-        self.assertNotEqual(result.returncode, 0, "identity fork must not exist in P0")
-        self.assertIn("invalid choice", (result.stderr or "").lower())
+    def _create_identity(self) -> None:
+        created = self._run_cli("identity", "create", str(self.root), "--name", "P0 Project")
+        self.assertEqual(created.returncode, 0, created.stderr)
 
-    def test_identity_explain_is_not_a_command(self):
-        result = self._run_cli("identity", "explain", str(self.root))
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("invalid choice", (result.stderr or "").lower())
+    def test_identity_fork_command_exists(self):
+        destination = self.base / "fork"
+        result = self._run_cli(
+            "identity", "fork", str(self.root),
+            "--destination", str(destination), "--confirm", "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotEqual(payload["project_id"], payload["parent_project_id"])
 
-    def test_no_relocate_domain_exists(self):
-        result = self._run_cli("relocate", "plan", "--from", str(self.root), "--to", str(self.root))
-        self.assertNotEqual(result.returncode, 0)
+    def test_identity_explain_command_exists(self):
+        result = self._run_cli("identity", "explain", str(self.root), "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["classification"], "verified")
+
+    def test_relocate_domain_exists(self):
+        destination = self.base / "relocated"
+        result = self._run_cli(
+            "relocate", "plan", str(self.root), str(destination), "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["operation"], "move")
 
     def test_every_not_implemented_row_maps_to_a_missing_surface(self):
         rows = [row for row in SCENARIOS.values() if row["observation"] == "NOT_IMPLEMENTED"]
@@ -375,7 +406,13 @@ class StateKeyCollisionTests(unittest.TestCase):
 
 
 class HostIdentityTests(unittest.TestCase):
-    """CX-03 / RT-16: host registration is not idempotent today."""
+    """CX-03 / RT-16: host registration idempotency.
+
+    DOCUMENTED COMPATIBILITY DECISION (post-P0): registration is now idempotent
+    for the same (host type, identifier) pair, so the assertion that recorded
+    duplicate host ids is inverted. The CX-03 fixture row still records the P0
+    baseline and is not rewritten.
+    """
 
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
@@ -413,12 +450,14 @@ class HostIdentityTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def test_registering_the_same_local_host_twice_creates_two_host_ids(self):
+    def test_registering_the_same_local_host_twice_reuses_one_host_id(self):
         self.assertEqual(CONFLICTS["CX-03"]["probe"], "P-HOST-PER-CALL")
         first = self._register()
         second = self._register()
-        self.assertNotEqual(first["host_id"], second["host_id"])
+        self.assertEqual(first["host_id"], second["host_id"])
         self.assertEqual(first["normalized_identifier"], second["normalized_identifier"])
+        self.assertEqual(second["registration"], "updated")
+        self.assertEqual(first["machine_host_id"], second["machine_host_id"])
 
     def test_fixture_records_that_the_conflict_is_not_detected(self):
         self.assertFalse(CONFLICTS["CX-03"]["expect"]["conflict_detected"])

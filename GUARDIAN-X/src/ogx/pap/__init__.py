@@ -16,6 +16,24 @@ from .exceptions import (
     IdentityValidationError,
     IdentityImmutableError,
 )
+from .host_identity import (
+    HostIdentity,
+    HOST_SCHEMA_VERSION,
+    adopt_host_identity,
+    create_host_identity,
+    derive_host_id,
+    host_identity_path,
+    load_host_identity,
+    load_or_create_host_identity,
+    machine_binding,
+    verify_host_identity,
+)
+from .lineage import (
+    LINEAGE_FILENAME,
+    explain_identity,
+    fork_project,
+    read_lineage,
+)
 from .manifest_schema import (
     MAX_MANIFEST_FILE_SIZE,
     SUPPORTED_SCHEMA_VERSIONS,
@@ -62,6 +80,22 @@ __all__ = [
     "IdentityMissingError",
     "IdentityValidationError",
     "IdentityImmutableError",
+    # Host identity
+    "HostIdentity",
+    "HOST_SCHEMA_VERSION",
+    "adopt_host_identity",
+    "create_host_identity",
+    "derive_host_id",
+    "host_identity_path",
+    "load_host_identity",
+    "load_or_create_host_identity",
+    "machine_binding",
+    "verify_host_identity",
+    # Lineage
+    "LINEAGE_FILENAME",
+    "explain_identity",
+    "fork_project",
+    "read_lineage",
     # Manifest
     "ManifestLocation",
     "ManifestConflictResolution",
