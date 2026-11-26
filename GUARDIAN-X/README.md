@@ -102,7 +102,7 @@ connected/degraded, otherwise every declared capability is `unavailable`; and
 registration does **not** mark a host `active`.
 
 Local verification (2026-11-27, implementation branch based on `71fcbbc`):
-canonical suite **627 passed / 18 skipped / 119 subtests**, drop-in suite
+canonical suite **631 passed / 18 skipped / 119 subtests**, drop-in suite
 **289 tests, OK (9 skipped)**, compileall and the source/drop-in consistency
 check pass, and the wheel builds with the new modules (140 entries). Host,
 patch and workflow tests are included in those totals.

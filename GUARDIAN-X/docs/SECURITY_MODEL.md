@@ -69,6 +69,33 @@ Vault/KMS-backed credentials, OAuth device or refresh flows, webhook signature
 verification, per-tenant provider quotas, and live production credential
 rotation.
 
+## Controlled change and workflow controls (0.8.0a1)
+
+- **Patch engine.** Every change requires an immutable plan with an exact,
+  single-match replacement per hunk, a SHA-256 precondition for each file and
+  project containment checked on the unresolved path before resolution. A
+  symlinked file or parent is refused. The pre-image is backed up outside the
+  project; writes are atomic; every transition is appended to the hash-chained
+  audit log. Rollback refuses to overwrite a file edited after the patch.
+- **Workflow engine.** State lives in SQLite under the OGX state directory
+  (never the project), in WAL mode, with validated state transitions, per-stage
+  checkpoints, recorded approvals for `edit` and `test`, bounded attempts and
+  idempotency keys. A run holds a time-based lease; concurrent runners are
+  refused while it is valid, and an expired lease resets only the interrupted
+  `running` stage so a crash can be resumed. A bounded `--max-stages` call
+  releases its lease and returns the workflow to `created`.
+- **GitHub host.** Reads use the provider transport (pinned host, refused
+  redirects, size caps, credential from `OGX_GITHUB_TOKEN` only). Draft-PR
+  creation requires a validated plan and explicit approval; branch creation,
+  file update, push, merge and deployment are reported as unsupported.
+- **State data.** Workflow rows contain project paths, stage outputs and
+  actor identities, not provider tokens. Stage output is capped before storage.
+
+Known limits: the lease is time-based and has no heartbeat, so a stage running
+longer than its lease could be reclaimed; choose a lease above the longest
+stage. The audit chain is tamper-evident but not signed, WORM or externally
+anchored. The patch engine prevents path escape but is not an OS sandbox.
+
 ## Release-review hardening (2026-11-24)
 
 - **Resolved-address enforcement.** The default transport resolves the provider
