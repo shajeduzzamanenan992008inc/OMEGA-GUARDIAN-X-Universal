@@ -20,7 +20,7 @@ class ProxyTargetValidationTests(unittest.TestCase):
                 _validated_origin_target(target)
 
     def test_rejects_ambiguous_or_control_characters(self):
-        for target in ("/\\\\evil.invalid/path", "/path\\nInjected: yes", "/path#fragment", "/has space", "/bad\\x7fpath"):
+        for target in ("/\\\\evil.invalid/path", "/path\\nInjected: yes", "/path#fragment", "/has space", "/bad\\x7fpath", "/bad%0apath", "/bad%20path"):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 _validated_origin_target(target)
 
