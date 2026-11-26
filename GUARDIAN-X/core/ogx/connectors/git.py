@@ -24,18 +24,26 @@ def _run(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT_SECOND
 
 def detect_provider(remote: str) -> str:
     value = remote.lower().strip()
-    if "github.com" in value:
+    scp_match = re.match(r"^[^/@:]+@([^/:]+):.+$", value)
+    parsed = None
+    if scp_match:
+        host = scp_match.group(1).strip("[]")
+    else:
+        parsed = urlparse(value if "://" in value else "https://" + value)
+        try:
+            host = parsed.hostname or ""
+        except ValueError:
+            host = ""
+    host = host.rstrip(".")
+    if host == "github.com" or host.endswith(".github.com"):
         return "github"
-    if "gitlab.com" in value or "gitlab." in value:
+    if host == "gitlab.com" or host.startswith("gitlab."):
         return "gitlab"
-    if "bitbucket.org" in value:
+    if host == "bitbucket.org" or host.endswith(".bitbucket.org"):
         return "bitbucket"
-    if "gitea" in value or "forgejo" in value:
+    if any(label in {"gitea", "forgejo"} for label in host.split(".")):
         return "gitea-or-forgejo"
-    if re.match(r"^[^/@:]+@[^/:]+:.+$", value):
-        return "generic-git"
-    parsed = urlparse(value if "://" in value else "https://" + value)
-    return "generic-git" if parsed.netloc else "unknown"
+    return "generic-git" if scp_match or (parsed is not None and parsed.netloc) else "unknown"
 
 
 def remote_summary(remote: str) -> dict[str, str]:
