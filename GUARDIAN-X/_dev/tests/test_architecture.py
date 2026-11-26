@@ -322,7 +322,9 @@ class ArchitectureTests(unittest.TestCase):
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
         for name, root in (("src", SRC), ("core", CORE)):
             env = dict(os.environ)
-            env["PYTHONPATH"] = str(root)
+            # The import root is the parent (src/ or core/), not the ogx
+            # package directory itself, or "import ogx" cannot resolve.
+            env["PYTHONPATH"] = str(root.parent)
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             result = subprocess.run(
                 [sys.executable, "-c", "import ogx, ogx.cli; print(ogx.__version__)"],
