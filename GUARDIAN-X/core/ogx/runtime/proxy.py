@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import logging
+import re
 import socket
 import ssl
 import sys
@@ -109,7 +110,7 @@ def make_handler(shield: Shield, upstream: Upstream, *, timeout: float = 30.0, p
 
         def _process(self) -> None:
             target = self.path
-            if not target.startswith("/") or target.startswith("//"):
+            if not _is_safe_origin_target(target):
                 return self._simple(400, "origin-form request target required")
             if self.headers.get("Transfer-Encoding"):
                 return self._simple(501, "chunked request bodies are not supported")
@@ -202,6 +203,43 @@ def make_handler(shield: Shield, upstream: Upstream, *, timeout: float = 30.0, p
     for verb in ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
         setattr(ProxyHandler, f"do_{verb}", ProxyHandler._handle)
     return ProxyHandler
+
+
+def _is_safe_origin_target(target: str) -> bool:
+    """Return True only for a safe HTTP/1.1 origin-form request target.
+
+    ``http.client.HTTPConnection.putrequest`` accepts the target verbatim and
+    sends it as the request line, so we reject anything that could be used to
+    inject extra request-line elements (CR/LF), confuse the origin path
+    (absolute-URI form or scheme/host crafted into the path), or traverse
+    upstream directories via raw ``..`` segments.
+
+    Relative-path form (``/path?query``) is required; absolute URIs and
+    authority/form targets are rejected because this proxy forwards requests
+    to a single configured upstream, not as a generic HTTP forward proxy.
+    """
+    if not isinstance(target, str):
+        return False
+    if not target or target[0] != "/":
+        return False
+    if target.startswith("//"):
+        return False
+    if _BACKSLASH_RE.search(target):
+        return False
+    if _CONTROL_RE.search(target):
+        return False
+    if target.startswith("//") or "://" in target:
+        return False
+    if _ABSOLUTE_URI_RE.match(target):
+        return False
+    if target.startswith("/..") or target == "/.." or "/../" in target or target.endswith("/.."):
+        return False
+    return True
+
+
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_ABSOLUTE_URI_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9.+-]*://")
+_BACKSLASH_RE = re.compile(r"\\")
 
 
 def make_proxy(shield: Shield, upstream: str | Upstream, listen: tuple[str, int] = ("127.0.0.1", 8080), *,

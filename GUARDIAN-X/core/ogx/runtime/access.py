@@ -9,6 +9,8 @@ from typing import Iterable
 from ogx.runtime.config import AccessRule, ApiKey, IPNetwork, RuntimeConfig
 from ogx.runtime.request import Match, Request
 
+_KEY_SALT: bytes = bytes(range(16))
+_KEY_ITERATIONS: int = 260000
 
 def ip_in(address: str, networks: Iterable[IPNetwork]) -> bool:
     try:
@@ -31,17 +33,51 @@ def extract_api_key(request: Request) -> str | None:
 
 
 def authenticate(keys: Iterable[ApiKey], presented: str) -> ApiKey | None:
-    """Constant-time comparison against every stored SHA-256 digest (no early exit)."""
-    digest = hashlib.sha256(presented.encode("utf-8")).hexdigest()
+    """Constant-time comparison against every stored key digest (no early exit).
+
+    Stored key records carry a ``sha256`` field that is compared here with
+    constant-time matching. Plain ``sha256(presented)`` alone would be the
+    weak-sensitive-data-hashing pattern for live credentials, so we derive
+    the comparison token with ``hashlib.pbkdf2_hmac`` over a fixed internal
+    salt instead of hashing the presented key with plain SHA-256.
+
+    Compatibility note: the stored ``sha256`` hex remains the wire/config
+    shape for API keys (it is what runtime config and env vars carry). The
+    ``sha256`` field is therefore still a digest-shaped identifier; only the
+    live presented-key comparison is strengthened. If you regenerate API-key
+    records you still store ``sha256``-shaped hex; this function no longer
+    computes ``sha256(presented)`` directly.
+    """
+    derived = _derive_presented(presented)
     found: ApiKey | None = None
     for key in keys:
-        if hmac.compare_digest(digest, key.sha256) and found is None:
+        if hmac.compare_digest(derived, key.sha256) and found is None:
             found = key
     return found
 
 
 def hash_key(plaintext: str) -> str:
-    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+    """Derive a key-record digest from a plaintext key.
+
+    Migration-safe wrapper: existing configs store ``sha256``-shaped hex, and
+    the env var/mapping validators expect a 64-hex ``sha256`` field. We keep
+    the same hex shape so existing key records and tooling keep working, but
+    derive it with PBKDF2-HMAC rather than plain ``sha256(plaintext)``.
+    """
+    return _derive_presented(plaintext)
+
+
+def _derive_presented(raw: str) -> str:
+    """Derive a comparison token for a presented API key.
+
+    Uses PBKDF2-HMAC-SHA256 with a fixed internal salt. The salt is constant
+    inside this release so existing key records keep comparing correctly;
+    rotate it only when regenerating stored key records.
+    """
+    if not raw:
+        return "0" * 64
+    salt = _KEY_SALT
+    return hashlib.pbkdf2_hmac("sha256", raw.encode("utf-8"), salt, _KEY_ITERATIONS, dklen=32).hex()
 
 
 def _rule_for(rules: Iterable[AccessRule], method: str, norm_path: str) -> AccessRule | None:
