@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .config import load_config, state_dir
+from .config import load_config, state_dir, state_key_slug
 from .envfile import (
     EnvFileError, create_env_file, configured_settings, file_permission_warning,
     load_runtime_env, resolve_env_path, validate_runtime_config,
@@ -228,7 +228,9 @@ def cmd_detect(args: argparse.Namespace) -> int:
 def _external_report_dir(root: Path) -> Path:
     canonical = str(root.resolve()).casefold()
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-    safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "-", root.name).strip(".-") or "project"
+    # The slug is case-folded by the same rule as the digest so a case-only
+    # path difference yields one directory name on every filesystem.
+    safe_name = state_key_slug(root.name)
     return state_dir() / "projects" / f"{safe_name}-{digest}" / "reports"
 
 
