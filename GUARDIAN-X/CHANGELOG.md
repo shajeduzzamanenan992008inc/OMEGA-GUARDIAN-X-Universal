@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased — controlled patching, durable workflows and GitHub host
+
+- Added `src/ogx/patching.py`: immutable patch plans, exact-single-match checks,
+  SHA-256 preconditions, containment/symlink refusal, external backups, atomic
+  writes and hash-chained audit. CLI: `ogx patch plan|apply|rollback|show|list`.
+  Apply and rollback require `--confirm`; rollback refuses to overwrite edits
+  made after the patch.
+- Added `src/ogx/orchestrator.py`: SQLite-backed workflow state machine
+  (`inspect → plan → edit → test → secure → review → evolve`) with validated
+  transitions, per-stage checkpoints, resume, cancel, bounded retry,
+  idempotency keys, recorded approvals for `edit`/`test`, event history and
+  audit correlation. CLI: `ogx workflow create|run|status|list|events|approve|
+  cancel|retry`. The `test` stage uses only the pinned-image container sandbox
+  and fails closed without Docker.
+- Added `src/ogx/hosts/adapters/github_runtime.py`: GitHub host read surface
+  (metadata, bounded file read, tree, branches, commits, pull requests) with
+  truth-derived capabilities, a mandatory API probe on connect, and one
+  approval-gated draft-PR write through the existing validated plan/audit path.
+  Branch creation, file update, push, merge, deployment and execution remain
+  unsupported and are reported as such. `runtime_factory` now registers
+  `github`; other providers still fail closed as unsupported host types.
+- Fixed a defect found by the new tests: the orchestrator approval gate stored
+  a timestamp in `current_stage` instead of the stage name. One cancel test was
+  also corrected to accept intentionally skipped stages remaining `skipped`
+  rather than requiring them to become `cancelled`.
+- Fixed a containment bug found by Linux CI: patch planning resolved a path
+  before checking its components for symlinks, which erased the symlink and let
+  a symlinked target through. Components are now checked unresolved, followed by
+  the resolved containment check, with a portable regression test.
+- Updated `tests/test_host_lifecycle.py`: GitHub is no longer the
+  "unsupported host type" case; GitLab is.
+- Verification (2026-11-27, branch based on `71fcbbc`): canonical suite 627
+  passed / 18 skipped / 119 subtests; drop-in 289 tests OK (9 skipped);
+  compileall and source/drop-in consistency pass; wheel 140 entries with the
+  new modules. Code scanning 0 open / 13 closed; Dependabot and secret scanning
+  0 open. Hosted CI at `71fcbbc` (OGX CI #84, Code Security #83, configuration
+  validation #13) succeeded. Live provider, Docker, cross-drive and independent
+  security verification remain outstanding — see
+  `docs/MASTER_COMPLETION_TRACKER.md`.
+
 ## Unreleased — Universal identity, host identity and relocation engine
 
 - Repaired the uncommitted `registry/v2.py` edit: fixed the `IndentationError`

@@ -5,8 +5,9 @@ from __future__ import annotations
 from ..lifecycle import HostAdapter, HostSessionConfig, UnsupportedHostTypeError
 from .filesystem_runtime import FilesystemHostAdapter
 from .git_runtime import GitHostAdapter
+from .github_runtime import GitHubHostAdapter
 
-SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git")
+SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git", "github")
 
 
 def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapter:
@@ -14,4 +15,6 @@ def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapte
         return FilesystemHostAdapter(config)
     if host_type == "local_git":
         return GitHostAdapter(config)
+    if host_type == "github":
+        return GitHubHostAdapter(config)
     raise UnsupportedHostTypeError(host_type)

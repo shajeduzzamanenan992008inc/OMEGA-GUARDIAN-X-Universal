@@ -61,7 +61,7 @@ Develop & test (canonical source): `python -m pytest -q` - drop-in and architect
 
 CI lives only in the repository root `.github/workflows/` (the workflow uses `working-directory: GUARDIAN-X`). The nested `GUARDIAN-X/.github/` directory is reusable kit content and contains no active workflows.
 
-## Universal host lifecycle & engineering (Milestone H — in progress)
+## Universal host lifecycle & engineering (Milestone H)
 
 `src/ogx/hosts/` adds a synchronous host **session lifecycle** (`HostSessionManager`)
 and two **operational local hosts**: a scoped read-only **local filesystem host**
@@ -70,18 +70,23 @@ operations, push/branch operations, or execution. Health/recovery, CLI host
 commands, and documentation are implemented.
 
 ```bash
-# register, connect, health, recover, sessions, inspect — local hosts only so far
-git clone https://github.com/acme/demo local-git && cd local-git
-ogx host register local-git <id> --kind git   # registers, starts at registered
-ogx host connect <id>                          # process-local connect, guarded adapter
-ogx host health <id>                           # computed from known router directories
-ogx host recover <id>                          # best-effort reconcile of a live session
-git clone /path/to/project local-fs && cd local-fs
-ogx host register local-fs <id> --kind filesystem --root /path/to/project
-ogx host connect <id>
-ogx host sessions                               # list live (non-terminal) sessions
-ogx host status                                 # enhanced status w/ live state
-git status                                      # host-shield harness below
+# register, connect, health, recover, sessions, inspect
+git clone https://github.com/acme/demo local-git
+ogx host register --type local_git --provider local --name demo \
+  --identifier "$PWD/local-git" --json     # registers, starts at `registered`
+ogx host connect <host-id>                 # process-local guarded adapter
+ogx host health <host-id>                  # adapter-specific health probe
+ogx host recover <host-id>                 # best-effort reconcile of a live session
+ogx host register --type local_filesystem --provider local --name project \
+  --identifier /path/to/project --json
+ogx host sessions                          # list live (non-terminal) sessions
+ogx host status                            # enhanced status with live state
+
+# GitHub host: read-only surface plus an approval-gated draft PR
+# Requires OGX_GITHUB_TOKEN; the provider engine refuses unauthenticated reads.
+ogx host register --type github --provider github --name upstream \
+  --identifier owner/repository --json
+ogx host connect <host-id>                 # probes the remote API before connecting
 ```
 
 Capability matrix was rewritten to **truthful read-only values**; registration
@@ -96,18 +101,23 @@ Truths that hold despite the `OPERATIONAL` label: these local hosts are read-onl
 connected/degraded, otherwise every declared capability is `unavailable`; and
 registration does **not** mark a host `active`.
 
-Local verification: 68 host-lifecycle/adapter/CLI/contract tests passed (3 skips),
-within a full canonical suite of 578 passed / 17 skipped, and a 278-test drop-in
-suite, and a clean wheel install plus drop-in smoke (HEAD `7135b6e`, 2026-11-26).
+Local verification (2026-11-27, implementation branch based on `71fcbbc`):
+canonical suite **627 passed / 18 skipped / 119 subtests**, drop-in suite
+**289 tests, OK (9 skipped)**, compileall and the source/drop-in consistency
+check pass, and the wheel builds with the new modules (140 entries). Host,
+patch and workflow tests are included in those totals.
 
 Docs: `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
 `docs/LOCAL_GIT_HOST.md`, `docs/HOST_HEALTH_AND_RECOVERY.md`,
 `docs/HOST_LIFECYCLE_CI_VALIDATION.md`, `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`,
 `docs/HOST_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`.
 
-**Local lifecycle hosts only.** `HostAdapter` sessions are implemented for the local
-filesystem and local Git hosts. Remote SSH, Docker and Kubernetes hosts are
-**not** implemented. Separately, the Git-provider API layer
+**Host sessions today:** local filesystem, local Git and a GitHub read surface
+with one approval-gated draft-PR write. The GitHub adapter is covered by mocked
+transport tests only; no live credential was verified. Remote SSH, Docker and
+Kubernetes hosts are **not** implemented, and GitLab/Bitbucket/Gitea/Forgejo/
+Azure DevOps/CodeCommit have provider adapters but no host lifecycle adapter.
+Separately, the Git-provider API layer
 (`src/ogx/platform/adapters/`) implements read-only GitHub, GitLab, Bitbucket Cloud,
 Azure DevOps Repos, AWS CodeCommit, Gitea and Forgejo contracts with
 approval-gated writes; `ogx providers list` reports 7 `verified` Git-hosting
