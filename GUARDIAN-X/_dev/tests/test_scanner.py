@@ -1,4 +1,5 @@
 import json
+import secrets
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,8 @@ class ScannerTests(unittest.TestCase):
     def test_secret_value_is_redacted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            secret = "sk_live_1234567890abcdef"
+            # Build a disposable credential at runtime; never commit a live-looking key.
+            secret = "sample_" + secrets.token_hex(16)
             (root / "app.py").write_text(f'API_KEY = "{secret}"\n', encoding="utf-8")
             report = scan_repository(root)
             hits = [f for f in report.findings if f.rule_id == "OGX-SEC-001"]
