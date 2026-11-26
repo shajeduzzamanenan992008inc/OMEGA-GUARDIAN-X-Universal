@@ -14,8 +14,8 @@
 | Current `origin/main` at report time | `8645385` (merge of PR #19, owner-initiated deletion of a nested release-notes file) |
 | Branch base | `71fcbbc` |
 | Branch name | `feat/universal-lifecycle-orchestration` |
-| Branch head at report time | `b13a53e` (2 commits) |
-| Pull request | #20 opened, **not merged**; 16/16 checks passed at `b13a53e` |
+| Branch head at report time | PR #20 head (code commit `b13a53e` plus documentation commits) |
+| Pull request | #20 opened, **not merged**; **16/16 checks passed**, including on the final documentation head |
 | Direct edits to `main` | none |
 | Merge performed by this agent | none |
 | Force-push / tag deletion | none |
@@ -110,7 +110,7 @@ the authority for the symlink path, which is skipped on unprivileged Windows.
 | `ogx patch --help` / `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
 | Hosted CI at `71fcbbc` | OGX CI #84 success, OGX Code Security #83 success, Configuration Validation #13 success |
-| Hosted CI at `b13a53e` (PR #20) | **16/16 checks passed**: OGX CI #91 (Python 3.11/3.12/3.13, drop-in, wheel, profile checks), CodeQL Python analysis (push and PR), Dependency Review, code scanning results |
+| Hosted CI at `b13a53e` and the final head (PR #20) | **16/16 checks passed** on both: OGX CI (Python 3.11/3.12/3.13, drop-in, wheel, profile checks; run #91 on the fix), CodeQL Python analysis (push and PR), Dependency Review, code scanning results |
 | Dependency Review | run #17 success (PR #19) |
 | Live GitHub probe without a token | failed closed with `credential_required` as designed; no authenticated live call was possible |
 
