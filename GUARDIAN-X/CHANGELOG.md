@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased — Universal identity, host identity and relocation engine
+
+- Repaired the uncommitted `registry/v2.py` edit: fixed the `IndentationError`
+  that made `import ogx` fail, replaced the `st_mtime` migration seed with a
+  SHA-256 content digest, and made `patch_kinds` reflect the patches that
+  actually ran. Migration now also reports `provisional_projects`.
+- Added `src/ogx/pap/host_identity.py`: stable host id (UUID v5 from a
+  privacy-conscious binding hash), `host.json` storage, `verified` / `weak` /
+  `foreign_or_renamed` / `missing` decisions and explicit `adopt_host_identity`.
+  No hardware serials or raw host names are persisted.
+- Added `src/ogx/pap/lineage.py`: `explain_identity` (evidence, classification,
+  conflicts) and `fork_project` (new identity + `.guardian-x/lineage.json`).
+- Added `src/ogx/relocation.py`: plan/journal/apply/verify/recover/rollback with
+  symlink and path-escape protection, hash-verified idempotent copy, registry
+  workspace rebinding, and source retention unless a move is explicitly confirmed.
+- `src/ogx/platform/identity.py`: `assert_relocation_safe` now also reports
+  workspace resolution (`workspace_paths_resolve`).
+- CLI: `identity explain`, `identity fork`, evidence-based `identity recover`,
+  `host identity`, `relocate plan|apply|verify|recover`, and idempotent
+  `host register`.
+- CI: the canonical `tests/` suite, wheel build and clean-install smoke test now
+  run in `.github/workflows/ci.yml` (previously only drop-in checks ran).
+- Tests: 63 new tests collected across five files (62 pass here; 1 symlink test
+  skips on Windows). Canonical suite: 578 passed, 17 skipped.
+  Drop-in project checks: 2/2 passed.
+- Documented compatibility decision: three P0 tests that asserted the *absence*
+  of `identity explain`, `identity fork`, `relocate` and host-registration
+  idempotency were inverted into positive tests. P0 fixtures and golden vectors
+  are unchanged. Report: `docs/MEGA_ULTRA_COMPLETION_REPORT.md`.
+
 ## Unreleased — release-readiness fixes (0.8.0a1)
 
 Host lifecycle & host engineering (v2)

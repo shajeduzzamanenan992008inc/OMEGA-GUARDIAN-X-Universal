@@ -74,6 +74,19 @@ from .pap import (
     TrustClassification,
     ActivationReadiness,
 )
+from .pap.host_identity import (
+    load_or_create_host_identity,
+    verify_host_identity,
+)
+from .pap.lineage import explain_identity, fork_project
+from .relocation import (
+    RelocationError,
+    RelocationRefused,
+    apply_relocation,
+    plan_relocation,
+    recover_relocation,
+    verify_relocation,
+)
 from .registry import RegistryV2, get_registry, RegistryError, RegistryNotFoundError, MigrationError
 from .discovery import (
     DiscoveryEngine, DiscoveryConfig, DiscoveryScope, DiscoveryRoot,
@@ -89,7 +102,7 @@ from .intelligence import AnalysisOptions, ProjectIntelligenceEngine
 from .intelligence.integration import resolve_registered_project
 from .intelligence.reports import render_markdown, render_terminal
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 BANNER = "OMEGA GUARDIAN X — Universal Repository Intelligence"
 GLOBAL_CONFIG = """# OMEGA GUARDIAN X global configuration
@@ -1281,13 +1294,23 @@ def cmd_host_register(args: argparse.Namespace) -> int:
             )
             return 2
         
+        identifier = args.identifier or ""
+        # Idempotent registration: the same (type, identifier) on this host
+        # reuses its existing host id instead of creating a duplicate row.
+        existing = host_registry.find_host_by_type_and_identifier(host_type.value, identifier)
+        host_id = UUID(existing["host_id"]) if existing else uuid4()
+
+        machine_identity = load_or_create_host_identity()
         host = host_registry.register_host(
-            host_id=uuid4(),
+            host_id=host_id,
             host_type=host_type.value,
             provider=provider.value,
             display_name=args.name,
-            normalized_identifier=args.identifier or "",
-            metadata={},
+            normalized_identifier=identifier,
+            metadata={
+                "machine_host_id": machine_identity.host_id,
+                "machine_binding_kind": machine_identity.binding_kind,
+            },
         )
         
         if args.json:
@@ -1297,15 +1320,122 @@ def cmd_host_register(args: argparse.Namespace) -> int:
                 "host_type": host.host_type.value,
                 "provider": host.provider.value,
                 "normalized_identifier": host.normalized_identifier,
+                "machine_host_id": machine_identity.host_id,
+                "registration": "updated" if existing else "new",
             })
         else:
-            print(f"Registered host: {host.display_name} ({host.host_id})")
+            verb = "Updated host" if existing else "Registered host"
+            print(f"{verb}: {host.display_name} ({host.host_id})")
             print(f"  Type: {host.host_type.value}")
             print(f"  Provider: {host.provider.value}")
+            print(f"  Machine host id: {machine_identity.host_id}")
         return 0
     except (OSError, ValueError, Exception) as exc:
         print(f"Host registration failed: {exc}", file=sys.stderr)
         return 2
+
+
+def cmd_host_identity(args: argparse.Namespace) -> int:
+    """Show and verify the machine-level host identity (host.json)."""
+    try:
+        identity = load_or_create_host_identity()
+        report = verify_host_identity(identity)
+        payload = {**identity.to_dict(), "verification": report}
+        if args.json:
+            _json_print(payload)
+        else:
+            print(f"Host identity: {identity.host_id}")
+            print(f"  display_name: {identity.display_name}")
+            print(f"  binding_kind: {identity.binding_kind}")
+            print(f"  binding_hash: {identity.binding_hash}")
+            print(f"  created_at: {identity.created_at}")
+            print(f"  verification: {report['state']} (access: {report['access']})")
+            print(f"  detail: {report['detail']}")
+        return 0 if report["state"] in ("verified", "weak") else 1
+    except (OSError, ValueError, IdentityError) as exc:
+        print(f"Host identity failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_relocate(args: argparse.Namespace) -> int:
+    """Plan, apply, verify or recover a project relocation."""
+    try:
+        action = args.relocate_action
+        if action == "plan":
+            plan = plan_relocation(args.source, args.destination, operation=args.operation)
+            if args.json:
+                _json_print(plan.to_dict())
+            else:
+                print("Relocation plan:")
+                print(f"  plan_id: {plan.plan_id}")
+                print(f"  operation: {plan.operation}")
+                print(f"  source: {plan.source}")
+                print(f"  destination: {plan.destination}")
+                print(f"  project_id: {plan.project_id}")
+                print(f"  files: {plan.file_count} ({plan.total_bytes} bytes)")
+                print("  source is retained unless apply is run with --delete-source (move only)")
+                for warning in plan.warnings:
+                    print(f"  WARNING: {warning}")
+            return 0
+
+        if action == "apply":
+            plan = plan_relocation(args.source, args.destination, operation=args.operation)
+            result = apply_relocation(
+                plan,
+                registry=None if args.no_registry else get_registry(),
+                confirm_delete_source=bool(args.delete_source),
+            )
+            _json_print(result) if args.json else _print_relocation(result)
+            return 0
+
+        if action == "verify":
+            report = verify_relocation(args.source, args.destination)
+            _json_print(report) if args.json else _print_relocation_verify(report)
+            return 0 if report["identity_preserved"] and report["content_matches"] else 1
+
+        if action == "recover":
+            result = recover_relocation(
+                args.journal,
+                registry=None if args.no_registry else get_registry(),
+                confirm_delete_source=True if args.delete_source else None,
+            )
+            _json_print(result) if args.json else _print_relocation(result)
+            return 0
+
+        print(f"Unknown relocate action: {action}", file=sys.stderr)
+        return 2
+    except RelocationRefused as exc:
+        print(f"Relocation refused ({exc.reason}): {exc}", file=sys.stderr)
+        return 2
+    except RelocationError as exc:
+        print(f"Relocation failed ({exc.reason}): {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError, IdentityError) as exc:
+        print(f"Relocation failed: {exc}", file=sys.stderr)
+        return 2
+
+
+def _print_relocation(result: dict) -> None:
+    plan = result.get("plan", {})
+    print("Relocation complete:")
+    print(f"  state: {result.get('state')}")
+    print(f"  destination: {plan.get('destination')}")
+    print(f"  project_id: {plan.get('project_id')}")
+    print(f"  source_deleted: {result.get('source_deleted')} ({result.get('delete_reason')})")
+    rebind = result.get("rebind") or {}
+    print(f"  workspace_rebind: {rebind.get('status')}")
+    if result.get("journal"):
+        print(f"  journal: {result['journal']}")
+
+
+def _print_relocation_verify(report: dict) -> None:
+    print("Relocation verification:")
+    print(f"  identity_preserved: {report['identity_preserved']}")
+    print(f"  content_matches: {report['content_matches']}")
+    print(f"  source_files: {report['source_files']}")
+    print(f"  destination_files: {report['destination_files']}")
+    for difference in report["differences"][:20]:
+        print(f"  DIFF: {difference}")
 
 
 def _host_error(exc: BaseException, action: str) -> int:
@@ -1585,6 +1715,16 @@ def cmd_skills(args: argparse.Namespace) -> int:
         print(f"Skill operation failed: {exc}", file=sys.stderr); return 2
 
 
+def _is_uuid4(value: str) -> bool:
+    """True when ``value`` is a UUID v4 string accepted by identity schema 1.0."""
+
+    try:
+        parsed = UUID(str(value))
+    except (TypeError, ValueError):
+        return False
+    return parsed.version == 4
+
+
 def cmd_identity(args: argparse.Namespace) -> int:
     """Manage project identity (.guardian-x/identity.json)."""
     try:
@@ -1670,19 +1810,93 @@ def cmd_identity(args: argparse.Namespace) -> int:
                     print(f"  WARNING: {warn}")
             return 0 if result["valid"] else 1
         
+        elif action == "explain":
+            report = explain_identity(root)
+            if args.json:
+                _json_print(report)
+            else:
+                print(f"Identity evidence for {report['root']}:")
+                print(f"  classification: {report['classification']}")
+                for item in report["evidence"]:
+                    print(f"  evidence: {item['kind']} [{item['status']}] {item['detail']}")
+                for conflict in report["conflicts"]:
+                    print(f"  CONFLICT: {conflict}")
+                print(f"  recommendation: {report['recommendation']}")
+            return 0 if report["classification"] != "conflict" else 1
+
+        elif action == "fork":
+            if not args.destination:
+                print("Fork requires --destination.", file=sys.stderr)
+                return 2
+            if not args.confirm:
+                print("Forking creates a new project identity; pass --confirm.", file=sys.stderr)
+                return 2
+            try:
+                result = fork_project(
+                    root,
+                    args.destination,
+                    new_name=args.name,
+                    confirm=True,
+                    description=args.description,
+                )
+            except IdentityError as e:
+                print(f"Fork failed: {e}", file=sys.stderr)
+                return 2
+            if args.json:
+                _json_print(result)
+            else:
+                print("Forked project:")
+                print(f"  source: {result['source']}")
+                print(f"  destination: {result['destination']}")
+                print(f"  parent_project_id: {result['parent_project_id']}")
+                print(f"  project_id: {result['project_id']}")
+                print(f"  files_copied: {result['files_copied']}")
+            for warning in result["warnings"]:
+                print(f"  WARNING: {warning}", file=sys.stderr)
+            return 0
+
         elif action == "recover":
             if not args.confirm:
                 print("Recovery requires explicit --confirm. This may create a new identity if recovery evidence is insufficient.", file=sys.stderr)
                 return 2
-            # For now, simple recovery without registry/manifest integration
-            # (registry integration comes in Milestone B)
             try:
-                identity = recover_identity(root, confirm=True)
+                # Use real evidence instead of guessing. Only UUID v4 ids can
+                # become identity files; deterministic provisional ids must be
+                # adopted explicitly.
+                analysis = explain_identity(root)
+                registry_identity = None
+                manifest_project_id = None
+                registry_info = analysis.get("registry")
+                if registry_info and _is_uuid4(registry_info["project_id"]):
+                    registry_identity = ProjectIdentity(
+                        schema_version="1.0",
+                        project_id=registry_info["project_id"],
+                        project_name=registry_info["canonical_name"],
+                        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        created_by="registry",
+                        ogx_version="recovery",
+                    )
+                elif registry_info:
+                    print(
+                        "Registry evidence uses a provisional (non-v4) project id; "
+                        "it cannot be adopted as a project identity without review.",
+                        file=sys.stderr,
+                    )
+                candidate = analysis.get("manifest_project_id")
+                if candidate and _is_uuid4(candidate):
+                    manifest_project_id = candidate
+                identity = recover_identity(
+                    root,
+                    registry_identity=registry_identity,
+                    manifest_project_id=manifest_project_id,
+                    confirm=True,
+                )
                 print(f"Recovered identity:")
                 print(f"  project_id: {identity.project_id}")
                 print(f"  project_name: {identity.project_name}")
                 print(f"  created_at: {identity.created_at}")
                 print(f"  identity_hash: {identity.identity_hash}")
+                print(f"  evidence: {'registry' if registry_identity else ('manifest' if manifest_project_id else 'new identity (no strong evidence)')}")
                 return 0
             except IdentityError as e:
                 print(f"Recovery failed: {e}", file=sys.stderr)
@@ -2594,6 +2808,22 @@ def build_parser() -> argparse.ArgumentParser:
     id_update.add_argument("--confirm", action="store_true", help="Confirm update")
     id_update.set_defaults(func=cmd_identity)
 
+    id_explain = identity_sub.add_parser("explain", help="Explain identity evidence and conflicts")
+    id_explain.add_argument("path", nargs="?", default=".", help="Project root directory")
+    id_explain.add_argument("--project", help="Name of a registered project")
+    id_explain.add_argument("--json", action="store_true", help="Print evidence JSON")
+    id_explain.set_defaults(func=cmd_identity)
+
+    id_fork = identity_sub.add_parser("fork", help="Fork a project into a new identity")
+    id_fork.add_argument("path", nargs="?", default=".", help="Source project root")
+    id_fork.add_argument("--project", help="Name of a registered project")
+    id_fork.add_argument("--destination", required=True, help="New project directory")
+    id_fork.add_argument("--name", help="Name for the forked project")
+    id_fork.add_argument("--description", help="Description for the forked project")
+    id_fork.add_argument("--confirm", action="store_true", help="Confirm creating a new identity")
+    id_fork.add_argument("--json", action="store_true", help="Print fork result JSON")
+    id_fork.set_defaults(func=cmd_identity)
+
     inventory = sub.add_parser("inventory", help="Build a bounded file and technology inventory")
     inventory.add_argument("path", nargs="?")
     inventory.add_argument("--project")
@@ -2848,6 +3078,10 @@ def build_parser() -> argparse.ArgumentParser:
     host_register.add_argument("--json", action="store_true", help="Print result JSON")
     host_register.set_defaults(func=cmd_host_register)
 
+    host_identity = host_sub.add_parser("identity", help="Show and verify this machine's host identity")
+    host_identity.add_argument("--json", action="store_true", help="Print host identity JSON")
+    host_identity.set_defaults(func=cmd_host_identity)
+
     host_inspect = host_sub.add_parser("inspect", help="Inspect a host (alias of show)")
     host_inspect.add_argument("host_id", help="Host UUID")
     host_inspect.add_argument("--json", action="store_true", help="Print full host JSON")
@@ -2888,6 +3122,47 @@ def build_parser() -> argparse.ArgumentParser:
     host_discover.add_argument("--limit", type=int, default=100)
     host_discover.add_argument("--json", action="store_true")
     host_discover.set_defaults(func=cmd_remote_discover)
+
+    relocate = sub.add_parser("relocate", help="Plan, apply, verify or recover a project relocation")
+    relocate_sub = relocate.add_subparsers(dest="relocate_action", required=True)
+
+    def _relocate_paths(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("source", help="Current project root")
+        parser.add_argument("destination", help="New project root (must not exist)")
+        parser.add_argument(
+            "--operation",
+            choices=("move", "copy", "clone"),
+            default="move",
+            help="move, copy or clone (copy/clone always retain the source)",
+        )
+        parser.add_argument("--json", action="store_true", help="Print JSON")
+
+    rel_plan = relocate_sub.add_parser("plan", help="Validate and preview a relocation")
+    _relocate_paths(rel_plan)
+    rel_plan.set_defaults(func=cmd_relocate)
+
+    rel_apply = relocate_sub.add_parser("apply", help="Execute a relocation plan")
+    _relocate_paths(rel_apply)
+    rel_apply.add_argument(
+        "--delete-source",
+        action="store_true",
+        help="Delete the source after a verified move (requires this explicit flag)",
+    )
+    rel_apply.add_argument("--no-registry", action="store_true", help="Do not rebind registry workspaces")
+    rel_apply.set_defaults(func=cmd_relocate)
+
+    rel_verify = relocate_sub.add_parser("verify", help="Verify identity and content across two trees")
+    rel_verify.add_argument("source")
+    rel_verify.add_argument("destination")
+    rel_verify.add_argument("--json", action="store_true", help="Print JSON")
+    rel_verify.set_defaults(func=cmd_relocate)
+
+    rel_recover = relocate_sub.add_parser("recover", help="Resume an interrupted relocation from its journal")
+    rel_recover.add_argument("journal", help="Path to the relocation journal JSON")
+    rel_recover.add_argument("--delete-source", action="store_true", help="Confirm source deletion if pending")
+    rel_recover.add_argument("--no-registry", action="store_true", help="Do not rebind registry workspaces")
+    rel_recover.add_argument("--json", action="store_true", help="Print JSON")
+    rel_recover.set_defaults(func=cmd_relocate)
 
     provider = sub.add_parser("provider", help="Manage providers")
     provider_sub = provider.add_subparsers(dest="provider_action", required=True)

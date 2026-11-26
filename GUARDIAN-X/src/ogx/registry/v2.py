@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -7,9 +8,10 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5, NAMESPACE_OID
 
 from .models import (
     HostRecord,
@@ -27,11 +29,118 @@ from .exceptions import (
     RegistryNotFoundError,
 )
 
+# ---- P1: deterministic migration ids and patch taxonomy ----
+
+class MigrationPatchKind(str, Enum):
+    """Which P1 patch kind a migration call is performing.
+
+    Used for observability and conflict reporting, not for changing how the
+    registry stores rows. Canonical migration patch kinds (RT-52 slot 1).
+    """
+
+    ID_FALLBACK = "id-fallback"
+    WORKSPACE = "workspace"
+    REPOSITORY = "repository"
+
+
+class MigrationWindow:
+    """A deterministic, repeatable window into a V1 registry for P1 migration.
+
+    Two calls with the same V1 registry path (resolved to the same identifier)
+    produce the same deterministic window id, so the migration result is
+    reproducible even when identity fallback ids are involved.
+    """
+
+    def __init__(self, v1_registry_path: Path):
+        self.v1_registry_path = v1_registry_path
+        self.window_id = _migration_id(v1_registry_path)
+        self.identifier = _migration_identifier(v1_registry_path)
+
+    @property
+    def summary(self) -> dict[str, Any]:
+        return {
+            "window_id": self.window_id,
+            "identifier": self.identifier,
+            "v1_registry_path": str(self.v1_registry_path),
+            "v1_registry_path_resolved": str(self.v1_registry_path.resolve()),
+        }
+
+
+def _stable_file_digest(path: Path) -> str:
+    """Content digest of a file, used as the deterministic migration seed.
+
+    Content is used instead of mtime so the seed is reproducible from the
+    same evidence; a touched-but-unchanged registry keeps its window id.
+    """
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _migration_seed(v1_registry_path: Path | str) -> str:
+    """Deterministic seed for a V1 registry: resolved path + content digest."""
+    path = Path(v1_registry_path)
+    resolved = path.resolve()
+    if resolved.is_file():
+        return f"{resolved}:{_stable_file_digest(resolved)}"
+    # Dry-run/preview against a not-yet-created path stays deterministic.
+    return f"{resolved}:absent"
+
+
+def _migration_id(v1_registry_path: Path | str) -> str:
+    """Deterministic uuid5 window id for a V1 registry location (RT-52 slot 1)."""
+    return _deterministic_uuid5(_migration_seed(v1_registry_path))
+
+
+def _migration_identifier(v1_registry_path: Path | str) -> str:
+    """Human-readable deterministic migration identifier for a V1 registry.
+
+    Display prefix + first 12 hex chars of the deterministic window id so it
+    is easy to read in logs without implying a full UUID shape.
+    """
+    return f"v1-to-v2-{str(uuid5(NAMESPACE_OID, _migration_seed(v1_registry_path)))[:12]}"
+
+
+def _deterministic_uuid5(seed: str) -> str:
+    """Deterministic uuid5 from a stable seed (RT-52 slot 1).
+
+    UUIDv5 from the OID namespace produces version-5 ids (the 13th hex
+    digit of the UUID is ``5``); the caller does not depend on a specific
+    suffix.
+    """
+    return str(uuid5(NAMESPACE_OID, seed))
+
+
+def _fallback_project_id(v1_name: str, v1_path: str) -> str:
+    """Deterministic provisional project id for a V1 entry with no identity.json.
+
+    Deterministic by V1 name + resolved normalized path (RT-52, slot 1 and 2).
+    Same evidence -> same id across calls and machines that see the same
+    resolved path; dry-run does not mutate the seed.
+    """
+    seed = f"v1-fallback:{v1_name}:{Path(v1_path).resolve()}"
+    return _deterministic_uuid5(seed)
+
+
+def _fallback_workspace_id(v1_name: str, v1_path: str, fallback_project_id: str) -> str:
+    """Deterministic workspace id for a migrated V1 project."""
+    seed = f"v1-ws:{v1_name}:{Path(v1_path).resolve()}:{fallback_project_id}"
+    return _deterministic_uuid5(seed)
+
+
+def _fallback_repository_id(v1_name: str, remote_url: str, fallback_project_id: str) -> str:
+    """Deterministic repository id for a detected git remote during migration."""
+    seed = f"v1-repo:{v1_name}:{remote_url}:{fallback_project_id}"
+    return _deterministic_uuid5(seed)
+
 
 SCHEMA_VERSION = 2
 DB_FILENAME = "registry.db"
 MIGRATION_BACKUP_SUFFIX = ".migration-backup"
 MIGRATION_PREVIEW_SUFFIX = ".migration-preview"
+
 
 
 class RegistryV2:
@@ -852,45 +961,42 @@ class RegistryV2:
     # ==================== Migration Operations ====================
     
     def migrate_from_v1(self, v1_registry_path: Path, dry_run: bool = False) -> dict[str, Any]:
+        """Migrate from Registry V1 (projects.json) to Registry V2.
+
+        Deterministic migration ids are derived from the V1 registry location
+        and each entry's (name, resolved path) so repeated migrations of the
+        same, unmodified V1 registry produce the same ids (RT-52 slot 1-2).
+        v1_registry_path must be provided by the caller.
         """
-        Migrate from Registry V1 (projects.json) to Registry V2.
-        
-        Args:
-            v1_registry_path: Path to projects.json
-            dry_run: If True, only preview migration without applying
-            
-        Returns:
-            Migration result with statistics
-        """
-        if not v1_registry_path.exists():
+        resolved = Path(v1_registry_path).resolve()
+        if not resolved.exists():
             raise MigrationError(
                 f"Registry V1 not found: {v1_registry_path}",
                 stage="validate"
             )
-        
-        # Load V1 registry
-        with open(v1_registry_path, 'r', encoding='utf-8') as f:
-            v1_data = json.load(f)
-        
+
+        with open(resolved, "r", encoding="utf-8") as handle:
+            v1_data = json.load(handle)
+
         if not isinstance(v1_data, dict):
             raise MigrationError(
                 "Registry V1 must be a dictionary",
                 stage="validate"
             )
-        
-        # Preview migration
-        preview = {
+
+        window = MigrationWindow(resolved)
+        preview: dict[str, Any] = {
             "projects_to_migrate": len(v1_data),
             "projects": [],
             "warnings": [],
+            "window": window.summary,
         }
-        
-        # Try to read identity.json for each project
+
         from ..pap import read_identity, IdentityMissingError, IdentityCorruptedError
-        
+
         for name, path_str in v1_data.items():
             project_path = Path(path_str)
-            project_info = {
+            project_info: dict[str, Any] = {
                 "v1_name": name,
                 "v1_path": path_str,
                 "project_id": None,
@@ -898,67 +1004,82 @@ class RegistryV2:
                 "identity_hash": None,
                 "git_remote": None,
             }
-            
-            # Try to read identity
+
             try:
                 identity = read_identity(project_path)
                 project_info["project_id"] = str(identity.project_id)
                 project_info["identity_found"] = True
                 project_info["identity_hash"] = identity.identity_hash
             except (IdentityMissingError, IdentityCorruptedError):
-                # Generate deterministic UUID from path
-                project_info["project_id"] = str(uuid4())
-            
-            # Try to detect git remote
+                project_info["project_id"] = _fallback_project_id(name, path_str)
+                project_info["provisional"] = True
+
             from ..connectors.git import inspect_repository
             try:
                 git_info = inspect_repository(project_path)
                 if git_info.get("remotes"):
-                    # Get first remote
-                    for remote_name, remote_info in git_info["remotes"].items():
+                    for _remote_name, remote_info in git_info["remotes"].items():
                         project_info["git_remote"] = remote_info.get("url")
                         break
             except Exception:
                 pass
-            
+
             preview["projects"].append(project_info)
-        
+
         if dry_run:
             return {"dry_run": True, "preview": preview}
-        
-        # Apply migration
+
         return self._apply_migration(v1_data, preview)
-    
-    def _apply_migration(self, v1_data: dict[str, str], preview: dict[str, Any]) -> dict[str, Any]:
-        """Apply the migration to the database."""
-        self.initialize()
-        
-        # Create backup of V1 registry
-        v1_registry_path = Path(preview.get("v1_path", ""))
-        if v1_registry_path.exists():
-            backup_path = v1_registry_path.with_suffix(MIGRATION_BACKUP_SUFFIX)
-            shutil.copy2(v1_registry_path, backup_path)
-        
+
+    def _apply_migration(
+        self,
+        v1_data: dict[str, str],
+        preview: dict[str, Any],
+        *,
+        patch_kinds: list[MigrationPatchKind] | None = None,
+    ) -> dict[str, Any]:
+        """Apply the V1->V2 migration to the database.
+
+        Deterministic ids are derived from the V1 entry inputs, so repeated
+        migrations of the same V1 registry reuse the same project/workspace/
+        repository ids and are idempotent by registration upsert.
+
+        backup_path is derived from the resolved V1 path carried in the
+        preview window (not from a ``Path("")`` default).
+        """
+        resolved = Path(preview["window"]["v1_registry_path_resolved"])
+        patch_kinds: set[MigrationPatchKind] = set(patch_kinds or [])
+        if any(info.get("provisional") for info in preview["projects"]):
+            patch_kinds.add(MigrationPatchKind.ID_FALLBACK)
+
+        backup_path: Path | None = None
+        if resolved.exists():
+            backup_path = resolved.with_suffix(MIGRATION_BACKUP_SUFFIX)
+            shutil.copy2(resolved, backup_path)
+
         migrated = 0
-        errors = []
-        
+        errors: list[dict[str, Any]] = []
+
         for project_info in preview["projects"]:
             try:
                 project_id = UUID(project_info["project_id"])
-                
-                # Register project
+
                 self.register_project(
                     project_id=project_id,
                     canonical_name=project_info["v1_name"],
                     identity_hash=project_info.get("identity_hash") or "",
                     lifecycle_state=ProjectLifecycleState.ACTIVE,
                 )
-                
-                # Register workspace
-                workspace_id = uuid4()
+
                 location = project_info["v1_path"]
                 normalized = str(Path(location).resolve())
-                
+                workspace_id = UUID(
+                    project_info.get("workspace_id")
+                    or _fallback_workspace_id(
+                        project_info["v1_name"], location, project_info["project_id"]
+                    )
+                )
+
                 self.register_workspace(
                     workspace_id=workspace_id,
                     project_id=project_id,
@@ -966,15 +1087,20 @@ class RegistryV2:
                     normalized_location=normalized,
                     display_name=project_info["v1_name"],
                 )
-                
-                # Register repository if git remote found
+                patch_kinds.add(MigrationPatchKind.WORKSPACE)
+
                 git_remote = project_info.get("git_remote")
                 if git_remote:
                     from ..connectors.git import detect_provider
+
                     provider = detect_provider(git_remote)
                     normalized_url = self._normalize_git_url(git_remote)
-                    
-                    repo_id = uuid4()
+                    repo_id = UUID(
+                        _fallback_repository_id(
+                            project_info["v1_name"], git_remote, project_info["project_id"]
+                        )
+                    )
+
                     self.register_repository(
                         repository_id=repo_id,
                         project_id=project_info["project_id"],
@@ -982,25 +1108,27 @@ class RegistryV2:
                         repository_url=git_remote,
                         normalized_repository_url=normalized_url,
                     )
-                    
-                    # Update workspace with repository
                     self._update_workspace_repo(workspace_id, repo_id)
-                
+                    patch_kinds.add(MigrationPatchKind.REPOSITORY)
+
                 migrated += 1
-                
-            except Exception as e:
+            except Exception as exc:
                 errors.append({
                     "project": project_info["v1_name"],
-                    "error": str(e)
+                    "error": str(exc),
                 })
-        
-        # Update V1 registry path reference
+
         return {
             "dry_run": False,
             "migrated": migrated,
             "total": len(v1_data),
             "errors": errors,
-            "backup_path": str(backup_path) if v1_registry_path.exists() else None,
+            "backup_path": str(backup_path) if backup_path else None,
+            "patch_kinds": sorted(k.value for k in patch_kinds),
+            "provisional_projects": sorted(
+                info["v1_name"] for info in preview["projects"] if info.get("provisional")
+            ),
+            "window": preview.get("window"),
         }
     
     def _normalize_git_url(self, url: str) -> str:

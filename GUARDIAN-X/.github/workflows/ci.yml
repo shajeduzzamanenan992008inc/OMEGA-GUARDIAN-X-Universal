@@ -29,3 +29,26 @@ jobs:
         env:
           OMEGA_PROFILE: _dev/project-profile.json
         run: python3 devkit/health/run_project_checks.py
+
+      # The profile checks cover the drop-in distribution. The canonical
+      # installable distribution under src/ has its own pytest suite, which was
+      # previously never executed by CI.
+      - name: Install test and build tooling
+        run: python3 -m pip install --disable-pip-version-check pytest build
+
+      - name: Canonical test suite
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m pytest tests -q
+
+      - name: Build wheel
+        run: python3 -m build --wheel --outdir build-wheelcheck
+
+      - name: Clean install, import and CLI smoke test
+        run: |
+          python3 -m venv .wheelcheck-venv
+          .wheelcheck-venv/bin/python -m pip install --no-deps build-wheelcheck/*.whl
+          .wheelcheck-venv/bin/python -c "import ogx; print(ogx.__version__)"
+          .wheelcheck-venv/bin/ogx --version
+          .wheelcheck-venv/bin/ogx identity explain . --json > /dev/null

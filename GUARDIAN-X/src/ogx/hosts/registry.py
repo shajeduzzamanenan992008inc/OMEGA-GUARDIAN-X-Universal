@@ -127,6 +127,24 @@ class HostRegistry:
         
         return self._row_to_host(row) if row else None
 
+    def find_host_by_type_and_identifier(self, host_type: str, identifier: str) -> Optional[dict]:
+        """Find a host by its (type, normalized identifier) pair.
+
+        Used to make registration idempotent: registering the same root for the
+        same host type reuses the existing host id instead of creating a new
+        record on every invocation.
+        """
+        self._ensure_initialized()
+
+        conn = self._registry._get_connection()
+        row = conn.execute(
+            "SELECT * FROM hosts WHERE host_type = ? AND host_identifier = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (host_type, identifier),
+        ).fetchone()
+
+        return self._row_to_host(row) if row else None
+
     def find_hosts_by_type(self, host_type: str) -> List[dict]:
         """Find all hosts of a given type."""
         self._ensure_initialized()
