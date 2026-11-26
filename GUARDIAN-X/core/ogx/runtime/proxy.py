@@ -195,7 +195,7 @@ def make_handler(shield: Shield, upstream: Upstream, *, timeout: float = 30.0, p
             try:
                 # Target was checked by _validated_origin_target before reaching this forwarding sink.
                 # codeql[py/partial-ssrf]
-                conn.putrequest(method, target, skip_host=True, skip_accept_encoding=True)
+                conn.putrequest(method, _validated_origin_target(self.path), skip_host=True, skip_accept_encoding=True)
                 for key, value in out:           # putheader keeps duplicate headers (e.g. several Cookie lines)
                     conn.putheader(key, value)
                 conn.endheaders(body or None)
