@@ -1,0 +1,400 @@
+{
+  "schema_version": "1.0",
+  "description": "Reusable relocation fixtures for Milestone P0. Each scenario is an abstract record of the identity transitions required by section 8 of the design; it is independent of storage technology so both distributions can consume it. The 'observation' field records what P0 can actually prove today, not what the design requires.",
+  "design_reference": "GUARDIAN-X/docs/UNIVERSAL_RELOCATION_IDENTITY_DESIGN.md#8-relocation-decision-matrix",
+  "observations": {
+    "EXECUTABLE": "A P0 test exercises this transition against the current implementation.",
+    "NOT_IMPLEMENTED": "The design requires this transition and the current implementation has no surface for it. The test asserts the absence so a later phase must flip it deliberately.",
+    "REAL_MEDIA": "Requires L-E physical evidence (cross-drive, USB, second machine, read-only media). NOT RUN in P0."
+  },
+  "probes": {
+    "P-IDENTITY-PRESERVED": {
+      "kind": "identity_preserved",
+      "applies_to": ["canonical"],
+      "asserts": "The identity file and its project_id/identity_hash are byte-identical after the filesystem operation."
+    },
+    "P-IDENTITY-ABSENT": {
+      "kind": "identity_absent",
+      "applies_to": ["canonical"],
+      "asserts": "A tree without .guardian-x/identity.json yields IdentityMissingError and recovery refuses without --confirm."
+    },
+    "P-IDENTITY-MINTED": {
+      "kind": "identity_minted_on_confirm",
+      "applies_to": ["canonical"],
+      "asserts": "recover_identity(confirm=True) with no evidence creates a new identity; it does not adopt or probe for an inherited one."
+    },
+    "P-REPO-URL": {
+      "kind": "repository_url_normalized",
+      "applies_to": ["canonical"],
+      "asserts": "HTTPS and SSH spellings of one remote normalize to the same key and the same deterministic repository id."
+    },
+    "P-STATE-ISOLATION": {
+      "kind": "state_isolation",
+      "applies_to": ["canonical", "drop-in"],
+      "asserts": "The state root is refused when it resolves inside the project, and distinct project locations map to distinct state directories."
+    },
+    "P-MISSING-SURFACE": {
+      "kind": "not_implemented",
+      "applies_to": ["canonical"],
+      "asserts": "The required command surface does not exist yet, so the scenario cannot be exercised."
+    },
+    "P-REAL-MEDIA": {
+      "kind": "real_media",
+      "applies_to": [],
+      "asserts": "Nothing. Recorded as NOT RUN until a dated L-E run sheet on physical media exists."
+    },
+    "P-DUPLICATE-PID": {
+      "kind": "duplicate_pid_two_locations",
+      "applies_to": ["canonical"],
+      "asserts": "Two locations can carry the same project_id today and both resolve to that project; no conflict is raised."
+    },
+    "P-LOCATION-REUSE": {
+      "kind": "location_reused_by_other_pid",
+      "applies_to": ["canonical"],
+      "asserts": "The registry accepts two projects at one normalized location and location lookup returns the newest row."
+    },
+    "P-HOST-PER-CALL": {
+      "kind": "host_registered_per_call",
+      "applies_to": ["canonical"],
+      "asserts": "Registering the same local host twice produces two different host ids."
+    },
+    "P-CASEFOLD": {
+      "kind": "collision_case_fold",
+      "applies_to": ["canonical", "drop-in"],
+      "asserts": "Paths that differ only by case map to the same state key, so case folding is a live collision source."
+    }
+  },
+  "scenarios": [
+    {
+      "id": "RX-01",
+      "matrix_row": 1,
+      "title": "Rename directory in place, same volume",
+      "operation": "rename",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-PRESERVED",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "same", "automatic": true, "confirmation": false},
+      "note": "The identity file travels with the tree; the workspace binding does not exist yet."
+    },
+    {
+      "id": "RX-02",
+      "matrix_row": 2,
+      "title": "Move to another directory, same volume",
+      "operation": "move",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-PRESERVED",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "same", "automatic": true, "confirmation": false},
+      "note": "No relocate command exists; the probe performs the filesystem move directly."
+    },
+    {
+      "id": "RX-03",
+      "matrix_row": 3,
+      "title": "Move to another volume or drive",
+      "operation": "move",
+      "layer": "L-E",
+      "probe": "P-REAL-MEDIA",
+      "observation": "REAL_MEDIA",
+      "requires_real_media": true,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "same", "automatic": true, "confirmation": true},
+      "note": "A second volume is not available to this suite. NOT RUN."
+    },
+    {
+      "id": "RX-04",
+      "matrix_row": 4,
+      "title": "Copy to USB, same machine",
+      "operation": "copy",
+      "layer": "L-E",
+      "probe": "P-REAL-MEDIA",
+      "observation": "REAL_MEDIA",
+      "requires_real_media": true,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Requires removable media. NOT RUN."
+    },
+    {
+      "id": "RX-05",
+      "matrix_row": 5,
+      "title": "Open USB project on another machine",
+      "operation": "open_remote",
+      "layer": "L-E",
+      "probe": "P-REAL-MEDIA",
+      "observation": "REAL_MEDIA",
+      "requires_real_media": true,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Requires a second machine. NOT RUN."
+    },
+    {
+      "id": "RX-06",
+      "matrix_row": 6,
+      "title": "Copy directory to a second location on the same host",
+      "operation": "copy",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-PRESERVED",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Current behavior copies the identity and therefore duplicates the project_id with no conflict check (design D4)."
+    },
+    {
+      "id": "RX-07",
+      "matrix_row": 7,
+      "title": "Copy to another machine (manual or file share)",
+      "operation": "copy",
+      "layer": "L-E",
+      "probe": "P-REAL-MEDIA",
+      "observation": "REAL_MEDIA",
+      "requires_real_media": true,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Requires a second machine. NOT RUN."
+    },
+    {
+      "id": "RX-08",
+      "matrix_row": 8,
+      "title": "git clone with a tracked identity file and a known remote",
+      "operation": "clone",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "rebind", "automatic": true, "confirmation": false},
+      "note": "There is no clone recognition path; the identity file is simply copied by git."
+    },
+    {
+      "id": "RX-09",
+      "matrix_row": 9,
+      "title": "git clone with a tracked identity file and an unknown remote",
+      "operation": "clone",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "none", "automatic": false, "confirmation": true},
+      "note": "Quarantine of an unknown remote is not implemented."
+    },
+    {
+      "id": "RX-10",
+      "matrix_row": 10,
+      "title": "git clone without an identity file",
+      "operation": "clone",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-ABSENT",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "new", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "none", "automatic": false, "confirmation": true},
+      "note": "Confirms the tree has no identity and that recovery will not invent one silently."
+    },
+    {
+      "id": "RX-11",
+      "matrix_row": 11,
+      "title": "GitHub or GitLab fork",
+      "operation": "fork",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "new", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "none", "automatic": false, "confirmation": true},
+      "note": "identity fork does not exist; the CLI parser rejects it."
+    },
+    {
+      "id": "RX-12",
+      "matrix_row": 12,
+      "title": "Restore backup at the original path and host",
+      "operation": "restore",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-PRESERVED",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "A restored tree verifies through the stored hash before reuse."
+    },
+    {
+      "id": "RX-13",
+      "matrix_row": 13,
+      "title": "Restore backup at a new path or host",
+      "operation": "restore",
+      "layer": "L-B",
+      "probe": "P-IDENTITY-PRESERVED",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "The restored tree keeps its project_id because the identity file is part of the backup."
+    },
+    {
+      "id": "RX-14",
+      "matrix_row": 14,
+      "title": "Remote URL change (HTTPS to SSH or host migration)",
+      "operation": "rebind_remote",
+      "layer": "L-A",
+      "probe": "P-REPO-URL",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "rebind", "automatic": true, "confirmation": true},
+      "note": "Normalization and the deterministic repository id are implemented; the confirmation step is not."
+    },
+    {
+      "id": "RX-15",
+      "matrix_row": 15,
+      "title": "Host rename or hostname change",
+      "operation": "host_rename",
+      "layer": "L-A",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "unchanged", "repository_link": "same", "automatic": true, "confirmation": false},
+      "note": "There is no host identity file, so there is nothing to keep stable across a rename."
+    },
+    {
+      "id": "RX-16",
+      "matrix_row": 16,
+      "title": "OS reinstall on the same machine",
+      "operation": "host_reinstall",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Requires host adoption, which does not exist."
+    },
+    {
+      "id": "RX-17",
+      "matrix_row": 17,
+      "title": "Move the state directory",
+      "operation": "state_move",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "rebind", "repository_link": "same", "automatic": true, "confirmation": true},
+      "note": "state move is not implemented; OGX_HOME can be relocated by hand."
+    },
+    {
+      "id": "RX-18",
+      "matrix_row": 18,
+      "title": "Share one OGX_HOME across machines",
+      "operation": "share_state",
+      "layer": "L-B",
+      "probe": "P-STATE-ISOLATION",
+      "observation": "EXECUTABLE",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "rebind", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "Only the local half is provable: the state root is refused inside the project and is keyed per location. Host namespacing does not exist."
+    },
+    {
+      "id": "RX-19",
+      "matrix_row": 19,
+      "title": "Open a project from read-only media",
+      "operation": "read_only_media",
+      "layer": "L-E",
+      "probe": "P-REAL-MEDIA",
+      "observation": "REAL_MEDIA",
+      "requires_real_media": true,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "unchanged", "repository_link": "same", "automatic": false, "confirmation": false},
+      "note": "Read-only media detection is not implemented and no media is available. NOT RUN."
+    },
+    {
+      "id": "RX-20",
+      "matrix_row": 20,
+      "title": "Cloud-synced folder (OneDrive or Dropbox)",
+      "operation": "cloud_sync",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": false, "confirmation": true},
+      "note": "No conflict-file or generation handling exists."
+    },
+    {
+      "id": "RX-21",
+      "matrix_row": 21,
+      "title": "Container or CI ephemeral host",
+      "operation": "ephemeral_host",
+      "layer": "L-B",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "new", "workspace_id": "new", "state": "new", "repository_link": "same", "automatic": true, "confirmation": false},
+      "note": "No ephemeral-host flag or disposable-state policy exists."
+    },
+    {
+      "id": "RX-22",
+      "matrix_row": 22,
+      "title": "Two processes relocate concurrently",
+      "operation": "concurrent_relocate",
+      "layer": "L-D",
+      "probe": "P-MISSING-SURFACE",
+      "observation": "NOT_IMPLEMENTED",
+      "requires_real_media": false,
+      "expect": {"project_id": "same", "host_id": "same", "workspace_id": "retain", "state": "rebind", "repository_link": "same", "automatic": false, "confirmation": false},
+      "note": "There is no relocation journal or lock to contend on."
+    }
+  ],
+  "conflict_scenarios": [
+    {
+      "id": "CX-01",
+      "title": "One project_id bound at two locations",
+      "probe": "P-DUPLICATE-PID",
+      "observation": "EXECUTABLE",
+      "design_reference": "D4, RT-24, RT-25",
+      "expect": {"project_id": "same", "workspace_id": "new", "state": "new", "conflict_detected": false},
+      "note": "A directory copy keeps the project_id and both copies resolve to the same project. This is the current behavior the design proposes to detect."
+    },
+    {
+      "id": "CX-02",
+      "title": "One normalized location reused by a different project_id",
+      "probe": "P-LOCATION-REUSE",
+      "observation": "EXECUTABLE",
+      "design_reference": "RT-27, T4",
+      "expect": {"project_id": "new", "workspace_id": "new", "state": "new", "conflict_detected": false},
+      "note": "The registry has no uniqueness constraint on workspaces.normalized_location, so the newest row shadows the older one."
+    },
+    {
+      "id": "CX-03",
+      "title": "Registering the same local host twice",
+      "probe": "P-HOST-PER-CALL",
+      "observation": "EXECUTABLE",
+      "design_reference": "RT-16, D1",
+      "expect": {"host_id": "new", "conflict_detected": false},
+      "note": "cmd_host_register passes a fresh uuid4 on every call, so a stable host identity is impossible today."
+    },
+    {
+      "id": "CX-04",
+      "title": "Two projects with the same folder name in different parents",
+      "probe": "P-STATE-ISOLATION",
+      "observation": "EXECUTABLE",
+      "design_reference": "RT-55",
+      "expect": {"project_id": "new", "state": "new", "conflict_detected": false},
+      "note": "The path hash keeps the two state directories apart, so the folder name alone cannot collide."
+    },
+    {
+      "id": "CX-05",
+      "title": "Two locations differing only by letter case",
+      "probe": "P-CASEFOLD",
+      "observation": "EXECUTABLE",
+      "design_reference": "T5, RT-48",
+      "expect": {"state": "same", "conflict_detected": false},
+      "note": "Both distributions casefold the location before hashing, so two distinct case-sensitive paths share one state key. Recorded, not yet detected."
+    },
+    {
+      "id": "CX-06",
+      "title": "State root placed inside the project",
+      "probe": "P-STATE-ISOLATION",
+      "observation": "EXECUTABLE",
+      "design_reference": "RT-29",
+      "expect": {"state": "reject", "conflict_detected": true},
+      "note": "Both distributions refuse this; it is the one isolation rule that already holds."
+    }
+  ],
+  "invariants": [
+    "The project_id never changes on scenarios 1-10 and 12-22; only an explicit fork (11) changes it.",
+    "The host_id changes only when the physical machine or install changes, never on a rename.",
+    "A workspace_id is retained only for a move of the same directory; a copy, clone, restore to a new location, or first open on another host creates a new one.",
+    "State follows the project on the same host and never travels with the tree automatically.",
+    "A repository link survives relocation; a URL change updates metadata and does not create a project.",
+    "A clone is not automatically the same project without a valid identity file and a consistent repository link.",
+    "A fork is a new project and must not inherit the parent project_id or state.",
+    "A missing path is not a deleted project; state is retained.",
+    "No scenario may be reported as passing while its observation is REAL_MEDIA or NOT_IMPLEMENTED."
+  ]
+}

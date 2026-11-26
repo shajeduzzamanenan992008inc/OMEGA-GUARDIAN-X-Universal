@@ -1,0 +1,563 @@
+{
+  "schema_version": "1.0",
+  "description": "Shared identity golden vectors for the canonical and drop-in distributions. Built from the schema in GUARDIAN-X/docs/UNIVERSAL_RELOCATION_IDENTITY_DESIGN.md section 6.1 and frozen; never regenerate these values to make a failing test pass.",
+  "design_reference": "GUARDIAN-X/docs/UNIVERSAL_RELOCATION_IDENTITY_DESIGN.md#114-shared-golden-vectors",
+  "implementations": {
+    "canonical": {
+      "identity_module": "ogx.pap.identity",
+      "status": "implemented",
+      "state_key_hex_length": 16
+    },
+    "drop-in": {
+      "identity_module": null,
+      "status": "not-implemented",
+      "state_key_hex_length": 12
+    }
+  },
+  "canonicalization": {
+    "encoding": "utf-8",
+    "sort_keys": true,
+    "ensure_ascii": false,
+    "separators": [
+      ",",
+      ":"
+    ],
+    "excluded_fields": [
+      "identity_hash"
+    ],
+    "defaulted_fields": {
+      "description": ""
+    },
+    "canonical_fields": [
+      "schema_version",
+      "project_id",
+      "project_name",
+      "description",
+      "created_at",
+      "created_by",
+      "ogx_version"
+    ],
+    "hash_algorithm": "sha256",
+    "hash_prefix": "sha256:"
+  },
+  "vectors": [
+    {
+      "id": "V01-minimal",
+      "title": "Minimal valid identity: required fields only",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:9f29c8fdbe0aadb4991ffcb9ed8864c5ae65adacf924441dd7e0ce3998c75210",
+      "note": "description is absent in the input and defaults to an empty string in the canonical form."
+    },
+    {
+      "id": "V02-with-description",
+      "title": "Valid identity with a short description",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "description": "Sample project."
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"Sample project.\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:08a003ae23162e23cd94bf7b510a143581e2fd3848cdf28711585267516e9de1"
+    },
+    {
+      "id": "V03-max-description",
+      "title": "Description at the 500-character limit",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:428daeaeb0c2242be96ad3b37a16c33baa728ec0aa4fe24eb89d4c6cdd927f10"
+    },
+    {
+      "id": "V04-name-128",
+      "title": "project_name at the 128-character limit",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:9e9e7f0c2d0b960069eb8c0e9ee344e6804cd92bc575c3cbda800d5607172d89"
+    },
+    {
+      "id": "V05-unicode",
+      "title": "Unicode project name and description",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Проект Guardian ガーディアン",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "description": "Ünïcødé — ok ✓"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"Ünïcødé — ok ✓\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Проект Guardian ガーディアン\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:b49456df0612fc5c1a9f0beedab8cdecd56451a7cbe9f460e372a3759ba086cb"
+    },
+    {
+      "id": "V06-uppercase-uuid",
+      "title": "Uppercase hexadecimal UUID v4 is accepted and preserved verbatim",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3F2A1C4E-9B7D-4A15-8C3E-2D6F5A1B0C94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3F2A1C4E-9B7D-4A15-8C3E-2D6F5A1B0C94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:b11d65c79a106e5e50c5dc3fd1fd6f75ba14d24a59c0387f5ecc6686a60f9e56",
+      "note": "Recorded divergence: the uppercase form is accepted but canonicalizes to a different PIH than the lowercase form of the same UUID, so UUID case is currently part of the identity. See D5/T5 in the design."
+    },
+    {
+      "id": "V07-zulu-timestamp",
+      "title": "Timestamp with a Z suffix is accepted and preserved verbatim",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05Z",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05Z\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:d9aa23b72c57334ccd903781e6c84ac1e48ba245622c449996775599562833d4"
+    },
+    {
+      "id": "V08-offset-timestamp",
+      "title": "Timestamp with a non-UTC offset is accepted and preserved verbatim",
+      "check": "validate_json",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+05:30",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+05:30\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:2cee0233ebf79c60dc2d41ee12f8ae0daf2a4fdfd4cb5c1e33447d0b5a37f7a7",
+      "note": "Recorded divergence: timestamps are validated but not normalized to UTC, so timestamp spelling is part of the identity."
+    },
+    {
+      "id": "V09-uuid-v1",
+      "title": "UUID v1 is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "f47ac10b-58cc-1372-a567-0e02b2c3d479",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_id"
+    },
+    {
+      "id": "V10-uuid-v5",
+      "title": "UUID v5 is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "21b4b4f2-8d1e-5b1a-9f2c-3d4e5f6a7b8c",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_id"
+    },
+    {
+      "id": "V11-uuid-malformed",
+      "title": "Malformed UUID is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "not-a-uuid",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_id"
+    },
+    {
+      "id": "V12-missing-project-name",
+      "title": "Missing required field is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_name"
+    },
+    {
+      "id": "V13-unknown-field",
+      "title": "Unknown field is rejected (strict schema)",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "relocation_hint": "/tmp/x"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "root"
+    },
+    {
+      "id": "V14-description-501",
+      "title": "Description over 500 characters is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "description"
+    },
+    {
+      "id": "V15-name-illegal-char",
+      "title": "project_name with an illegal character is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "bad/name",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_name"
+    },
+    {
+      "id": "V16-name-129",
+      "title": "project_name over 128 characters is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "project_name"
+    },
+    {
+      "id": "V17-timestamp-no-tz",
+      "title": "Timestamp without a timezone is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "created_at"
+    },
+    {
+      "id": "V18-timestamp-not-iso",
+      "title": "Non-ISO timestamp is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "02/01/2026 03:04",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "created_at"
+    },
+    {
+      "id": "V19-secret-like",
+      "title": "Credential-like content is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "description": "api_key = SUPERSECRETVALUE1234567890"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "security"
+    },
+    {
+      "id": "V20-schema-version-2",
+      "title": "Unsupported schema version is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "2.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "schema_version"
+    },
+    {
+      "id": "V21-identity-hash-bad",
+      "title": "Malformed identity_hash is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "identity_hash": "sha256:ABC"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "identity_hash"
+    },
+    {
+      "id": "V22-created-by-invalid",
+      "title": "created_by with whitespace is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "two words",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityValidationError",
+      "error_field": "created_by"
+    },
+    {
+      "id": "V23-root-not-object",
+      "title": "A non-object root is rejected",
+      "check": "validate_json",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "input": [],
+      "error_class": "IdentityValidationError",
+      "error_field": "root"
+    },
+    {
+      "id": "V24-oversize-file",
+      "title": "Identity file above 64 KiB is rejected before parsing",
+      "check": "file_size",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "file_json": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "trailing_whitespace_bytes": 66560,
+      "error_class": "IdentityFileTooLargeError"
+    },
+    {
+      "id": "V25-hash-mismatch",
+      "title": "Stored hash that does not match the content is rejected",
+      "check": "read_identity",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "file_json": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "identity_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "error_class": "IdentityCorruptedError"
+    },
+    {
+      "id": "V26-crlf-file",
+      "title": "CRLF line endings and indentation do not change the PIH",
+      "check": "read_identity",
+      "expect": "accept",
+      "applies_to": [
+        "canonical"
+      ],
+      "file_json": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0",
+        "identity_hash": "sha256:9f29c8fdbe0aadb4991ffcb9ed8864c5ae65adacf924441dd7e0ce3998c75210"
+      },
+      "file_text_style": "crlf",
+      "indent": 4,
+      "canonical_json": "{\"created_at\":\"2026-01-02T03:04:05+00:00\",\"created_by\":\"owner@example.com\",\"description\":\"\",\"ogx_version\":\"0.4.0\",\"project_id\":\"3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94\",\"project_name\":\"Guardian Sample\",\"schema_version\":\"1.0\"}",
+      "identity_hash": "sha256:9f29c8fdbe0aadb4991ffcb9ed8864c5ae65adacf924441dd7e0ce3998c75210",
+      "note": "Canonicalization hashes the parsed object, never the raw file bytes."
+    },
+    {
+      "id": "V27-missing-hash",
+      "title": "Identity without a stored hash is rejected on read",
+      "check": "read_identity",
+      "expect": "reject",
+      "applies_to": [
+        "canonical"
+      ],
+      "file_json": {
+        "schema_version": "1.0",
+        "project_id": "3f2a1c4e-9b7d-4a15-8c3e-2d6f5a1b0c94",
+        "project_name": "Guardian Sample",
+        "created_at": "2026-01-02T03:04:05+00:00",
+        "created_by": "owner@example.com",
+        "ogx_version": "0.4.0"
+      },
+      "error_class": "IdentityCorruptedError"
+    }
+  ]
+}
