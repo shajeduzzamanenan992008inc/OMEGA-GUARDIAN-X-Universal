@@ -119,15 +119,10 @@ def _safe_relative(root: Path, value: str) -> Path:
     if not parts or any(part == ".." for part in parts):
         raise PatchRefused(f"Change path traversal is not accepted: {raw!r}", code="path_traversal")
     candidate = root.joinpath(*parts)
-    try:
-        resolved = candidate.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise PatchRefused(f"Change target does not exist: {raw!r}", code="missing_file") from exc
-    if not resolved.is_relative_to(root):
-        raise PatchRefused(f"Change target escapes the project root: {raw!r}", code="path_escape")
-    # Refuse a symlinked file or any symlinked parent between root and file.
+    # Check the *unresolved* path first: resolving a symlink would erase the
+    # symlink component and make the escape invisible (found by Linux CI).
     current = root
-    for part in resolved.relative_to(root).parts:
+    for part in parts:
         current = current / part
         try:
             if current.is_symlink():
@@ -136,6 +131,12 @@ def _safe_relative(root: Path, value: str) -> Path:
                 )
         except OSError as exc:  # pragma: no cover - platform dependent
             raise PatchRefused(f"Cannot inspect change target: {raw!r}", code="path_rejected") from exc
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise PatchRefused(f"Change target does not exist: {raw!r}", code="missing_file") from exc
+    if not resolved.is_relative_to(root):
+        raise PatchRefused(f"Change target escapes the project root: {raw!r}", code="path_escape")
     if not resolved.is_file():
         raise PatchRefused(f"Change target is not a regular file: {raw!r}", code="not_a_file")
     return resolved

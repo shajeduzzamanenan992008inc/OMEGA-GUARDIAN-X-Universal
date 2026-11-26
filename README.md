@@ -109,7 +109,7 @@ Read-only audits do not require email approval. Never enable `OGX_ALLOW_UNAPPROV
 
 Locally executed for this working tree (Windows, CPython 3.15.2):
 
-- Canonical source: `python -m pytest -q` — **626 passed, 18 skipped, 119 subtests passed** (executed 2026-11-27 on the implementation branch based on `71fcbbc`, Windows/CPython 3.15.2, 149.66 s, exit 0). Earlier totals (`340/11`, `465/15`, `578/17`) are kept as history only.
+- Canonical source: `python -m pytest -q` — **627 passed, 18 skipped, 119 subtests passed** (executed 2026-11-27 on the implementation branch based on `71fcbbc`, Windows/CPython 3.15.2, 140.40 s, exit 0). Earlier totals (`340/11`, `465/15`, `578/17`) are kept as history only.
 - Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **289 tests, OK (9 skipped)** (executed 2026-11-27, 73.86 s, exit 0).
 - Architecture and distribution checks (included in the suites) — 17 passed.
 - `python -m compileall -q src core tests _dev/tests` — passed.

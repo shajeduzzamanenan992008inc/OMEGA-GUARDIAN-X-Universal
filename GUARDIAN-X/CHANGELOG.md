@@ -25,9 +25,13 @@
   a timestamp in `current_stage` instead of the stage name. One cancel test was
   also corrected to accept intentionally skipped stages remaining `skipped`
   rather than requiring them to become `cancelled`.
+- Fixed a containment bug found by Linux CI: patch planning resolved a path
+  before checking its components for symlinks, which erased the symlink and let
+  a symlinked target through. Components are now checked unresolved, followed by
+  the resolved containment check, with a portable regression test.
 - Updated `tests/test_host_lifecycle.py`: GitHub is no longer the
   "unsupported host type" case; GitLab is.
-- Verification (2026-11-27, branch based on `71fcbbc`): canonical suite 626
+- Verification (2026-11-27, branch based on `71fcbbc`): canonical suite 627
   passed / 18 skipped / 119 subtests; drop-in 289 tests OK (9 skipped);
   compileall and source/drop-in consistency pass; wheel 140 entries with the
   new modules. Code scanning 0 open / 13 closed; Dependabot and secret scanning
