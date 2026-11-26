@@ -1,0 +1,241 @@
+# OMEGA GUARDIAN X UNIVERSAL PUBLIC ATTRIBUTION NON-COMMERCIAL LICENSE
+
+**Version:** 1.1  
+**License Identifier:** `LicenseRef-OMEGA-GUARDIAN-X-PANC-1.1`  
+**Licensor / Original Author:** Shajeduzzaman Enan  
+**Copyright:** Copyright (c) 2026 Shajeduzzaman Enan  
+**Project:** OMEGA GUARDIAN X — Universal Enterprise Guardian  
+**Official Repository:** https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal  
+**Status:** Final text; becomes effective upon first public publication as the root `LICENSE` on the default branch of the Official Repository.  
+**Effective Date:** The date of that first public publication.
+
+This is an attribution-required, non-commercial, source-available license. It is not an OSI-approved Open Source license. It grants only the permissions expressly stated below and only for material that the Licensor owns or is legally authorized to license.
+
+Before the Effective Date, this document is an adoption-ready license text and does not by itself grant public rights. The Effective Date is not backdated.
+
+## 1. Covered Project and Materials
+
+1.1 **Covered Project.** This License applies exclusively to the `OMEGA-GUARDIAN-X-Universal` repository identified above (the **Official Repository**).
+
+1.2 **Covered Materials.** “Covered Materials” means first-party materials contained in the Official Repository on the Effective Date and later first-party additions maintained in that same repository, to the extent the Licensor owns or is legally authorized to license them. This includes, without limitation:
+
+- the root `.github/` engineering kit, agent profiles, instructions, prompts, skills, workflow files, templates, runbooks, issue and pull-request templates, configuration, and repository automation;
+- the complete `GUARDIAN-X/` project, including its canonical `src/ogx/` package, hand-maintained `core/ogx/` drop-in distribution, `guard/`, `devkit/`, `link/`, scripts, schemas, examples, configuration, documentation, and tests;
+- the `init.py` entry point, command-line interfaces, scanner and audit logic, runtime request-guard components, host and provider abstractions, governance and approval features, report-generation code, packaging/build metadata, and release/distribution tooling;
+- first-party documentation, diagrams, text, original designs, and other original repository assets.
+
+1.3 **Repository boundary.** A component is not excluded merely because it is a reusable kit, agent instruction, workflow template, drop-in package, security tool, or separately installable component, if it is first-party material maintained inside this Official Repository and otherwise licensable by the Licensor. The `GUARDIAN-X/` subtree is expressly included. The duplicate distribution copies in `core/ogx/` are included on the same basis as the canonical source in `src/ogx/`.
+
+1.4 **Exclusions.** This License does not grant rights in:
+
+- any other repository, independent project, product, service, or application outside the Official Repository;
+- source code, files, reports, logs, datasets, configurations, or other content belonging to a repository or host that a user scans, audits, integrates with, or otherwise processes using OMEGA GUARDIAN X;
+- third-party libraries, frameworks, fonts, icons, images, datasets, trademarks, service components, or externally sourced materials;
+- user information, customer data, private repository contents, scan targets, generated findings derived from third-party inputs, or other data supplied by an operator or another person (**User Data**);
+- passwords, API tokens, private keys, signing materials, secrets, environment values, access credentials, approval codes, or other security-sensitive values (**Security Materials**);
+- independently owned contributions or materials for which the Licensor lacks authority to grant the permissions in this License.
+
+1.5 Repository presence alone does not establish ownership. Third-party and independently owned materials remain subject to their actual owners’ rights and terms. The wider OMEGA ecosystem is not licensed as a whole by this document.
+
+## 2. Definitions
+
+**Non-Commercial Purpose** means personal, educational, academic, research, charitable, or community activity that is not intended to generate revenue, commercial advantage, or business benefit for you or another party.
+
+**Commercial Use** means using, operating, offering, distributing, hosting, integrating, or exploiting Covered Materials for revenue, payment, monetization, commercial advantage, or the operation or promotion of a business or other commercial undertaking. It includes use by a company, agency, consultancy, contractor, or service provider for internal business operations or to provide a paid or commercially beneficial service to a client.
+
+**Modified Version** means a copy or derivative of Covered Materials that has been changed, adapted, translated, ported, refactored, patched, extended, or combined with other material, to the extent it contains or is derived from protectable elements of Covered Materials.
+
+**Contributor** means a person other than the Licensor who owns or is authorized to license an original contribution.
+
+**Written Permission** means prior, explicit, verifiable written authorization from the Licensor identifying the recipient, materials, and permitted activity.
+
+## 3. Ownership and Reservation of Rights
+
+3.1 The Licensor retains copyright and other intellectual-property rights the Licensor owns in Covered Materials. This License grants permissions; it does not transfer ownership.
+
+3.2 The Licensor does not claim ownership of third-party materials, User Data, independently authored Contributions, or rights belonging to another person or organization.
+
+3.3 No patent, trademark, service-mark, trade-secret, private-data, infrastructure, or external-service right is granted except for the limited copyright permissions expressly stated here.
+
+## 4. Public Non-Commercial Permissions
+
+Subject to every condition in this License, the Licensor grants you a worldwide, non-exclusive, royalty-free, non-transferable copyright permission to do the following for a Non-Commercial Purpose:
+
+- view, inspect, evaluate, study, and learn from Covered Materials;
+- clone, download, copy, reproduce, preserve, and back up Covered Materials;
+- install, configure, build, compile, test, execute, and run the software;
+- modify, edit, refactor, translate, port, patch, improve, and create Modified Versions;
+- create and maintain public or private forks;
+- integrate Covered Materials into personal, educational, research, or other non-commercial projects;
+- deploy, host, and self-host Covered Materials, including non-commercial production operation;
+- distribute and share original or modified source code and permitted builds for Non-Commercial Purposes.
+
+These permissions include use of the scanner, audit engine, runtime guard, governance features, and drop-in distribution on systems or repositories that you own or are authorized to assess, subject to Section 12. They do not authorize Commercial Use.
+
+## 5. Attribution, Branding, and Modification Notices
+
+5.1 Every copy, fork, substantial derivative, and redistribution must retain or reproduce:
+
+- the original copyright notice;
+- **Shajeduzzaman Enan** as the original author and Licensor, where applicable;
+- the project name **OMEGA GUARDIAN X** or **OMEGA-GUARDIAN-X-Universal**;
+- the Official Repository URL;
+- this complete License text and its identifier;
+- applicable third-party notices.
+
+5.2 A Modified Version must include a reasonably prominent notice that changes were made and identify the modifier where known. It must not imply that it is the official upstream version or is endorsed, certified, sponsored, or supported by the original author.
+
+5.3 You must not remove, falsify, conceal, or misrepresent copyright, attribution, license, or ownership notices, or claim that you created the original Covered Materials.
+
+5.4 A fork may use a distinct name or branding, but it must continue to identify OMEGA GUARDIAN X and Shajeduzzaman Enan as the original project and author in the required notices. Rebranding must not erase attribution or imply official status.
+
+## 6. Same-License Redistribution
+
+6.1 If you distribute Covered Materials or a Modified Version to another person for a Non-Commercial Purpose, you must provide the Covered Materials under this same Version 1.1 License, include its complete text, and preserve all notices required by Section 5.
+
+6.2 You must not impose additional restrictions that remove or contradict the non-commercial, attribution, AI/ML, or other conditions of this License.
+
+6.3 This Section does not relicense third-party materials or independently owned Contributions. Their separate terms continue to apply.
+
+## 7. Commercial Use Prohibited Without Separate Permission
+
+7.1 Commercial Use is prohibited unless the Licensor first grants separate Written Permission for the specific recipient, Covered Materials, and activity.
+
+7.2 Without Written Permission, you must not:
+
+- sell or resell Covered Materials or a Modified Version;
+- charge for access to, use of, scanning with, or operation of OMEGA GUARDIAN X;
+- offer paid SaaS, managed scanning, hosted security assessment, repository-audit, compliance, or runtime-guard services based on Covered Materials;
+- provide the software as part of paid consulting, agency, contractor, support, maintenance, implementation, customization, training, or integration services;
+- bundle Covered Materials into a paid product, service, SDK, toolkit, subscription, or commercial distribution;
+- monetize use through advertisements, affiliate links, sponsorships, paid access, or customer fees;
+- use Covered Materials for internal business operations or to obtain commercial advantage for a business or commercial undertaking;
+- commercially sublicense, redistribute, or otherwise make Covered Materials available as part of a paid offering.
+
+7.3 A genuinely free, non-monetized, non-commercial self-hosted use is permitted. Ordinary infrastructure expenses paid by an operator for its own non-commercial deployment do not alone make that deployment Commercial Use. Selling hosting, managed operation, assessment, access, or services to another party is Commercial Use.
+
+7.4 Donations, grants, sponsorships, cost recovery, and mixed-purpose activities must not be used to disguise Commercial Use. Where the character of an activity is reasonably ambiguous, obtain Written Permission before proceeding.
+
+## 8. Commercial Licensing
+
+8.1 Only Shajeduzzaman Enan, or a person expressly authorized by him in writing, may grant Commercial Use permission for rights he owns or controls.
+
+8.2 A commercial agreement should identify the legal recipient, covered version and materials, permitted use, number of users or deployments, territory, duration, distribution rights, fees, support obligations, and termination terms.
+
+8.3 Silence, public visibility, a repository star, fork, download, issue, pull request, informal conversation, or attribution is not Written Permission.
+
+8.4 A separate commercial agreement changes rights only for its named recipient and scope. It does not change this public License for other recipients.
+
+## 9. Contributions and Third-Party Authorship
+
+9.1 Contributors retain ownership of their original Contributions unless a separate written agreement states otherwise.
+
+9.2 A Contribution is covered by this License only where the Contributor owns it or has authority to license it and has expressly agreed in writing to the non-commercial public grant described here, for example through a Contributor License Agreement or an explicit contribution statement accepted by the project.
+
+9.3 Submission or acceptance of a pull request does not by itself transfer copyright or grant the Licensor commercial relicensing rights.
+
+9.4 The Licensor may commercially relicense a Contributor’s contribution only with that Contributor’s separate explicit prior written consent or a Contributor License Agreement that expressly grants that right.
+
+9.5 Do not submit third-party code, assets, private source, customer materials, or secrets without authorization and appropriate rights.
+
+## 10. Third-Party Materials, Dependencies, and External Services
+
+10.1 Third-party components remain under their own licenses, terms of service, and attribution requirements. This License does not replace, expand, or override those terms.
+
+10.2 Dependencies identified in `GUARDIAN-X/pyproject.toml`, development requirements, lock files, or other manifests are not relicensed by this document. Each dependency and asset must be assessed under its own actual license.
+
+10.3 External hosting providers, Git platforms, identity providers, email providers, cloud platforms, package registries, and other services remain subject to their own terms and policies.
+
+10.4 A repository file or dependency entry is not proof that the Licensor owns the referenced library, font, icon, image, certificate, dataset, or service material.
+
+## 11. AI and Machine-Learning Restrictions
+
+11.1 Without prior Written Permission, you must not use Covered Materials to train, fine-tune, distill, or otherwise develop or improve an AI or machine-learning model.
+
+11.2 Prohibited activities include creating source-code or instruction training datasets, synthetic training corpora, model-training benchmarks, embedding-model training corpora, bulk-scraped collections, or other datasets from Covered Materials for model development.
+
+11.3 This restriction applies whether the proposed model development is commercial or non-commercial, subject to any rights or exceptions that applicable law makes non-waivable.
+
+11.4 Ordinary AI-assisted coding, debugging, explanation, and documentation work is permitted for a Non-Commercial Purpose where the AI provider and selected settings do not use submitted Covered Materials for prohibited training, fine-tuning, distillation, or model improvement. Do not submit secrets, private source, personal information, or third-party materials without authorization.
+
+11.5 Ordinary inference-time use of an AI service, and a private local search or retrieval index for non-commercial development, are not automatically model training if they are not used to train or improve a model or create a training dataset.
+
+11.6 AI-generated output is not automatically a derivative work merely because AI was used. This License applies to output only to the extent it reproduces or adapts protectable expression in Covered Materials under applicable law.
+
+## 12. Authorized and Lawful Security Use
+
+12.1 OMEGA GUARDIAN X may be used only on repositories, files, applications, systems, networks, and infrastructure that you own or are authorized to assess, test, protect, or administer.
+
+12.2 This License does not grant permission to access, clone, scan, test, probe, enumerate, monitor, or modify another person’s private repository, network, host, application, account, or data without authorization.
+
+12.3 This License does not authorize unlawful access, credential theft, phishing, fraud, malware, privacy violations, unlawful interception, data exfiltration, destructive testing, or misuse of another person’s credentials or infrastructure.
+
+12.4 A non-commercial permission to run the software is not a security-testing authorization for a target. Obtain separate authorization from the relevant system owner before assessment or testing.
+
+12.5 The project documentation describes the scanner as heuristic and the runtime guard as defence in depth, not a managed WAF or a security certification. A clean scan does not prove that a system is safe, compliant, or free of vulnerabilities. You remain responsible for review, configuration, authorization, backups, monitoring, and operational decisions.
+
+## 13. User Data and Scan Results
+
+13.1 This License does not claim ownership of or grant rights to User Data, target repository contents, source code supplied for analysis, customer information, findings derived from third-party inputs, or other data processed by a deployment.
+
+13.2 You are responsible for having a lawful basis and necessary authorization to collect, process, retain, export, or disclose User Data and scan results.
+
+13.3 Never publish or redistribute private repository contents, secrets, personal information, or customer findings merely because they were processed by Covered Materials.
+
+## 14. Disclaimer of Warranty
+
+Covered Materials are provided **“AS IS”** and **“AS AVAILABLE”**, without warranties or conditions of any kind, express or implied, to the maximum extent permitted by applicable law. The Licensor does not warrant uninterrupted operation, fitness for a particular purpose, merchantability, non-infringement, security, accuracy, completeness, compatibility, support, or error-free operation. Nothing in this License excludes a warranty or right that applicable law does not permit to be excluded.
+
+## 15. Limitation of Liability
+
+To the maximum extent permitted by applicable law, the Licensor will not be liable for indirect, incidental, special, exemplary, punitive, or consequential loss, loss of profits, revenue, data, goodwill, business interruption, security incidents, or loss arising from assessment or operational decisions made using Covered Materials. To the maximum extent permitted by law, aggregate liability will not exceed the amount, if any, paid directly to the Licensor for a license to the relevant Covered Materials during the twelve months preceding the event. The fee for permissions under this public non-commercial License is zero. Liability that cannot lawfully be limited is not limited.
+
+## 16. Termination
+
+16.1 Permissions terminate automatically if you materially breach this License.
+
+16.2 Where a breach can be remedied, the Licensor may provide written notice and a reasonable opportunity to cure it. Reinstatement may occur upon cure or Written Permission.
+
+16.3 Upon termination, stop the activity causing the breach and stop exercising the terminated permissions. A breach by one recipient does not automatically terminate the rights of compliant downstream recipients.
+
+16.4 Termination does not erase accrued rights, obligations, or claims, subject to applicable law.
+
+## 17. Transition and License Copies
+
+17.1 No earlier complete public license file was present at the root of the Official Repository when this Version 1.1 draft was prepared. The nested `GUARDIAN-X/pyproject.toml` declared the identifier `LicenseRef-OMEGA-GUARDIAN-X-Proprietary-Alpha` and expected a `GUARDIAN-X/LICENSE` file, while the repository documentation stated that the license file was absent.
+
+17.2 Upon adoption, this License is intended to replace that package metadata identifier for licensable first-party materials in this repository. It does not retroactively authorize earlier conduct or waive accrued claims.
+
+17.3 The root `LICENSE` is the canonical license document for the Official Repository. An identical copy may be placed at `GUARDIAN-X/LICENSE` so that the Python package build can include the license in its wheel. The nested copy is a distribution copy, not a separate or broader grant. If the copies ever differ, the root `LICENSE` controls.
+
+17.4 This License does not change terms for other repositories, independent projects, third-party materials, User Data, Security Materials, or materials the Licensor is not authorized to license. Separate signed agreements, valid prior written permissions, third-party licenses, and Contributor agreements are not silently modified.
+
+## 18. General Terms
+
+18.1 **No endorsement.** No fork, derivative, integration, or third-party deployment is endorsed, certified, sponsored, or supported by the original author unless expressly stated in a separate writing.
+
+18.2 **Severability.** If a provision is unenforceable, it will be limited to the minimum extent necessary, and the remaining provisions will continue to apply to the extent permitted by law.
+
+18.3 **No waiver.** Failure or delay in enforcing a provision is not a waiver. A waiver must be in writing and applies only to its stated scope.
+
+18.4 **Entire public license.** This License states the public copyright permissions and conditions for Covered Materials, subject to third-party rights, separate agreements, and mandatory law.
+
+18.5 **No selected governing law.** This License does not select a governing-law jurisdiction, court, or dispute forum. Mandatory conflict-of-law rules and non-waivable rights continue to apply. Obtain qualified legal advice before adding a jurisdiction or dispute forum.
+
+18.6 **Language.** The English text controls unless applicable law requires otherwise.
+
+18.7 **Statutory rights.** Nothing in this License restricts rights or exceptions that applicable law makes non-waivable.
+
+## 19. License Identification
+
+**Name:** OMEGA GUARDIAN X Universal Public Attribution Non-Commercial License  
+**Version:** 1.1  
+**Identifier:** `LicenseRef-OMEGA-GUARDIAN-X-PANC-1.1`  
+**Licensor:** Shajeduzzaman Enan  
+**Project:** OMEGA GUARDIAN X — Universal Enterprise Guardian  
+**Official Repository:** https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal  
+**Effective Date:** Date of first public publication as the root `LICENSE` on the default branch.
+
+---
+
+**END OF OMEGA GUARDIAN X UNIVERSAL PUBLIC ATTRIBUTION NON-COMMERCIAL LICENSE v1.1**

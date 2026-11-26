@@ -1,5 +1,12 @@
 # Project Completion Tracker
 
+> **Historical status snapshot.** Every test count in this file (`465/15`,
+> `258` drop-in, and the `340/11`/`409/12` figures kept as history) was true at
+> the HEAD named in its row and is **not** the current result. Current verified
+> state: `578 passed, 17 skipped` canonical and `278 tests, OK (9 skipped)`
+> drop-in at HEAD `7135b6e` — see `MEGA_ULTRA_FINAL_COMPLETION_REPORT.md` §D and
+> `TEST_RESULTS.md`.
+
 Updated: 2026-11-24, completion commit `8647892dd9d16f648303533596df6df74dac9dad`.
 Phase 0 baseline re-verified: 2026-11-26 at HEAD `36e56c0c6de4f246626cd8f57f56e3fc5bbaa40f`
 (see `../../docs/MASTER_BASELINE_AUDIT.md`).
