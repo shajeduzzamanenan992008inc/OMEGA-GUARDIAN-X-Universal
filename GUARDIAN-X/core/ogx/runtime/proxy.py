@@ -61,7 +61,8 @@ def _validated_origin_target(target: str) -> str:
         if next_path == decoded_path:
             break
         decoded_path = next_path
-    if decoded_path.startswith("//") or "\\" in decoded_path:
+    if (decoded_path.startswith("//") or "\\" in decoded_path
+            or any(ord(char) <= 0x20 or ord(char) == 0x7f for char in decoded_path)):
         raise ValueError("ambiguous request path")
     if any(segment == ".." for segment in decoded_path.split("/")):
         raise ValueError("path traversal is not allowed")
