@@ -32,7 +32,7 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **626 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 149.66 s) |
+| Canonical suite `python -m pytest -q` | **627 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 140.40 s) |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (73.86 s) |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.` |
@@ -72,7 +72,7 @@ installation, release signing, performance measurement.
 | SEC-05 | Endpoint validation, DNS pinning, redirect refusal | `platform/security.py`, `platform/transport.py` | `tests/test_network_policy.py`, `test_transport_bounds.py` | TESTED |
 | SEC-06 | Bounded request/response handling | transport byte caps, retries, timeouts | `test_transport_bounds.py` | TESTED |
 | SEC-07 | Secret redaction in reports/logs/errors | `platform.security.redact*`, audit redaction | suite + `test_patching.py` audit assertion | TESTED |
-| SEC-08 | Controlled patch writes cannot escape the project | `src/ogx/patching.py` containment, symlink refusal, hash preconditions | `tests/test_patching.py` (11 passed, 1 skipped) | TESTED |
+| SEC-08 | Controlled patch writes cannot escape the project | `src/ogx/patching.py` containment, symlink refusal, hash preconditions | `tests/test_patching.py` (12 passed, 1 skipped); Linux CI caught and verified the symlink-order fix | TESTED |
 | SEC-09 | Approval-gated remote writes | `platform/operations.py`; GitHub host `create_pull_request(approved=...)` | `tests/test_host_github_runtime.py` | TESTED |
 | SEC-10 | Differential secret scanning | GitHub secret scanning | UI 0 open / 0 closed | VERIFIED |
 | SEC-11 | Dependency vulnerability/malware scanning | GitHub Dependabot | UI 0 open / 0 closed each | VERIFIED |
@@ -210,7 +210,7 @@ installation, release signing, performance measurement.
 
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| TST-01 | Canonical unit/integration suite | 42 test files | 626 passed, 18 skipped | VERIFIED |
+| TST-01 | Canonical unit/integration suite | 42 test files | 627 passed, 18 skipped; Linux CI runs the symlink tests as well | VERIFIED |
 | TST-02 | Drop-in suite | 23 test files | 289 tests, OK (9 skipped) | VERIFIED |
 | TST-03 | Python 3.11/3.12/3.13 | CI matrix | hosted CI at `71fcbbc` succeeded; new branch not yet run | TESTED |
 | TST-04 | Linux | `ubuntu-latest` CI | hosted CI at `71fcbbc` succeeded | TESTED |

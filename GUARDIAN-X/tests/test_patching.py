@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -114,6 +115,20 @@ def test_symlinked_target_is_refused(project):
     (project / "link.txt").symlink_to(project / "notes.txt")
     with pytest.raises(PatchRefused) as error:
         plan_patch(project, [{"path": "link.txt", "old": "hello", "new": "bye"}])
+    assert error.value.code == "symlink_rejected"
+
+
+def test_symlink_check_runs_before_resolution(project, monkeypatch):
+    """Regression: resolving first erased the symlink component (Linux CI)."""
+    target = project / "app.py"
+    real = Path.is_symlink
+
+    def fake_is_symlink(self):
+        return self == target or real(self)
+
+    monkeypatch.setattr(Path, "is_symlink", fake_is_symlink)
+    with pytest.raises(PatchRefused) as error:
+        plan_patch(project, [{"path": "app.py", "old": "VALUE = 1", "new": "VALUE = 2"}])
     assert error.value.code == "symlink_rejected"
 
 

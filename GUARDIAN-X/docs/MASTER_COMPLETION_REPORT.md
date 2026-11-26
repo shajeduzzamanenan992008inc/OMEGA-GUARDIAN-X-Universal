@@ -83,22 +83,24 @@ the required inventory and documentation.
 
 | File | Result |
 | --- | --- |
-| `tests/test_patching.py` | 11 passed, 1 skipped (Windows symlink privilege) |
+| `tests/test_patching.py` | 12 passed, 1 skipped (Windows symlink privilege; the symlink case runs on Linux CI) |
 | `tests/test_orchestrator.py` | 11 passed |
 | `tests/test_host_github_runtime.py` | 10 passed (mocked transport) |
 | `tests/test_cli_patch_workflow.py` | 3 passed |
 | `tests/test_host_lifecycle.py` | updated one test that assumed GitHub had no adapter; GitLab is now the unsupported case |
 
-Two defects were found by the new tests and fixed before completion: a swapped
-`current_stage`/`updated_at` binding at the approval gate, and a cancel
-assertion that incorrectly required intentionally skipped stages to become
-cancelled.
+Defects found and fixed: a swapped `current_stage`/`updated_at` binding at the
+orchestrator approval gate; a cancel assertion that incorrectly required
+intentionally skipped stages to become cancelled; and a patch containment bug
+found by Linux CI where the path was resolved before its components were
+checked for symlinks, erasing the symlink and allowing it through. Linux CI is
+the authority for the symlink path, which is skipped on unprivileged Windows.
 
 ## 3. Verification executed
 
 | Check | Result |
 | --- | --- |
-| `python -m pytest -q` | **626 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 149.66 s, exit 0) |
+| `python -m pytest -q` | **627 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 140.40 s, exit 0) |
 | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (73.86 s) |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | OK: versions, packages, layout and packaging declarations agree |
@@ -109,8 +111,8 @@ cancelled.
 | Dependency Review | run #17 success (PR #19) |
 | Live GitHub probe without a token | failed closed with `credential_required` as designed; no authenticated live call was possible |
 
-The canonical suite grew from 578 passed / 17 skipped to 626 passed / 18
-skipped. This branch adds 35 tests across four new files (one Windows symlink
+The canonical suite grew from 578 passed / 17 skipped to 627 passed / 18
+skipped. This branch adds 36 tests across four new files (one Windows symlink
 skip); the remaining growth came from commits merged after the 578 measurement.
 The drop-in suite grew from 278 to 289 tests.
 
