@@ -1,6 +1,5 @@
 
 
-```python
 import asyncio
 import http.client
 import io
@@ -766,5 +765,4 @@ class ProxyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-```
 
