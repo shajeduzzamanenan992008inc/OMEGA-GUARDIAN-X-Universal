@@ -237,7 +237,7 @@ def _is_safe_origin_target(target: str) -> bool:
     return True
 
 
-_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _ABSOLUTE_URI_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9.+-]*://")
 _BACKSLASH_RE = re.compile(r"\\")
 
