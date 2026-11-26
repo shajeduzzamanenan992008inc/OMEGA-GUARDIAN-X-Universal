@@ -42,6 +42,9 @@ def _validated_origin_target(target: str) -> str:
     """Return a strict HTTP origin-form target or reject ambiguous URL forms."""
     if not isinstance(target, str) or not target:
         raise ValueError("request target must be a non-empty string")
+    # Check the raw prefix before urlsplit: it can collapse triple-leading slashes.
+    if target.startswith("//"):
+        raise ValueError("network-path request target is not allowed")
     # Reject characters that urlsplit may strip or HTTP parsers may interpret
     # differently, plus fragments and backslashes that can confuse intermediaries.
     if any(ord(char) <= 0x20 or ord(char) == 0x7f for char in target) or "\\" in target or "#" in target:
@@ -53,8 +56,8 @@ def _validated_origin_target(target: str) -> str:
     if parsed.scheme or parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
         raise ValueError("origin-form request target required")
 
-    # Check repeatedly decoded path semantics so encoded dot-segments, slashes,
-    # and backslashes cannot bypass the origin-form/path checks downstream.
+    # Check repeatedly decoded path semantics so encoded authority prefixes,
+    # backslashes, and control characters cannot bypass the origin-form checks.
     decoded_path = parsed.path
     for _ in range(4):
         next_path = unquote(decoded_path)
@@ -64,9 +67,6 @@ def _validated_origin_target(target: str) -> str:
     if (decoded_path.startswith("//") or "\\" in decoded_path
             or any(ord(char) <= 0x20 or ord(char) == 0x7f for char in decoded_path)):
         raise ValueError("ambiguous request path")
-    if any(segment == ".." for segment in decoded_path.split("/")):
-        raise ValueError("path traversal is not allowed")
-
     return parsed.path + (("?" + parsed.query) if "?" in target else "")
 
 
