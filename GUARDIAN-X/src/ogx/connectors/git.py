@@ -33,18 +33,26 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT_SEC
 
 def detect_provider(remote: str) -> str:
     value = remote.lower().strip()
-    if "github.com" in value:
+    ssh_match = re.match(r"^[^/@:]+@([^/:]+):.+$", value)
+    if ssh_match:
+        host = ssh_match.group(1)
+        has_authority = True
+    else:
+        parsed = urlparse(value if "://" in value else "https://" + value)
+        host = parsed.hostname or ""
+        has_authority = bool(parsed.netloc)
+
+    host = host.rstrip(".")
+    labels = host.split(".")
+    if host == "github.com":
         return "github"
-    if "gitlab.com" in value or "gitlab." in value:
+    if host == "gitlab.com" or "gitlab" in labels:
         return "gitlab"
-    if "bitbucket.org" in value:
+    if host == "bitbucket.org":
         return "bitbucket"
-    if "gitea" in value or "forgejo" in value:
+    if "gitea" in labels or "forgejo" in labels:
         return "gitea-or-forgejo"
-    if re.match(r"^[^/@:]+@[^/:]+:.+$", value):
-        return "generic-git"
-    parsed = urlparse(value if "://" in value else "https://" + value)
-    return "generic-git" if parsed.netloc else "unknown"
+    return "generic-git" if has_authority else "unknown"
 
 
 def remote_summary(remote: str) -> dict[str, str]:
