@@ -10,6 +10,8 @@ import base64
 import json
 import uuid
 
+from urllib.parse import urlparse
+
 import pytest
 
 from ogx import registry as registry_module
@@ -416,7 +418,7 @@ def test_gitea_and_forgejo_identity_and_auth_header():
 
     forgejo = ForgejoAdapter(environ={}, credential="t")
     assert forgejo.provider_id == "forgejo"
-    assert "codeberg.org" in forgejo.api_base
+    assert urlparse(forgejo.api_base).hostname == "codeberg.org"
 
 
 def test_self_hosted_gitea_base_is_configurable():
