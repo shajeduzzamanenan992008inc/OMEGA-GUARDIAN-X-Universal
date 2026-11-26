@@ -170,7 +170,7 @@ Key code paths:
                                     ▼
         ┌────────────────────────────────────────────────────────┐
         │  <LOCALAPPDATA>/omega-shield/                          │
-        │    <slug>-sha256(casefold(HOST_ROOT))[:12]/            │
+        │    <casefold-slug>-sha256(casefold(HOST_ROOT))[:12]/   │
         │      projects.json         name -> absolute path       │
         │      projects/<name>-<pathhash>/reports/               │
         │                                                        │
@@ -183,6 +183,11 @@ Derivation details (verified):
 - `HOST_ROOT = Path(os.environ.get("OMEGA_HOST_ROOT") or SHIELD_DIR.parent).resolve()`.
 - `state_home()` returns `OGX_HOME` when set; otherwise Windows `%LOCALAPPDATA%\omega-shield\<slug>-<digest>` and POSIX `$XDG_STATE_HOME/omega-shield/<slug>-<digest>`.
 - `digest = sha256(str(HOST_ROOT).casefold())[:12]` — 48 bits.
+- `slug = casefold(HOST_ROOT.name)` with unsafe characters replaced by `-` (empty ⇒ `project`).
+  Folding the slug, not only the digest, is required: on a case-sensitive
+  filesystem an unfolded slug produced `project-<d>` and `PROJECT-<d>` as two
+  siblings for the same digest. The canonical tree applies the identical rule
+  in `src/ogx/config.py::state_key_slug` with a 16-hex digest.
 - `_prepare_env()` refuses a state root inside `HOST_ROOT` and creates the state directory.
 - `init.py status` calls `_prepare_env(force=True)`, so even a read-only status call can create the external state directory. It does not write inside the host project.
 

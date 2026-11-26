@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+#: Single documented state-key slug rule shared by every call site.
+STATE_KEY_SLUG_FALLBACK = "project"
+_UNSAFE_SLUG_CHARS = re.compile(r"[^a-z0-9._-]+")
 
 DEFAULT_EXCLUDES = [
     ".git", ".hg", ".svn", ".venv", "venv", "env", "node_modules", "vendor",
@@ -17,6 +22,31 @@ class ScanConfig:
     excludes: list[str] = field(default_factory=lambda: DEFAULT_EXCLUDES.copy())
     max_files: int = 12000
     max_file_bytes: int = 2_000_000
+
+
+def state_key_slug(name: str) -> str:
+    """Return the deterministic, case-folded directory slug for a project name.
+
+    The state key for a project is ``<slug>-<digest>`` where the digest is
+    ``sha256(str(path.resolve()).casefold())[:16]``. The digest was always
+    case-folded, but the slug kept the original letter case, so two paths that
+    differ only by case (``alpha/project`` and ``alpha/PROJECT``) hashed to the
+    same digest while producing two sibling directories on case-sensitive
+    filesystems (Linux CI) and one directory on case-insensitive ones (Windows,
+    macOS). Folding the slug removes that platform divergence.
+
+    ``str.casefold()`` is used deliberately rather than ``str.lower()``: it is
+    the same Unicode rule the digest input uses, so ``straße`` and ``STRASSE``
+    fold together, and the slug can never disagree with the digest about
+    whether two names are the same project.
+
+    The slug is cosmetic - the digest is the identity. Non-ASCII and unsafe
+    characters are replaced with ``-`` so the directory name stays portable,
+    and the result can never contain a path separator, contain ``..`` or be
+    empty.
+    """
+    folded = _UNSAFE_SLUG_CHARS.sub("-", str(name).casefold())
+    return folded.strip(".-") or STATE_KEY_SLUG_FALLBACK
 
 
 def state_dir() -> Path:
