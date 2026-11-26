@@ -5,12 +5,11 @@ import argparse
 import hashlib
 import json
 import os
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ogx.governance.approvals import ApprovalManager
-from ogx.kernel.config import state_dir
+from ogx.kernel.config import state_dir, state_key_slug
 
 
 BANNER = "OMEGA GUARDIAN X — Universal Repository Intelligence"
@@ -66,7 +65,7 @@ def _resolve_project(args: argparse.Namespace) -> Path:
 def _external_report_dir(root: Path) -> Path:
     canonical = str(root.resolve()).casefold()
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-    safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "-", root.name).strip(".-") or "project"
+    safe_name = state_key_slug(root.name)
     return state_dir() / "projects" / f"{safe_name}-{digest}" / "reports"
 
 

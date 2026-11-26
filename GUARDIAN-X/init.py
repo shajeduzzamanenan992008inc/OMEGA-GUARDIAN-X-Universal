@@ -76,7 +76,11 @@ def state_home() -> Path:
     else:
         base = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
     digest = hashlib.sha256(str(HOST_ROOT).casefold().encode("utf-8")).hexdigest()[:12]
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", HOST_ROOT.name).strip(".-") or "host"
+    # Case-fold the slug exactly like the digest input, and fold it *before*
+    # sanitising: otherwise `alpha/project` and `alpha/PROJECT` hash to one
+    # digest but create two sibling folders on case-sensitive filesystems.
+    # Same documented rule as src/ogx/config.py::state_key_slug.
+    slug = re.sub(r"[^a-z0-9._-]+", "-", HOST_ROOT.name.casefold()).strip(".-") or "project"
     return base / "omega-shield" / f"{slug}-{digest}"
 
 
