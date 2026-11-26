@@ -14,6 +14,8 @@
 | Current `origin/main` at report time | `8645385` (merge of PR #19, owner-initiated deletion of a nested release-notes file) |
 | Branch base | `71fcbbc` |
 | Branch name | `feat/universal-lifecycle-orchestration` |
+| Branch head at report time | `b13a53e` (2 commits) |
+| Pull request | #20 opened, **not merged**; 16/16 checks passed at `b13a53e` |
 | Direct edits to `main` | none |
 | Merge performed by this agent | none |
 | Force-push / tag deletion | none |
@@ -108,6 +110,7 @@ the authority for the symlink path, which is skipped on unprivileged Windows.
 | `ogx patch --help` / `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
 | Hosted CI at `71fcbbc` | OGX CI #84 success, OGX Code Security #83 success, Configuration Validation #13 success |
+| Hosted CI at `b13a53e` (PR #20) | **16/16 checks passed**: OGX CI #91 (Python 3.11/3.12/3.13, drop-in, wheel, profile checks), CodeQL Python analysis (push and PR), Dependency Review, code scanning results |
 | Dependency Review | run #17 success (PR #19) |
 | Live GitHub probe without a token | failed closed with `credential_required` as designed; no authenticated live call was possible |
 
@@ -120,7 +123,7 @@ The drop-in suite grew from 278 to 289 tests.
 
 | Surface | State |
 | --- | --- |
-| Code scanning | **0 open / 13 closed** on `main`; page states "All alerts are resolved." |
+| Code scanning | **0 open / 13 closed** after branch head `b13a53e`; page states "All alerts are resolved." |
 | Alerts #8, #9, #10, #13 | closed with recorded justification; #8/#9 test fixtures are outside the analysed scope; #10 is SHA-256 over 256-bit CSPRNG tokens with constant-time comparison; #13 is a reverse proxy whose target comes from `_validated_origin_target` |
 | Dependabot vulnerabilities | 0 open / 0 closed |
 | Dependabot malware | 0 open / 0 closed |

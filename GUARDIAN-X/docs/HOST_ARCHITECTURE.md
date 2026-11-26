@@ -114,7 +114,7 @@ Operational local hosts:
   `local_filesystem` and `local_git`.
 
 Test evidence: lifecycle 13, filesystem 16 (3 skipped), Git 21, GitHub host 10 (mocked transport), CLI 6 — all pass.
-Canonical suite 625 passed / 18 skipped; drop-in 289 tests, OK (9 skipped), executed 2026-11-27 on the implementation branch (base `71fcbbc`).
+Canonical suite 627 passed / 18 skipped; drop-in 289 tests, OK (9 skipped), executed 2026-11-27 on the implementation branch (base `71fcbbc`).
 
 Truths that hold despite the `OPERATIONAL` labels:
 

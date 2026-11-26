@@ -39,11 +39,12 @@ limited (for example mocked transport or one OS).
 | Wheel build `python -m pip wheel . --no-deps` | exit 0; 140 entries; new modules present; no `tests/` or `_dev/` entries |
 | `ogx patch --help`, `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
-| Code scanning (GitHub UI) | **0 Open / 13 Closed** on `main`, "All alerts are resolved." |
+| Code scanning (GitHub UI) | **0 Open / 13 Closed** after branch head `b13a53e`, "All alerts are resolved." |
 | Dependabot vulnerabilities (GitHub UI) | **0 Open / 0 Closed** |
 | Dependabot malware (GitHub UI) | **0 Open / 0 Closed** |
 | Secret scanning (GitHub UI) | **0 Open / 0 Closed**, "No secrets found." |
 | Hosted CI at `71fcbbc` (merge of PR #18) | OGX CI #84 success (31 s), OGX Code Security #83 success (1 m 6 s), GitHub Configuration Validation #13 success (10 s) |
+| Hosted CI at `b13a53e` (PR #20) | 16/16 checks passed: OGX CI #91 (3.11/3.12/3.13, drop-in, wheel, profile), CodeQL Python analysis (push + PR), Dependency Review, code scanning results |
 
 Not executed in this pass: Python 3.11–3.13 locally (hosted CI runs them on
 `ubuntu-latest`), macOS, a second drive/removable volume, Docker sandbox
@@ -212,8 +213,8 @@ installation, release signing, performance measurement.
 | --- | --- | --- | --- | --- |
 | TST-01 | Canonical unit/integration suite | 42 test files | 627 passed, 18 skipped; Linux CI runs the symlink tests as well | VERIFIED |
 | TST-02 | Drop-in suite | 23 test files | 289 tests, OK (9 skipped) | VERIFIED |
-| TST-03 | Python 3.11/3.12/3.13 | CI matrix | hosted CI at `71fcbbc` succeeded; new branch not yet run | TESTED |
-| TST-04 | Linux | `ubuntu-latest` CI | hosted CI at `71fcbbc` succeeded | TESTED |
+| TST-03 | Python 3.11/3.12/3.13 | CI matrix | all three matrix jobs green at `b13a53e` (OGX CI #91) | VERIFIED |
+| TST-04 | Linux | `ubuntu-latest` CI | green at `b13a53e`; Linux also executed the symlink tests skipped on Windows | VERIFIED |
 | TST-05 | Windows | local execution | this pass | VERIFIED |
 | TST-06 | macOS | not configured in CI | — | UNSUPPORTED |
 | TST-07 | Live provider integration tests | no credentials | — | BLOCKED |
