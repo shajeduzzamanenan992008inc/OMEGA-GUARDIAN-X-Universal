@@ -14,7 +14,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from ogx.runtime.access import ip_in
 from ogx.runtime.engine import Shield
@@ -36,6 +36,38 @@ class Upstream:
     def netloc(self) -> str:
         default = 443 if self.scheme == "https" else 80
         return self.host if self.port == default else f"{self.host}:{self.port}"
+
+
+def _validated_origin_target(target: str) -> str:
+    """Return a strict HTTP origin-form target or reject ambiguous URL forms."""
+    if not isinstance(target, str) or not target:
+        raise ValueError("request target must be a non-empty string")
+    # Check the raw prefix before urlsplit: it can collapse triple-leading slashes.
+    if target.startswith("//"):
+        raise ValueError("network-path request target is not allowed")
+    # Reject characters that urlsplit may strip or HTTP parsers may interpret
+    # differently, plus fragments and backslashes that can confuse intermediaries.
+    if any(ord(char) <= 0x20 or ord(char) == 0x7f for char in target) or "\\" in target or "#" in target:
+        raise ValueError("request target contains forbidden characters")
+    try:
+        parsed = urlsplit(target)
+    except ValueError as exc:
+        raise ValueError("invalid request target") from exc
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
+        raise ValueError("origin-form request target required")
+
+    # Check repeatedly decoded path semantics so encoded authority prefixes,
+    # backslashes, and control characters cannot bypass the origin-form checks.
+    decoded_path = parsed.path
+    for _ in range(4):
+        next_path = unquote(decoded_path)
+        if next_path == decoded_path:
+            break
+        decoded_path = next_path
+    if (decoded_path.startswith("//") or "\\" in decoded_path
+            or any(ord(char) <= 0x20 or ord(char) == 0x7f for char in decoded_path)):
+        raise ValueError("ambiguous request path")
+    return parsed.path + (("?" + parsed.query) if "?" in target else "")
 
 
 def parse_upstream(value: str) -> Upstream:
@@ -108,9 +140,10 @@ def make_handler(shield: Shield, upstream: Upstream, *, timeout: float = 30.0, p
                 self.server.slots.release()
 
         def _process(self) -> None:
-            target = self.path
-            if not target.startswith("/") or target.startswith("//"):
-                return self._simple(400, "origin-form request target required")
+            try:
+                target = _validated_origin_target(self.path)
+            except ValueError:
+                return self._simple(400, "invalid request target")
             if self.headers.get("Transfer-Encoding"):
                 return self._simple(501, "chunked request bodies are not supported")
             path, _, query = target.partition("?")
@@ -160,6 +193,8 @@ def make_handler(shield: Shield, upstream: Upstream, *, timeout: float = 30.0, p
             else:
                 conn = http.client.HTTPConnection(upstream.host, upstream.port, timeout=timeout)
             try:
+                # Target was checked by _validated_origin_target before reaching this forwarding sink.
+                # codeql[py/partial-ssrf]
                 conn.putrequest(method, target, skip_host=True, skip_accept_encoding=True)
                 for key, value in out:           # putheader keeps duplicate headers (e.g. several Cookie lines)
                     conn.putheader(key, value)
