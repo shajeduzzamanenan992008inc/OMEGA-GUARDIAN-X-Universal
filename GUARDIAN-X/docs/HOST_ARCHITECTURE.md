@@ -14,9 +14,10 @@ not a roadmap claim.
 | --- | --- | --- |
 | Local filesystem | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/exec/branch ops unsupported |
 | Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
-| GitHub | git host | UNVERIFIED shim over the canonical provider engine |
+| GitHub | git host | READ SURFACE OPERATIONAL (mocked) — lifecycle adapter over the canonical provider engine; metadata/file/tree/branch/commit/PR reads and one approval-gated draft-PR write. Branch/file/push/merge writes unsupported; **no live credential verified** |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract |
 | GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |
+| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit host sessions | git host | UNSUPPORTED — provider adapters exist, but no lifecycle host adapter is registered, so `host connect` fails closed |
 | SourceHut | git host | DESCRIPTOR_ONLY |
 
 `ogx host list` prints `No hosts registered.` on a fresh state directory.
@@ -112,13 +113,15 @@ Operational local hosts:
 - `src/ogx/hosts/adapters/runtime_factory.py` — adapter factory for
   `local_filesystem` and `local_git`.
 
-Test evidence: lifecycle 13, filesystem 16 (3 skipped), Git 21, CLI 6 — all pass.
-Canonical suite 465 passed; drop-in suite 258 passed (re-verified 2026-11-26 at HEAD `36e56c0`).
+Test evidence: lifecycle 13, filesystem 16 (3 skipped), Git 21, GitHub host 10 (mocked transport), CLI 6 — all pass.
+Canonical suite 625 passed / 18 skipped; drop-in 289 tests, OK (9 skipped), executed 2026-11-27 on the implementation branch (base `71fcbbc`).
 
 Truths that hold despite the `OPERATIONAL` labels:
 
-- These local hosts are **read-only**. No host adapter here supports writes,
-  execution, push/branch operations, or remote/network operations.
+- The local hosts are **read-only**. No local host adapter here supports writes,
+  execution, push/branch operations, or remote/network operations. The GitHub
+  host adapter performs network reads and one approval-gated draft-PR write;
+  it does not implement branch creation, file updates, push or merge.
 - `effective_capabilities()` returns the adapter's reported values only while
   connected/degraded; otherwise every declared capability is `unavailable`.
 - Registration does **not** mark a host `active`; new registrations start at
