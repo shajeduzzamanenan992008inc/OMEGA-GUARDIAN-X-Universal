@@ -18,6 +18,7 @@ import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, unquote, urlsplit
+import re
 
 from ogx.runtime.access import ip_in
 from ogx.runtime.engine import Shield
@@ -59,6 +60,37 @@ class Upstream:
 
 def _has_forbidden_chars(value: str) -> bool:
     return any(ord(ch) <= 0x20 or ord(ch) == 0x7F for ch in value)
+
+
+_VALID_PERCENT_RE = re.compile(r'%[0-9A-Fa-f]{2}')
+
+
+def _preserve_valid_percent(value: str) -> str:
+    """Validate and encode a query string while preserving valid %xx sequences.
+
+    Invalid percent sequences (truncated % or % followed by non-hex) are
+    rejected so they cannot be used for obfuscation. Valid percent-encoded
+    byte sequences are preserved as-is; only genuinely unsafe characters are
+    percent-encoded.
+    """
+    if '%' in value:
+        out: list[str] = []
+        pos = 0
+        while pos < len(value):
+            if value[pos] == '%':
+                if pos + 2 >= len(value) or not all(c in '0123456789ABCDEFabcdef' for c in value[pos+1:pos+3]):
+                    raise ValueError("malformed percent encoding in request target")
+                out.append(value[pos:pos+3])
+                pos += 3
+            else:
+                ch = value[pos]
+                if ord(ch) <= 0x20 or ord(ch) == 0x7F or ch in ' \t#\\':
+                    out.append('%%%02X' % ord(ch))
+                else:
+                    out.append(ch)
+                pos += 1
+        return ''.join(out)
+    return value
 
 
 def _validated_origin_target(target: str) -> str:
@@ -110,7 +142,7 @@ def _validated_origin_target(target: str) -> str:
         raise ValueError("ambiguous reconstructed request path")
 
     if "?" in target:
-        safe_query = quote(parsed.query, safe="-._~!$&'()*+,;=:@/?")
+        safe_query = _preserve_valid_percent(parsed.query)
         return f"{safe_path}?{safe_query}"
 
     return safe_path
@@ -219,6 +251,14 @@ def make_handler(
                 self.server.slots.release()
 
         def _process(self) -> None:
+            # Reject network-path references in the raw request line before Python normalizes them.
+            if self.raw_requestline and self.raw_requestline.split():
+                raw_uri = self.raw_requestline.split()[1]
+                if isinstance(raw_uri, bytes):
+                    raw_uri = raw_uri.decode("ascii", errors="ignore")
+                if raw_uri.startswith("//"):
+                    return self._simple(400, "network-path request target is not allowed")
+
             try:
                 target = _validated_origin_target(self.path)
             except ValueError:
@@ -266,6 +306,10 @@ def make_handler(
             self._forward(method, target, headers, body, decision, request)
 
         def _forward(self, method, target, headers, body, decision, request) -> None:
+            # Reject absolute URLs, network-path references, and encoded authority prefixes.
+            if "://" in target.partition("?")[0]:
+                return self._simple(400, "absolute request target is not allowed")
+
             try:
                 safe_target = _validated_origin_target(target)
             except ValueError:
