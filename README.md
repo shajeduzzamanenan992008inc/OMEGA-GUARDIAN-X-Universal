@@ -109,8 +109,8 @@ Read-only audits do not require email approval. Never enable `OGX_ALLOW_UNAPPROV
 
 Locally executed for this working tree (Windows, CPython 3.15.2):
 
-- Canonical source: `python -m pytest -q` — **627 passed, 18 skipped, 119 subtests passed** (executed 2026-11-27 on the implementation branch based on `71fcbbc`, Windows/CPython 3.15.2, 140.40 s, exit 0). Earlier totals (`340/11`, `465/15`, `578/17`) are kept as history only.
-- Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **289 tests, OK (9 skipped)** (executed 2026-11-27, 73.86 s, exit 0).
+- Canonical source: `python -m pytest -q` — **631 passed, 18 skipped, 119 subtests passed** (executed 2026-11-27 on the implementation branch based on `71fcbbc`, Windows/CPython 3.15.2, 151.71 s, exit 0). Earlier totals (`340/11`, `465/15`, `578/17`) are kept as history only.
+- Drop-in distribution: `PYTHONPATH=core python -m unittest discover -s _dev/tests` — **289 tests, OK (9 skipped)** (executed 2026-11-27, 92.36 s, exit 0).
 - Architecture and distribution checks (included in the suites) — 17 passed.
 - `python -m compileall -q src core tests _dev/tests` — passed.
 - Wheel `omega_guardian_x-0.8.0a1-py3-none-any.whl` — rebuilt 2026-11-27 from this branch (SHA-256 `9710fbd6…`), 140 files, 422,662 bytes, no test/CI/source-tree leakage; the new patch, orchestrator and GitHub-host modules are inside the wheel. Clean-venv installation was last verified on the earlier `36e56c0` wheel and was **not** repeated in this pass; `ogx --version`, `--help`, `providers list`, `platform status` and `host list` passed. The build warns that the declared `LICENSE` file is absent, so no license file is bundled.

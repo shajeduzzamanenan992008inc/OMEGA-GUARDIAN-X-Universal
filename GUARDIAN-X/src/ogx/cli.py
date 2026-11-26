@@ -2730,7 +2730,11 @@ def cmd_workflow(args: argparse.Namespace) -> int:
             actor = (args.actor or os.environ.get("OGX_ACTOR_SUBJECT", "") or "operator").strip()
             for stage in args.approve or ():
                 orchestrator.approve(args.workflow_id, stage, actor=actor, note="approved on run")
-            result = orchestrator.run(args.workflow_id, max_stages=args.max_stages)
+            result = orchestrator.run(
+                args.workflow_id,
+                max_stages=args.max_stages,
+                lease_seconds=args.lease_seconds,
+            )
             if args.json:
                 _json_print(result)
             else:
@@ -3592,6 +3596,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Record approval for a gated stage before running (repeatable)")
     wf_run.add_argument("--actor", help="Approver identity; defaults to OGX_ACTOR_SUBJECT")
     wf_run.add_argument("--max-stages", type=int, help="Execute at most this many stages in this call")
+    wf_run.add_argument(
+        "--lease-seconds",
+        type=float,
+        default=3600.0,
+        help="Lease held by this run; an expired lease allows crash recovery (default 3600)",
+    )
     wf_run.add_argument("--json", action="store_true")
     wf_run.set_defaults(func=cmd_workflow)
     wf_status = workflow_sub.add_parser("status", help="Show workflow, stage and event state")

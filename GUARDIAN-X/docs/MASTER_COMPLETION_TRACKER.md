@@ -4,9 +4,10 @@
 `shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal`.
 
 **Snapshot:** 2026-11-27. Starting `main` was `71fcbbc` (merge of PR #18);
-the owner merged PR #19 during this pass, so current `origin/main` is
-`8645385`. Implementation branch: `feat/universal-lifecycle-orchestration`
-(created from `71fcbbc`; no direct `main` edits).
+the owner merged PR #19 and then PR #20 during this pass, so current
+`origin/main` is `9dfcfc1`. PR #20's head branch was deleted on merge; the
+follow-up was pushed to a recreated `feat/universal-lifecycle-orchestration`
+and opened as PR #21 (no direct `main` edits).
 
 This tracker is an evidence table, not a roadmap. A row is only `VERIFIED`
 when a command or external system was checked in this pass (or an explicitly
@@ -32,8 +33,10 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **627 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 140.40 s) |
-| Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (73.86 s) |
+| Canonical suite `python -m pytest -q` | **631 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 151.71 s) |
+| Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
+| Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`: `IMPORT_OK 0.8.0a1`, `ogx patch --help` and `ogx workflow --help` both exit 0 |
+| Performance baseline | `_dev/tools/benchmark_baseline.py --files 1000 --runs 3`: 1,021 files scanned in **3.53 s** median (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, workflow create 56.9 ms / status 29.7 ms; see `docs/PERFORMANCE_BASELINE.md` |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.` |
 | Wheel build `python -m pip wheel . --no-deps` | exit 0; 140 entries; new modules present; no `tests/` or `_dev/` entries |
@@ -44,12 +47,12 @@ limited (for example mocked transport or one OS).
 | Dependabot malware (GitHub UI) | **0 Open / 0 Closed** |
 | Secret scanning (GitHub UI) | **0 Open / 0 Closed**, "No secrets found." |
 | Hosted CI at `71fcbbc` (merge of PR #18) | OGX CI #84 success (31 s), OGX Code Security #83 success (1 m 6 s), GitHub Configuration Validation #13 success (10 s) |
-| Hosted CI at `b13a53e` and final PR head | 16/16 checks passed on both: OGX CI (3.11/3.12/3.13, drop-in, wheel, profile; #91 on the fix), CodeQL Python analysis (push + PR), Dependency Review, code scanning results |
+| Hosted CI on PR #20 | 16/16 checks passed at `b13a53e` and its final documentation head: OGX CI (3.11/3.12/3.13, drop-in, wheel, profile; #91 on the symlink fix), CodeQL (push + PR), Dependency Review, code scanning results |
+| Hosted CI on PR #21 | 18/18 checks passed at `206bf98`: OGX CI matrix, drop-in, wheel, CodeQL, Dependency Review, code scanning results |
 
 Not executed in this pass: Python 3.11–3.13 locally (hosted CI runs them on
 `ubuntu-latest`), macOS, a second drive/removable volume, Docker sandbox
-execution, any live provider API call with credentials, clean-venv wheel
-installation, release signing, performance measurement.
+execution, any live provider API call with credentials, release signing.
 
 ## Phase 0 — Repository inventory
 
@@ -80,7 +83,7 @@ installation, release signing, performance measurement.
 | SEC-12 | Container sandbox for project execution | `sandbox.py` immutable image + no network + dropped capabilities | no Docker locally; fail-closed code only | PARTIAL |
 | SEC-13 | OS-level isolation claim | none claimed; container is documented as a restricted boundary | `docs/SECURITY_MODEL.md` | VERIFIED |
 | SEC-14 | Independent security review | not performed | requires an external reviewer | BLOCKED |
-| SEC-15 | Threat model | `docs/SECURITY_MODEL.md` | document exists; not re-audited line by line | PARTIAL |
+| SEC-15 | Threat model | `docs/SECURITY_MODEL.md` | new section covers patch engine, lease reclaim, GitHub host and state data; not an independent review | PARTIAL |
 
 ## Phase 2 — Universal project identity
 
@@ -142,7 +145,7 @@ installation, release signing, performance measurement.
 | --- | --- | --- | --- | --- |
 | AI-01 | Repository inspection and intelligence | `intelligence/`, scanner, architecture, SBOM | intelligence suites | TESTED |
 | AI-02 | Root-cause/planning/impact | `impact.py`, `guardian.plan_safe_fixes`, triage | impact/pipeline tests | TESTED |
-| AI-03 | Controlled patch application and rollback | `patching.py` (exact-match, hash, backup, audit) | 11 tests + CLI tests | TESTED |
+| AI-03 | Controlled patch application and rollback | `patching.py` (exact-match, hash, backup, audit) | 12 tests + CLI tests | TESTED |
 | AI-04 | Generic automated patch generation from findings | only narrow `.env` ignore fix exists | `guardian.apply_safe_fixes` | PARTIAL |
 | AI-05 | Sandboxed test execution | orchestrator `test` stage uses pinned-image sandbox | Docker unavailable locally; stage fails closed | PARTIAL |
 | AI-06 | Static security gate | `secure` stage + scanner | orchestrator tests | TESTED |
@@ -155,18 +158,19 @@ installation, release signing, performance measurement.
 
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| ORC-01 | Validated state machine | `orchestrator.py` workflow/stage states + guards | `tests/test_orchestrator.py` (11 passed) | TESTED |
+| ORC-01 | Validated state machine | `orchestrator.py` workflow/stage states + guards | `tests/test_orchestrator.py` (14 passed) | TESTED |
 | ORC-02 | Durable workflow persistence | SQLite in `<state>/workflows/orchestrator.db`, WAL | reopen test | TESTED |
 | ORC-03 | Checkpoints and resume | per-stage rows, resume from pending | resume test | TESTED |
 | ORC-04 | Cancellation | terminal cancel, unfinished stages cancelled | cancel test | TESTED |
 | ORC-05 | Retry with attempt limit | failed stage reset, `max_attempts=2` | retry test | TESTED |
 | ORC-06 | Failure recovery | failed stage recorded with stable code; resume after approval | failure test | TESTED |
 | ORC-07 | Idempotency | explicit workflow ID and idempotency key | idempotency test | TESTED |
-| ORC-08 | Concurrency control | `BEGIN IMMEDIATE` + running claim | code inspection; no multi-process test | PARTIAL |
+| ORC-08 | Concurrency control | `BEGIN IMMEDIATE` + run lease; live lease refuses a second runner | multi-thread runner test refuses with `concurrent_run` | TESTED |
 | ORC-09 | Approval gates | `edit`/`test` require recorded approver | gate test | TESTED |
 | ORC-10 | Event history | `events` table + CLI | event test | TESTED |
 | ORC-11 | Audit correlation | workflow ID mirrored to hash-chained audit | audit assertions | TESTED |
-| ORC-12 | Crash recovery after killed process | not exercised | — | UNVERIFIED |
+| ORC-12 | Crash recovery after killed process | run lease + stale-claim reset of only the interrupted stage | killed-subprocess test (`os._exit(17)`), lease expiry, resume to success | VERIFIED |
+| ORC-15 | Bounded run does not strand the workflow | `max_stages` releases the lease and returns to `created` | `test_max_stages_releases_the_claim_and_resumes` | TESTED |
 | ORC-13 | Real edit+test end-to-end | requires patch plan + Docker + image | — | BLOCKED |
 | ORC-14 | CLI create/run/status/approve/cancel/retry/events | `ogx workflow ...` | `tests/test_cli_patch_workflow.py` | TESTED |
 
@@ -211,18 +215,18 @@ installation, release signing, performance measurement.
 
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| TST-01 | Canonical unit/integration suite | 42 test files | 627 passed, 18 skipped; Linux CI runs the symlink tests as well | VERIFIED |
+| TST-01 | Canonical unit/integration suite | 42 test files | 631 passed, 18 skipped; Linux CI runs the symlink tests as well | VERIFIED |
 | TST-02 | Drop-in suite | 23 test files | 289 tests, OK (9 skipped) | VERIFIED |
-| TST-03 | Python 3.11/3.12/3.13 | CI matrix | all three matrix jobs green on PR #20 (OGX CI #91 on the fix, green again on the final head) | VERIFIED |
-| TST-04 | Linux | `ubuntu-latest` CI | green on PR #20; Linux also executed the symlink tests skipped on Windows | VERIFIED |
+| TST-03 | Python 3.11/3.12/3.13 | CI matrix | all three matrix jobs green on PR #20 and PR #21 | VERIFIED |
+| TST-04 | Linux | `ubuntu-latest` CI | green on PR #20 and #21; Linux also executed the symlink tests skipped on Windows | VERIFIED |
 | TST-05 | Windows | local execution | this pass | VERIFIED |
 | TST-06 | macOS | not configured in CI | — | UNSUPPORTED |
 | TST-07 | Live provider integration tests | no credentials | — | BLOCKED |
 | TST-08 | Contract tests label mocks honestly | adapter contract suite; docs say mocked | `test_provider_contract.py` | VERIFIED |
-| TST-09 | Performance baselines | none measured | — | NOT_STARTED |
-| TST-10 | Failure injection | stage failure, transport bounds, proxy negatives | tests | PARTIAL |
+| TST-09 | Performance baselines | `_dev/tools/benchmark_baseline.py`, `docs/PERFORMANCE_BASELINE.md` | measured: scan 3.53 s / 1,021 files, workflow 3.74 s, patch 0.221 s, state create 56.9 ms (local synthetic) | VERIFIED |
+| TST-10 | Failure injection | killed process, stage failure, transport bounds, proxy negatives | `test_crashed_run_is_reclaimed...`, retry/failure tests, transport/proxy suites | TESTED |
 | TST-11 | Cross-drive/USB relocation | no second volume | — | BLOCKED |
-| TST-12 | Clean-venv wheel install | wheel built only | — | NOT_STARTED |
+| TST-12 | Clean-venv wheel install | wheel installed with `--no-index` into a fresh venv | imports OK (0.8.0a1), both new CLI help commands exit 0 | VERIFIED |
 
 ## Phase 11 — Performance and reliability
 
@@ -232,8 +236,9 @@ installation, release signing, performance measurement.
 | PRF-02 | Timeouts and bounded concurrency | transport/subprocess/sandbox timeouts | tests | TESTED |
 | PRF-03 | Queue backpressure | no server/queue | — | UNSUPPORTED |
 | PRF-04 | Caching/incremental analysis | partial (scan limits; no cache) | — | PARTIAL |
-| PRF-05 | Large-repository behaviour | not benchmarked | — | NOT_STARTED |
-| PRF-06 | Memory/database performance | not measured | — | NOT_STARTED |
+| PRF-05 | Large-repository behaviour | synthetic 1,021-file repository | 3.53 s scan median, linear file limits; not a monorepo benchmark | TESTED |
+| PRF-06 | Memory/database performance | scan peak and single-writer state latency measured | 1.22 MiB peak; create 56.9 ms, status 29.7 ms, list-50 7.0 ms; no concurrent throughput | TESTED |
+| PRF-07 | Workflow DB handles closed | `_ClosingConnection` closes every handle | rename-the-database regression test passes on Windows | VERIFIED |
 
 ## Phase 12 — Documentation
 
@@ -245,6 +250,7 @@ installation, release signing, performance measurement.
 | DOC-04 | Changelog entry for new capabilities | `CHANGELOG.md` | file | VERIFIED |
 | DOC-05 | Every historical document re-audited | not done (many milestone reports) | — | PARTIAL |
 | DOC-06 | Unsupported operations documented | host/provider/security docs | files | VERIFIED |
+| DOC-07 | Measured performance documented | `docs/PERFORMANCE_BASELINE.md` | numbers from the committed benchmark script | VERIFIED |
 
 ## Phase 13 — Release and supply chain
 

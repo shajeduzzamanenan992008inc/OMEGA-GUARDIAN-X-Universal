@@ -27,14 +27,15 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from uuid import UUID, uuid4
 
 from .config import load_config, state_dir
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+DEFAULT_LEASE_SECONDS = 3600.0
 DEFAULT_STAGES: tuple[str, ...] = ("inspect", "plan", "edit", "test", "secure", "review", "evolve")
 APPROVAL_STAGES: frozenset[str] = frozenset({"edit", "test"})
 MAX_STAGE_OUTPUT_CHARS = 60_000
@@ -55,6 +56,34 @@ _ALLOWED_WORKFLOW_TRANSITIONS: dict[str, frozenset[str]] = {
     "succeeded": frozenset(),
     "cancelled": frozenset(),
 }
+
+
+class _ClosingConnection:
+    """Close the SQLite handle on exit.
+
+    ``sqlite3.Connection``'s own context manager commits but never closes the
+    file, which leaves the database locked on Windows (found by the benchmark
+    cleanup). Explicit COMMIT/ROLLBACK calls in the engine still apply.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def __enter__(self) -> sqlite3.Connection:
+        return self._connection
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        try:
+            if exc_type is None:
+                self._connection.commit()
+            else:
+                try:
+                    self._connection.rollback()
+                except sqlite3.Error:
+                    pass  # the failing path may already have rolled back
+        finally:
+            self._connection.close()
+        return False
 
 
 class WorkflowError(RuntimeError):
@@ -373,14 +402,14 @@ class Orchestrator:
         self._initialize()
 
     # ------------------------------------------------------------------ storage
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self) -> _ClosingConnection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(self.db_path), timeout=10.0, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=10000")
-        return connection
+        return _ClosingConnection(connection)
 
     def _initialize(self) -> None:
         if self.db_path.is_symlink():
@@ -438,6 +467,17 @@ class Orchestrator:
                 "INSERT OR IGNORE INTO schema_meta(key, value) VALUES('version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+            connection.execute(
+                "UPDATE schema_meta SET value = ? WHERE key = 'version'", (str(SCHEMA_VERSION),)
+            )
+            # Schema v2 adds the run lease. Additive migration: an existing
+            # database keeps its workflows and simply gains the two columns.
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(workflows)")
+            }
+            for column in ("run_token", "lease_expires_at"):
+                if column not in columns:
+                    connection.execute(f"ALTER TABLE workflows ADD COLUMN {column} TEXT")
 
     def _event(
         self,
@@ -476,6 +516,26 @@ class Orchestrator:
             # The workflow database is authoritative; a failed audit mirror is
             # reported by 'review' (chain verification) rather than aborting work.
             pass
+
+    def _lease_deadline(self, seconds: float) -> str:
+        return (
+            datetime.now(timezone.utc) + timedelta(seconds=max(0.0, float(seconds)))
+        ).isoformat()
+
+    @staticmethod
+    def _lease_expired(row: sqlite3.Row) -> bool:
+        """A missing or unparsable lease means the previous owner is gone."""
+
+        raw = row["lease_expires_at"]
+        if not raw:
+            return True
+        try:
+            deadline = datetime.fromisoformat(str(raw))
+        except ValueError:
+            return True
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) >= deadline
 
     def _get(self, connection: sqlite3.Connection, workflow_id: str) -> sqlite3.Row:
         row = connection.execute(
@@ -720,6 +780,7 @@ class Orchestrator:
                 timestamp = _now()
                 connection.execute(
                     "UPDATE workflows SET state = 'cancelled', finished_at = ?, updated_at = ?,"
+                    " run_token = NULL, lease_expires_at = NULL,"
                     " revision = revision + 1 WHERE workflow_id = ?",
                     (timestamp, timestamp, workflow_id),
                 )
@@ -774,6 +835,7 @@ class Orchestrator:
                 )
                 connection.execute(
                     "UPDATE workflows SET state = 'created', finished_at = NULL, updated_at = ?,"
+                    " run_token = NULL, lease_expires_at = NULL,"
                     " revision = revision + 1 WHERE workflow_id = ?",
                     (_now(), workflow_id),
                 )
@@ -786,8 +848,19 @@ class Orchestrator:
             return payload
 
     # ------------------------------------------------------------------------ run
-    def run(self, workflow_id: str, *, max_stages: int | None = None) -> dict[str, Any]:
-        """Execute pending stages until completion, failure or an approval gate."""
+    def run(
+        self,
+        workflow_id: str,
+        *,
+        max_stages: int | None = None,
+        lease_seconds: float = DEFAULT_LEASE_SECONDS,
+    ) -> dict[str, Any]:
+        """Execute pending stages until completion, failure or an approval gate.
+
+        A run holds a lease. A second runner is refused while the lease is
+        valid; once it expires (the owner crashed), the stale ``running`` stage
+        is reset and the workflow resumes instead of being stuck forever.
+        """
 
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -796,16 +869,34 @@ class Orchestrator:
                 if row["state"] in {"succeeded", "cancelled"}:
                     connection.execute("COMMIT")
                     return {"workflow": self._workflow_dict(connection, row), "executed": []}
+                reclaimed = False
                 if row["state"] == "running":
-                    raise WorkflowError(
-                        "Workflow is already running in another process.", code="concurrent_run"
+                    if not self._lease_expired(row):
+                        raise WorkflowError(
+                            "Workflow is already running elsewhere and its lease has not expired.",
+                            code="concurrent_run",
+                        )
+                    connection.execute(
+                        "UPDATE stages SET state = 'pending', started_at = NULL"
+                        " WHERE workflow_id = ? AND state = 'running'",
+                        (workflow_id,),
                     )
+                    reclaimed = True
                 connection.execute(
-                    "UPDATE workflows SET state = 'running', updated_at = ?, revision = revision + 1"
-                    " WHERE workflow_id = ?",
-                    (_now(), workflow_id),
+                    "UPDATE workflows SET state = 'running', run_token = ?, lease_expires_at = ?,"
+                    " updated_at = ?, revision = revision + 1 WHERE workflow_id = ?",
+                    (uuid4().hex, self._lease_deadline(lease_seconds), _now(), workflow_id),
                 )
-                self._event(connection, workflow_id, "run.started")
+                if reclaimed:
+                    self._event(
+                        connection,
+                        workflow_id,
+                        "run.reclaimed",
+                        detail={"stale_running_stage_reset": True},
+                    )
+                self._event(
+                    connection, workflow_id, "run.started", detail={"reclaimed": reclaimed}
+                )
                 connection.execute("COMMIT")
             except Exception:
                 connection.execute("ROLLBACK")
@@ -836,7 +927,8 @@ class Orchestrator:
                         if awaiting is not None:
                             connection.execute(
                                 "UPDATE workflows SET state = 'awaiting_approval', current_stage = ?,"
-                                " updated_at = ? WHERE workflow_id = ?",
+                                " updated_at = ?, run_token = NULL, lease_expires_at = NULL"
+                                " WHERE workflow_id = ?",
                                 (awaiting["name"], timestamp, workflow_id),
                             )
                             self._event(
@@ -848,7 +940,8 @@ class Orchestrator:
                         else:
                             connection.execute(
                                 "UPDATE workflows SET state = 'succeeded', finished_at = ?,"
-                                " updated_at = ?, revision = revision + 1 WHERE workflow_id = ?",
+                                " updated_at = ?, run_token = NULL, lease_expires_at = NULL,"
+                                " revision = revision + 1 WHERE workflow_id = ?",
                                 (timestamp, timestamp, workflow_id),
                             )
                             self._event(connection, workflow_id, "succeeded")
@@ -864,7 +957,8 @@ class Orchestrator:
                         )
                         connection.execute(
                             "UPDATE workflows SET state = 'awaiting_approval', current_stage = ?,"
-                            " updated_at = ? WHERE workflow_id = ?",
+                            " updated_at = ?, run_token = NULL, lease_expires_at = NULL"
+                            " WHERE workflow_id = ?",
                             (name, _now(), workflow_id),
                         )
                         self._event(connection, workflow_id, "stage.awaiting_approval", stage=name)
@@ -878,8 +972,9 @@ class Orchestrator:
                         (_now(), workflow_id, name),
                     )
                     connection.execute(
-                        "UPDATE workflows SET current_stage = ?, updated_at = ? WHERE workflow_id = ?",
-                        (name, _now(), workflow_id),
+                        "UPDATE workflows SET current_stage = ?, updated_at = ?,"
+                        " lease_expires_at = ? WHERE workflow_id = ?",
+                        (name, _now(), self._lease_deadline(lease_seconds), workflow_id),
                     )
                     self._event(connection, workflow_id, "stage.started", stage=name)
                     metadata = json.loads(row["metadata"] or "{}")
@@ -917,6 +1012,7 @@ class Orchestrator:
                         )
                         connection.execute(
                             "UPDATE workflows SET state = 'failed', current_stage = ?, updated_at = ?,"
+                            " run_token = NULL, lease_expires_at = NULL,"
                             " revision = revision + 1 WHERE workflow_id = ?",
                             (name, _now(), workflow_id),
                         )
@@ -951,6 +1047,27 @@ class Orchestrator:
                         stage=name,
                         detail={"keys": sorted(result)},
                     )
+                    connection.execute("COMMIT")
+                except Exception:
+                    connection.execute("ROLLBACK")
+                    raise
+
+        if limit is not None and len(executed) >= limit:
+            # A bounded call must not leave a live lease behind: release it so
+            # the next invocation can continue immediately.
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    row = self._get(connection, workflow_id)
+                    if row["state"] == "running":
+                        connection.execute(
+                            "UPDATE workflows SET state = 'created', updated_at = ?,"
+                            " run_token = NULL, lease_expires_at = NULL WHERE workflow_id = ?",
+                            (_now(), workflow_id),
+                        )
+                        self._event(
+                            connection, workflow_id, "run.paused", detail={"max_stages": limit}
+                        )
                     connection.execute("COMMIT")
                 except Exception:
                     connection.execute("ROLLBACK")
