@@ -13,7 +13,7 @@ The universal layer adds engines without changing the original `ogx` scanner and
 ## 2. Package layout
 
 ```text
-core/ogx/
+src/ogx/
   rules.py                 shared declarative rules
   workspace.py             safe bounded file access
   findings.py              unified finding schema
@@ -26,6 +26,10 @@ core/ogx/
     build.py               build/test discovery adapters
     registry.py            registration and selection
 ```
+
+The canonical engine layer lives in `src/ogx`. The standard-library drop-in
+`core/ogx` does not ship an `engines/` package; see
+`docs/DEPENDENCY_BOUNDARIES.md`.
 
 ## 3. Engine contract
 
@@ -91,7 +95,7 @@ Do not add a new parser dependency without an explicit product/security decision
 
 ## 5. Adding a dedicated engine
 
-Create a module under `core/ogx/engines/`, subclass `BaseEngine`, register it in `default_engines()`, and add tests. Android is the reference implementation.
+Create a module under `src/ogx/engines/`, subclass `BaseEngine`, register it in `default_engines()`, and add tests. Android is the reference implementation.
 
 Minimum test checklist:
 
@@ -147,7 +151,7 @@ Every new engine must preserve:
 ## 9. Running the tests
 
 ```powershell
-python -m compileall -q core _dev/tests
+python -m compileall -q src core tests _dev/tests
 $env:PYTHONPATH = "src"
 python -m unittest discover -s _dev/tests -v
 ```

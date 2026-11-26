@@ -78,9 +78,14 @@ Contract status:
 - Adapters present: `local_filesystem`, `local_git`, and a GitHub shim.
 - A shared host contract suite exists (`tests/test_host_contract.py`, 12 tests)
   and passes for the registry and the local adapters' metadata/capability
-  surface. It does **not** cover connect/read/disconnect/health/recovery, so no
-  adapter is declared operational. `ogx host list` reports `No hosts
-  registered.` by default.
+  surface. The session lifecycle, health/recovery and the two read-only local
+  hosts are additionally covered by `tests/test_host_lifecycle.py` (13),
+  `tests/test_host_filesystem_runtime.py` (16 passed, 3 skipped),
+  `tests/test_host_git_runtime.py` (21) and `tests/test_host_cli_lifecycle.py`
+  (6). The local filesystem and local Git hosts are therefore declared
+  OPERATIONAL for that read-only surface only. No adapter is operational for
+  writes, execution, remote or branch operations, and no cloud/remote host
+  passes the suite. `ogx host list` reports `No hosts registered.` by default.
 - A host claim is valid only after that adapter passes the shared contract
   suite: identity, discovery, connect, health, read, list, metadata,
   capabilities, failure handling, permission handling, disconnect, recovery.
@@ -163,6 +168,6 @@ immutable storage.
 | Registry and relocation | `tests/test_registry.py` |
 | Identity file lifecycle | `tests/test_identity.py` |
 | Architecture, stdlib-only, cycles | `_dev/tests/test_architecture.py` |
-| Drop-in parity | `_dev/tests/` suite (245 tests) |
+| Drop-in parity | `_dev/tests/` suite (258 tests) |
 
 Absence of a test is recorded as a gap, not as support.

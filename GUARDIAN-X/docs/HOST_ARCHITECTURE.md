@@ -113,7 +113,7 @@ Operational local hosts:
   `local_filesystem` and `local_git`.
 
 Test evidence: lifecycle 13, filesystem 16 (3 skipped), Git 21, CLI 6 — all pass.
-Canonical suite 465 passed; drop-in suite 245 passed.
+Canonical suite 465 passed; drop-in suite 258 passed (re-verified 2026-11-26 at HEAD `36e56c0`).
 
 Truths that hold despite the `OPERATIONAL` labels:
 

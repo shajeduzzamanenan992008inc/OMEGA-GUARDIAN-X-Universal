@@ -68,3 +68,12 @@ python -m pip wheel . --no-deps --no-build-isolation -w <dir>
 
 Results: 465 passed / 15 skipped at HEAD `e7e7686`; 245 drop-in tests OK (9 skipped); compile and
 sync checks passed; wheel built and installed in a fresh venv.
+
+## 7. Phase 0 baseline re-verification (2026-11-26)
+
+At HEAD `36e56c0` (clean tree, `origin/main` 0/0) the local equivalents were
+re-executed: canonical **465 passed, 15 skipped** (90.58 s, exit 0), drop-in
+**258 tests, OK (9 skipped)** (71.25 s, exit 0), archive regression suite
+**13 tests, OK**, compile and sync checks exit 0. No hosted workflow was
+executed or queried for `36e56c0`; the billing blocker recorded in §3 is
+unchanged. See `../../docs/MASTER_BASELINE_AUDIT.md`.
