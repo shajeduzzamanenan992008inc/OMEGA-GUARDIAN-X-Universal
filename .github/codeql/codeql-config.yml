@@ -1,0 +1,13 @@
+name: "OGX CodeQL configuration"
+
+# Test trees are excluded from code scanning.
+#
+# Both scanner test modules write a *runtime-generated synthetic* credential into
+# a temporary file on purpose: that is the fixture the redaction test asserts on.
+# CodeQL correctly sees "a secret is written to disk" and reports it as
+# clear-text storage of sensitive information, but the finding is inherent to the
+# fixture and says nothing about shipping code. Excluding test trees is the
+# engine-native way to keep those fixtures from producing permanent alerts.
+paths-ignore:
+  - "GUARDIAN-X/tests"
+  - "GUARDIAN-X/_dev/tests"
