@@ -365,7 +365,10 @@ def make_handler(
                 )
 
             try:
-                # codeql[py/partial-ssrf] sink: safe_target is the return of _validated_origin_target, which rejects absolute/network-path targets, scheme/netloc, control chars, backslashes, fragments and malformed percent encoding.
+                # codeql[py/partial-ssrf] sink: safe_target is the validated return of _validated_origin_target —
+                # the only value forwarded to the HTTP client. Validation rejects absolute URLs, network-path
+                # references, scheme/netloc, control characters, backslashes, fragments, and malformed percent
+                # encoding before any value reaches this call site.
                 conn.putrequest(
                     method,
                     safe_target,
