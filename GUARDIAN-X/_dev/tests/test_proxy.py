@@ -16,7 +16,7 @@ class ProxyTargetValidationTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 _validated_origin_target(target)
 
-    def test_rejects_traversal_and_encoded_authority_paths(self):
+    def test_rejects_encoded_authority_paths(self):
         for target in ("/%2f%2fevil.invalid/path", "/%252f%252fevil.invalid/path"):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 _validated_origin_target(target)
