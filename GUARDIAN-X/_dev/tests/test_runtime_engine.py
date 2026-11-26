@@ -262,9 +262,6 @@ class ConfigTests(unittest.TestCase):
     def test_plaintext_keys_are_never_accepted_and_env_keys_work(self):
         import os
         digest = hashlib.sha256(b"k").hexdigest()
-        # NOTE: this env-test uses a legacy `sha256(b"k")` digest so it still
-        # exercises the stored-record path without depending on the PBKDF2
-        # derivation. The config validator only cares that the field is 64-hex.
         os.environ["OMEGA_GUARD_KEYS"] = f"svc:admin:{digest}"
         try:
             cfg = from_mapping({})
