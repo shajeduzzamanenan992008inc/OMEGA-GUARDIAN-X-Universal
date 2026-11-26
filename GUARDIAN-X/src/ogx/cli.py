@@ -87,6 +87,18 @@ from .relocation import (
     recover_relocation,
     verify_relocation,
 )
+from .patching import (
+    PatchApprovalRequired,
+    PatchError,
+    PatchIntegrityError,
+    PatchRefused,
+    apply_patch as apply_source_patch,
+    list_plans as list_source_patches,
+    load_plan as load_source_patch,
+    plan_patch as plan_source_patch,
+    rollback_patch as rollback_source_patch,
+)
+from .orchestrator import Orchestrator, WorkflowError
 from .registry import RegistryV2, get_registry, RegistryError, RegistryNotFoundError, MigrationError
 from .discovery import (
     DiscoveryEngine, DiscoveryConfig, DiscoveryScope, DiscoveryRoot,
@@ -2592,6 +2604,185 @@ def cmd_governance(args: argparse.Namespace) -> int:
         return 2
 
 
+def _patch_error(exc: Exception) -> None:
+    print(f"Patch operation failed: {exc}", file=sys.stderr)
+    for detail in getattr(exc, "details", ()) or ():
+        print(f"  {detail}", file=sys.stderr)
+
+
+def cmd_patch(args: argparse.Namespace) -> int:
+    """Plan, apply, inspect and roll back controlled source patches."""
+    try:
+        if args.patch_action == "plan":
+            spec_path = Path(args.spec).expanduser()
+            if spec_path.is_symlink() or not spec_path.is_file():
+                print(f"Patch specification not found: {spec_path}", file=sys.stderr)
+                return 2
+            if spec_path.stat().st_size > 1_000_000:
+                print("Patch specification exceeds 1 MB.", file=sys.stderr)
+                return 2
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+            changes = spec.get("changes") if isinstance(spec, dict) else spec
+            if not isinstance(changes, list):
+                print("Patch specification must contain a 'changes' array.", file=sys.stderr)
+                return 2
+            plan = plan_source_patch(
+                _root(args.path),
+                changes,
+                project_id=args.project_id,
+                actor_subject=args.actor_subject or os.environ.get("OGX_ACTOR_SUBJECT", ""),
+            )
+            if args.json:
+                _json_print(plan)
+            else:
+                print(f"Patch plan: {plan['plan_id']}")
+                print(f"  files: {plan['summary']['files']}")
+                for path in plan['summary']['paths']:
+                    print(f"  - {path}")
+                print("No project file was modified.")
+            return 0
+        if args.patch_action == "apply":
+            result = apply_source_patch(
+                args.plan_id,
+                approved=args.confirm,
+                actor_subject=args.actor_subject,
+            )
+            if args.json:
+                _json_print(result)
+            else:
+                print(f"Applied patch plan {result['plan_id']} to {len(result['applied'])} file(s).")
+                print(f"  backup: {result['backup_dir']}")
+                print("Rollback: ogx patch rollback " + result['plan_id'] + " --confirm")
+            return 0
+        if args.patch_action == "rollback":
+            result = rollback_source_patch(
+                args.plan_id,
+                approved=args.confirm,
+                actor_subject=args.actor_subject,
+            )
+            if args.json:
+                _json_print(result)
+            else:
+                print(f"Rolled back {result['plan_id']}: restored {len(result['restored'])} file(s).")
+            return 0
+        if args.patch_action == "show":
+            plan = load_source_patch(args.plan_id)
+            _json_print(plan) if args.json else print(json.dumps(plan, indent=2))
+            return 0
+        if args.patch_action == "list":
+            plans = list_source_patches(limit=args.limit)
+            if args.json:
+                _json_print(plans)
+            else:
+                if not plans:
+                    print("No patch plans.")
+                for item in plans:
+                    print(f"  {item['plan_id']}  [{item['state']}]  {item['files']} file(s)  {item['project_root']}")
+            return 0
+        print("usage: ogx patch plan|apply|rollback|show|list", file=sys.stderr)
+        return 2
+    except PatchApprovalRequired as exc:
+        _patch_error(exc)
+        return 2
+    except PatchIntegrityError as exc:
+        _patch_error(exc)
+        return 1
+    except (PatchError, OSError, ValueError, json.JSONDecodeError) as exc:
+        _patch_error(exc)
+        return 2
+
+
+def cmd_workflow(args: argparse.Namespace) -> int:
+    """Manage durable engineering workflows."""
+    try:
+        orchestrator = Orchestrator()
+        action = args.workflow_action
+        if action == "create":
+            metadata: dict[str, object] = {}
+            if args.patch_plan:
+                metadata["patch_plan_id"] = args.patch_plan
+            if args.changed_file:
+                metadata["changed_file"] = args.changed_file
+            if args.sandbox_image:
+                metadata["sandbox_image"] = args.sandbox_image
+            if args.test_command:
+                metadata["test_command"] = list(args.test_command)
+            if args.actor_subject:
+                metadata["actor_subject"] = args.actor_subject
+            result = orchestrator.create(
+                _root(args.path),
+                project_id=args.project_id,
+                workflow_id=args.workflow_id,
+                idempotency_key=args.idempotency_key,
+                skip_stages=args.skip or (),
+                metadata=metadata,
+            )
+            payload = result["workflow"]
+            if args.json:
+                _json_print(result)
+            else:
+                state = "created" if result["created"] else "already exists"
+                print(f"Workflow {payload['workflow_id']} {state}.")
+                print(f"  stages: {', '.join(stage['name'] for stage in payload['stages'])}")
+                print("Run it with: ogx workflow run " + payload['workflow_id'])
+            return 0
+        if action == "run":
+            actor = (args.actor or os.environ.get("OGX_ACTOR_SUBJECT", "") or "operator").strip()
+            for stage in args.approve or ():
+                orchestrator.approve(args.workflow_id, stage, actor=actor, note="approved on run")
+            result = orchestrator.run(args.workflow_id, max_stages=args.max_stages)
+            if args.json:
+                _json_print(result)
+            else:
+                workflow = result["workflow"]
+                print(f"Workflow {workflow['workflow_id']}: {workflow['state']}")
+                if result["executed"]:
+                    print(f"  executed: {', '.join(result['executed'])}")
+                for stage in workflow["stages"]:
+                    print(f"  {stage['ordinal']}. {stage['name']:<8} {stage['state']}" + (f"  ({stage['error']})" if stage['error'] else ""))
+                if workflow["state"] == "awaiting_approval":
+                    print("Approve with: ogx workflow approve " + workflow['workflow_id'] + " --stage <stage> --actor <identity>")
+            return 0
+        if action == "status":
+            payload = orchestrator.status(args.workflow_id, events=args.events)
+            _json_print(payload) if args.json else print(json.dumps(payload, indent=2))
+            return 0
+        if action == "list":
+            payload = orchestrator.list(limit=args.limit)
+            if args.json:
+                _json_print(payload)
+            else:
+                if not payload:
+                    print("No workflows.")
+                for item in payload:
+                    print(f"  {item['workflow_id']}  [{item['state']}]  stage={item['current_stage']}  {item['project_root']}")
+            return 0
+        if action == "events":
+            payload = orchestrator.events(args.workflow_id, limit=args.limit)
+            _json_print(payload) if args.json else print(json.dumps(payload, indent=2))
+            return 0
+        if action == "approve":
+            payload = orchestrator.approve(args.workflow_id, args.stage, actor=args.actor, note=args.note or "")
+            _json_print(payload) if args.json else print(f"Stage '{args.stage}' approved for {args.workflow_id}.")
+            return 0
+        if action == "cancel":
+            payload = orchestrator.cancel(args.workflow_id, actor=args.actor, reason=args.reason or "")
+            _json_print(payload) if args.json else print(f"Workflow {args.workflow_id} cancelled.")
+            return 0
+        if action == "retry":
+            payload = orchestrator.retry(args.workflow_id, stage=args.stage)
+            _json_print(payload) if args.json else print(f"Workflow {args.workflow_id} reset to created; resume with 'workflow run'.")
+            return 0
+        print("usage: ogx workflow create|run|status|list|events|approve|cancel|retry", file=sys.stderr)
+        return 2
+    except WorkflowError as exc:
+        print(f"Workflow operation failed: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Workflow operation failed: {exc}", file=sys.stderr)
+        return 2
+
+
 def _git_provider_choices() -> tuple[str, ...]:
     from .platform import ProviderKind, get_provider_registry
 
@@ -3347,6 +3538,94 @@ def build_parser() -> argparse.ArgumentParser:
     governance_execute.add_argument("request_id")
     governance_execute.add_argument("--requester-subject", help="External identity; defaults to OGX_ACTOR_SUBJECT")
     governance_execute.set_defaults(func=cmd_governance)
+
+    patch_parser = sub.add_parser("patch", help="Plan, apply and roll back exact-text source patches")
+    patch_sub = patch_parser.add_subparsers(dest="patch_action", required=True)
+    patch_plan = patch_sub.add_parser("plan", help="Validate a JSON change set and store a patch plan")
+    patch_plan.add_argument("path", help="Project root directory")
+    patch_plan.add_argument("--spec", required=True, help="JSON file containing a 'changes' array")
+    patch_plan.add_argument("--project-id", help="Optional project identity UUID recorded in the plan")
+    patch_plan.add_argument("--actor-subject", help="Actor identity; defaults to OGX_ACTOR_SUBJECT")
+    patch_plan.add_argument("--json", action="store_true")
+    patch_plan.set_defaults(func=cmd_patch)
+    patch_apply = patch_sub.add_parser("apply", help="Apply a planned patch after re-verifying every file hash")
+    patch_apply.add_argument("plan_id")
+    patch_apply.add_argument("--confirm", action="store_true", help="Explicitly approve the write")
+    patch_apply.add_argument("--actor-subject", help="Actor identity; defaults to OGX_ACTOR_SUBJECT")
+    patch_apply.add_argument("--json", action="store_true")
+    patch_apply.set_defaults(func=cmd_patch)
+    patch_rollback = patch_sub.add_parser("rollback", help="Restore originals from the external backup")
+    patch_rollback.add_argument("plan_id")
+    patch_rollback.add_argument("--confirm", action="store_true", help="Explicitly approve the rollback")
+    patch_rollback.add_argument("--actor-subject", help="Actor identity; defaults to OGX_ACTOR_SUBJECT")
+    patch_rollback.add_argument("--json", action="store_true")
+    patch_rollback.set_defaults(func=cmd_patch)
+    patch_show = patch_sub.add_parser("show", help="Print a stored patch plan")
+    patch_show.add_argument("plan_id")
+    patch_show.add_argument("--json", action="store_true")
+    patch_show.set_defaults(func=cmd_patch)
+    patch_list = patch_sub.add_parser("list", help="List stored patch plans")
+    patch_list.add_argument("--limit", type=int, default=50)
+    patch_list.add_argument("--json", action="store_true")
+    patch_list.set_defaults(func=cmd_patch)
+
+    workflow = sub.add_parser("workflow", help="Durable inspect/plan/edit/test/secure/review/evolve workflows")
+    workflow_sub = workflow.add_subparsers(dest="workflow_action", required=True)
+    wf_create = workflow_sub.add_parser("create", help="Create a durable workflow and its stage records")
+    wf_create.add_argument("path", help="Project root directory")
+    wf_create.add_argument("--project-id")
+    wf_create.add_argument("--workflow-id", help="Explicit UUID; reusing it is idempotent")
+    wf_create.add_argument("--idempotency-key", help="Reuse returns the existing workflow")
+    wf_create.add_argument("--skip", action="append", default=[], metavar="STAGE",
+                           help="Record a stage as intentionally skipped (repeatable)")
+    wf_create.add_argument("--patch-plan", help="Patch plan id used by the edit stage")
+    wf_create.add_argument("--changed-file", help="File used for change-impact analysis")
+    wf_create.add_argument("--sandbox-image", help="Pinned sandbox image for the test stage")
+    wf_create.add_argument("--test-command", nargs="+", metavar="ARG",
+                           help="Sandboxed test command as an argument array")
+    wf_create.add_argument("--actor-subject")
+    wf_create.add_argument("--json", action="store_true")
+    wf_create.set_defaults(func=cmd_workflow)
+    wf_run = workflow_sub.add_parser("run", help="Resume execution until done, failed or awaiting approval")
+    wf_run.add_argument("workflow_id")
+    wf_run.add_argument("--approve", action="append", default=[], metavar="STAGE",
+                        help="Record approval for a gated stage before running (repeatable)")
+    wf_run.add_argument("--actor", help="Approver identity; defaults to OGX_ACTOR_SUBJECT")
+    wf_run.add_argument("--max-stages", type=int, help="Execute at most this many stages in this call")
+    wf_run.add_argument("--json", action="store_true")
+    wf_run.set_defaults(func=cmd_workflow)
+    wf_status = workflow_sub.add_parser("status", help="Show workflow, stage and event state")
+    wf_status.add_argument("workflow_id")
+    wf_status.add_argument("--events", type=int, default=20)
+    wf_status.add_argument("--json", action="store_true")
+    wf_status.set_defaults(func=cmd_workflow)
+    wf_list = workflow_sub.add_parser("list", help="List workflows")
+    wf_list.add_argument("--limit", type=int, default=50)
+    wf_list.add_argument("--json", action="store_true")
+    wf_list.set_defaults(func=cmd_workflow)
+    wf_events = workflow_sub.add_parser("events", help="Show the workflow event history")
+    wf_events.add_argument("workflow_id")
+    wf_events.add_argument("--limit", type=int, default=100)
+    wf_events.add_argument("--json", action="store_true")
+    wf_events.set_defaults(func=cmd_workflow)
+    wf_approve = workflow_sub.add_parser("approve", help="Record an approval for a gated stage")
+    wf_approve.add_argument("workflow_id")
+    wf_approve.add_argument("--stage", required=True)
+    wf_approve.add_argument("--actor", required=True)
+    wf_approve.add_argument("--note")
+    wf_approve.add_argument("--json", action="store_true")
+    wf_approve.set_defaults(func=cmd_workflow)
+    wf_cancel = workflow_sub.add_parser("cancel", help="Cancel a workflow and its unfinished stages")
+    wf_cancel.add_argument("workflow_id")
+    wf_cancel.add_argument("--actor", required=True)
+    wf_cancel.add_argument("--reason")
+    wf_cancel.add_argument("--json", action="store_true")
+    wf_cancel.set_defaults(func=cmd_workflow)
+    wf_retry = workflow_sub.add_parser("retry", help="Reset a failed stage for another attempt")
+    wf_retry.add_argument("workflow_id")
+    wf_retry.add_argument("--stage")
+    wf_retry.add_argument("--json", action="store_true")
+    wf_retry.set_defaults(func=cmd_workflow)
 
     return parser
 
