@@ -29,9 +29,15 @@
   before checking its components for symlinks, which erased the symlink and let
   a symlinked target through. Components are now checked unresolved, followed by
   the resolved containment check, with a portable regression test.
+- Fixed two reliability defects found by the new crash and benchmark checks.
+  A killed run left the workflow permanently `running`; runs now hold a lease,
+  refuse a concurrent live runner, and reclaim an expired lease by resetting
+  only the interrupted stage. `--max-stages` now releases its lease instead of
+  stranding the workflow. SQLite handles are now closed on exit (the context
+  manager only committed), which had kept the database locked on Windows.
 - Updated `tests/test_host_lifecycle.py`: GitHub is no longer the
   "unsupported host type" case; GitLab is.
-- Verification (2026-11-27, branch based on `71fcbbc`): canonical suite 627
+- Verification (2026-11-27, branch based on `71fcbbc`): canonical suite 631
   passed / 18 skipped / 119 subtests; drop-in 289 tests OK (9 skipped);
   compileall and source/drop-in consistency pass; wheel 140 entries with the
   new modules. Code scanning 0 open / 13 closed; Dependabot and secret scanning

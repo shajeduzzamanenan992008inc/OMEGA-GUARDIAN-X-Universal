@@ -4,7 +4,7 @@
 **Repository:** `shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal`
 **Report date:** 2026-11-27
 **Implementation branch:** `feat/universal-lifecycle-orchestration`
-**Tracker:** `docs/MASTER_COMPLETION_TRACKER.md` (136 requirement rows)
+**Tracker:** `docs/MASTER_COMPLETION_TRACKER.md` (140 requirement rows)
 
 ## 1. Repository state
 
@@ -30,7 +30,9 @@ in this branch do not overlap that path.
 ## 2. What was implemented in this pass
 
 Three previously missing P0/P1 capabilities were implemented with tests, plus
-the required inventory and documentation.
+the required inventory and documentation. A second enforcement pass then fixed
+two reliability defects found by new crash and benchmark checks and closed the
+locally testable verification rows.
 
 ### 2.1 Controlled patch engine — `src/ogx/patching.py`
 
@@ -81,29 +83,47 @@ the required inventory and documentation.
 - The lifecycle factory now supports `github`; GitLab and the other providers
   still have no host adapter and continue to fail closed.
 
-### 2.4 Tests added
+### 2.4 Crash recovery, leases and resource handling
+
+- A run now holds a **time-based lease** in the workflow row (`run_token`,
+  `lease_expires_at`). A second runner is refused while the lease is valid;
+  after it expires, the engine resets only the interrupted `running` stage and
+  resumes. Succeeded stages and their outputs are never re-executed.
+- A bounded `--max-stages` run releases its lease and returns the workflow to
+  `created`, so it cannot strand itself for an hour.
+- Schema v2 migration is additive (`ALTER TABLE` for the two columns) and keeps
+  existing workflow rows.
+- SQLite handles are now closed on exit via `_ClosingConnection`. The earlier
+  context manager only committed, leaving the database locked on Windows.
+- CLI: `ogx workflow run --lease-seconds N`.
+
+### 2.5 Tests added
 
 | File | Result |
 | --- | --- |
 | `tests/test_patching.py` | 12 passed, 1 skipped (Windows symlink privilege; the symlink case runs on Linux CI) |
-| `tests/test_orchestrator.py` | 11 passed |
+| `tests/test_orchestrator.py` | 14 passed |
 | `tests/test_host_github_runtime.py` | 10 passed (mocked transport) |
 | `tests/test_cli_patch_workflow.py` | 3 passed |
 | `tests/test_host_lifecycle.py` | updated one test that assumed GitHub had no adapter; GitLab is now the unsupported case |
 
 Defects found and fixed: a swapped `current_stage`/`updated_at` binding at the
 orchestrator approval gate; a cancel assertion that incorrectly required
-intentionally skipped stages to become cancelled; and a patch containment bug
-found by Linux CI where the path was resolved before its components were
-checked for symlinks, erasing the symlink and allowing it through. Linux CI is
-the authority for the symlink path, which is skipped on unprivileged Windows.
+intentionally skipped stages to become cancelled; a patch containment bug found
+by Linux CI where the path was resolved before its components were checked for
+symlinks, erasing the symlink and allowing it through; a permanent `running`
+state after a killed process (no lease); and SQLite handles that were committed
+but never closed, locking the database on Windows. Linux CI is the authority
+for the symlink path, which is skipped on unprivileged Windows.
 
 ## 3. Verification executed
 
 | Check | Result |
 | --- | --- |
-| `python -m pytest -q` | **627 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 140.40 s, exit 0) |
-| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (73.86 s) |
+| `python -m pytest -q` | **631 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 151.71 s, exit 0) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
+| Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`; import OK (0.8.0a1); `ogx patch --help` and `ogx workflow --help` exit 0 |
+| Performance baseline | `benchmark_baseline.py --files 1000 --runs 3`: scan **3.53 s** median for 1,021 files (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, state create 56.9 ms / status 29.7 ms |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | OK: versions, packages, layout and packaging declarations agree |
 | Wheel build | exit 0, 140 entries, new modules present, no test/CI entries |
@@ -114,10 +134,12 @@ the authority for the symlink path, which is skipped on unprivileged Windows.
 | Dependency Review | run #17 success (PR #19) |
 | Live GitHub probe without a token | failed closed with `credential_required` as designed; no authenticated live call was possible |
 
-The canonical suite grew from 578 passed / 17 skipped to 627 passed / 18
-skipped. This branch adds 36 tests across four new files (one Windows symlink
+The canonical suite grew from 578 passed / 17 skipped to 631 passed / 18
+skipped. This branch adds 40 tests across four new files (one Windows symlink
 skip); the remaining growth came from commits merged after the 578 measurement.
-The drop-in suite grew from 278 to 289 tests.
+The drop-in suite grew from 278 to 289 tests. The performance baseline is
+documented in `docs/PERFORMANCE_BASELINE.md` and is reproducible with the
+committed script; it is a local synthetic baseline, not a capacity claim.
 
 ## 4. Security state
 
@@ -197,18 +219,18 @@ treated as verified because it was generated.
 
 ## 9. Requirement accounting
 
-From `docs/MASTER_COMPLETION_TRACKER.md` (136 rows):
+From `docs/MASTER_COMPLETION_TRACKER.md` (140 rows):
 
 | Status | Count |
 | --- | --- |
-| VERIFIED | 19 |
-| TESTED | 51 |
+| VERIFIED | 26 |
+| TESTED | 54 |
 | IMPLEMENTED | 1 |
-| PARTIAL | 19 |
+| PARTIAL | 17 |
 | DESCRIPTOR_ONLY | 4 |
 | UNSUPPORTED | 22 |
 | BLOCKED | 14 |
-| NOT_STARTED | 4 |
+| NOT_STARTED | 0 |
 | ACCEPTED | 2 |
 
 `TESTED` rows are real passing tests with a named environment limit (mocked
@@ -229,8 +251,9 @@ provider, single OS, or Windows-only execution). They are not counted as
    (`PLG-02..05`).
 6. **Live verification** — provider APIs, cross-drive/USB relocation,
    second machine (`PROV-05`, `ID-10..13`, `TST-07/11`).
-7. **Performance** — baselines, large-repository behaviour, queue backpressure
-   (`TST-09`, `PRF-03/05/06`).
+7. **Performance** — queue backpressure and concurrent database throughput
+   remain unmeasured (`PRF-03`); the 1,021-file scan and single-writer state
+   baseline is done (`TST-09`, `PRF-05/06`, `DOC-07`).
 8. **Release engineering** — signing, provenance, reproducibility
    (`REL-04/05`).
 9. **Independent security and production review** (`SEC-14`, `PRD-02`).
@@ -243,13 +266,13 @@ provider, single OS, or Windows-only execution). They are not counted as
 Reasons, stated plainly:
 
 - 22 requirements have no implementation, 14 are blocked on credentials,
-  hardware, an external reviewer or owner authorization, 4 were not started,
+  hardware, an external reviewer or owner authorization, none are unstarted,
   and 19 are partial.
 - The product remains a local-first CLI alpha, not a production SaaS platform:
   no server API, no dashboard, no SSO, no PostgreSQL, no queue, no HA.
-- The newly implemented orchestrator and patch engine are tested but have not
-  completed a real edit+test run (needs a patch plan plus Docker and a pinned
-  image), and have not been crash-tested with a killed process.
+- The orchestrator is now crash-tested with a killed process and a stale lease,
+  but has not completed a real `edit`+`test` run (needs a patch plan plus Docker
+  and a pinned image).
 - Live provider and cross-drive verification remain impossible in this
   environment without the external resources listed in the blocked register.
 

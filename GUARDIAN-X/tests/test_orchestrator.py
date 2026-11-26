@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import threading
+from pathlib import Path
 
 import pytest
 
@@ -159,6 +164,108 @@ def test_approval_requires_an_identifiable_actor(project, tmp_path):
     with pytest.raises(WorkflowError) as error:
         engine.approve(workflow_id, "edit", actor="  ")
     assert error.value.code == "missing_actor"
+
+
+def test_max_stages_releases_the_claim_and_resumes(project, tmp_path):
+    engine = _engine(tmp_path)
+    workflow_id = engine.create(project, skip_stages=("edit", "test"))["workflow"]["workflow_id"]
+
+    paused = engine.run(workflow_id, max_stages=1)
+    assert paused["executed"] == ["inspect"]
+    assert paused["workflow"]["state"] == "created"
+
+    resumed = engine.run(workflow_id)
+    assert resumed["workflow"]["state"] == "succeeded"
+
+
+def test_active_lease_blocks_a_second_runner(project, tmp_path):
+    started = threading.Event()
+    release = threading.Event()
+    outcomes: list[object] = []
+
+    def blocking(ctx):
+        started.set()
+        assert release.wait(10)
+        return {"blocked": True}
+
+    engine = _engine(tmp_path, inspect=blocking)
+    workflow_id = engine.create(project, skip_stages=("edit", "test"))["workflow"]["workflow_id"]
+
+    def first_run() -> None:
+        outcomes.append(engine.run(workflow_id, lease_seconds=60))
+
+    thread = threading.Thread(target=first_run, daemon=True)
+    thread.start()
+    assert started.wait(10)
+    try:
+        with pytest.raises(WorkflowError) as error:
+            _engine(tmp_path).run(workflow_id, lease_seconds=60)
+        assert error.value.code == "concurrent_run"
+    finally:
+        release.set()
+        thread.join(10)
+    assert outcomes and outcomes[0]["workflow"]["state"] == "succeeded"
+
+
+def test_crashed_run_is_reclaimed_after_its_lease_expires(project, tmp_path):
+    engine = _engine(tmp_path)
+    workflow_id = engine.create(
+        project, stages=("inspect", "plan")
+    )["workflow"]["workflow_id"]
+
+    script = """
+import os, sys
+from pathlib import Path
+from ogx.orchestrator import Orchestrator
+
+def crash(ctx):
+    os._exit(17)
+
+engine = Orchestrator(db_path=Path(sys.argv[1]), handlers={"inspect": crash})
+# A zero-length lease models a run whose lease has already lapsed.
+engine.run(sys.argv[3], lease_seconds=0)
+"""
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [str(source_root), environment.get("PYTHONPATH", "")]
+    ).strip(os.pathsep)
+    crash = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(tmp_path / "state" / "workflows" / "orchestrator.db"),
+            str(project),
+            workflow_id,
+        ],
+        env=environment,
+        capture_output=True,
+        timeout=60,
+    )
+    assert crash.returncode == 17, crash.stderr.decode("utf-8", "replace")
+
+    stuck = engine.status(workflow_id)
+    assert stuck["state"] == "running"
+    assert next(stage for stage in stuck["stages"] if stage["name"] == "inspect")["state"] == "running"
+
+    resumed = engine.run(workflow_id, lease_seconds=0)
+    assert resumed["workflow"]["state"] == "succeeded"
+    inspect = next(stage for stage in resumed["workflow"]["stages"] if stage["name"] == "inspect")
+    assert inspect["attempts"] == 2
+    assert any(event["event"] == "run.reclaimed" for event in engine.events(workflow_id))
+
+
+def test_database_handles_are_closed_after_use(project, tmp_path):
+    """Regression: sqlite's context manager commits but does not close."""
+    engine = _engine(tmp_path)
+    workflow_id = engine.create(project, skip_stages=("edit", "test"))["workflow"]["workflow_id"]
+    engine.run(workflow_id)
+    engine.status(workflow_id)
+    database = tmp_path / "state" / "workflows" / "orchestrator.db"
+    moved = database.with_name("orchestrator.db.moved")
+    database.rename(moved)
+    assert moved.exists()
 
 
 def test_corrupt_or_unknown_workflow_is_not_found(project, tmp_path):
