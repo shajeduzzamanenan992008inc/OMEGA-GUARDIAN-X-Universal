@@ -1,3 +1,5 @@
+# Standalone-distribution configuration validation for the GUARDIAN-X tree.
+# Authoritative monorepo workflow: /.github/workflows/config-validation.yml.
 name: GitHub Configuration Validation
 
 on:
@@ -7,16 +9,16 @@ on:
       - "devkit/agents/**"
       - "devkit/health/**"
       - "link/templates/**"
+      - "_dev/tools/**"
       - "SECURITY.md"
-      - "CODEOWNERS"
   pull_request:
     paths:
       - ".github/**"
       - "devkit/agents/**"
       - "devkit/health/**"
       - "link/templates/**"
+      - "_dev/tools/**"
       - "SECURITY.md"
-      - "CODEOWNERS"
   workflow_dispatch:
 
 permissions:
@@ -35,7 +37,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout without persisted credentials
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 

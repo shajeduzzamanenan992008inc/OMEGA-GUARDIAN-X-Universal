@@ -3,6 +3,24 @@
 These are the results actually observed for the current working tree. They are
 not a claim about hosted CI or about platforms that were not exercised.
 
+## Current baseline (supersedes every row below)
+
+Executed 2026-11-26 at HEAD `7135b6e` on Windows / CPython 3.15.2, clean tree,
+`origin/main` = `7135b6e`:
+
+| Check | Command (from `GUARDIAN-X`) | Result |
+|---|---|---|
+| Canonical tests | `python -m pytest tests -q` | **578 passed, 17 skipped, 102 subtests passed** (150.23 s, exit 0) |
+| Drop-in + architecture tests | `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **278 tests, OK (9 skipped)** (88.5 s, exit 0) |
+| Profile-configured checks | `OMEGA_PROFILE=_dev/project-profile.json python devkit/health/run_project_checks.py` | **2/2 PASS**, exit 0 |
+| Compile | `python -m compileall -q src core tests _dev/tests` | passed, exit 0 |
+| Version/structure | `python _dev/tools/sync_core_from_src.py --check` | passed, exit 0 |
+
+The older `340/11`, `409/12`, `465/15` and `516/16` totals in this file and in the
+Milestone I/P0 reports are **historical snapshots of their own HEAD**, not the
+current result. The 17 canonical skips are platform gates: 15 symlink creation and
+2 POSIX file-mode checks, both unavailable on Windows.
+
 ## Environment
 
 - OS: Windows (Git Bash)

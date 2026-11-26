@@ -97,17 +97,23 @@ connected/degraded, otherwise every declared capability is `unavailable`; and
 registration does **not** mark a host `active`.
 
 Local verification: 68 host-lifecycle/adapter/CLI/contract tests passed (3 skips),
-within a full canonical suite of 465 passed / 15 skipped, and a 258-test drop-in
-suite, and a clean wheel install plus drop-in smoke.
+within a full canonical suite of 578 passed / 17 skipped, and a 278-test drop-in
+suite, and a clean wheel install plus drop-in smoke (HEAD `7135b6e`, 2026-11-26).
 
 Docs: `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
 `docs/LOCAL_GIT_HOST.md`, `docs/HOST_HEALTH_AND_RECOVERY.md`,
 `docs/HOST_LIFECYCLE_CI_VALIDATION.md`, `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`,
 `docs/HOST_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`.
 
-**Only local hosts are implemented.** Remote SSH, hosted Git hosts (GitHub/GitLab/
-Bitbucket/etc.), Docker and Kubernetes hosts are **not** implemented — only a short
-roadmap is recorded.
+**Local lifecycle hosts only.** `HostAdapter` sessions are implemented for the local
+filesystem and local Git hosts. Remote SSH, Docker and Kubernetes hosts are
+**not** implemented. Separately, the Git-provider API layer
+(`src/ogx/platform/adapters/`) implements read-only GitHub, GitLab, Bitbucket Cloud,
+Azure DevOps Repos, AWS CodeCommit, Gitea and Forgejo contracts with
+approval-gated writes; `ogx providers list` reports 7 `verified` Git-hosting
+providers and 21 `descriptor_only` entries whose lifecycle operations are declared
+unsupported rather than emulated. No live provider call has been verified from this
+machine (0 credentials configured).
 
 ## Universal provider engine (Milestone G)
 

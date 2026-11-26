@@ -11,7 +11,8 @@ Date: 2026-11-24
 
 | OS | Python | Canonical suite | Drop-in suite | Status |
 | --- | --- | --- | --- | --- |
-| Windows (`win32`) | CPython 3.15.2 | 465 passed, 15 skipped at HEAD `e7e7686` | 245 tests, OK (9 skipped) | EXECUTED |
+| Windows (`win32`) | CPython 3.15.2 | **578 passed, 17 skipped** at HEAD `7135b6e` (2026-11-26) | **278 tests, OK (9 skipped)** | EXECUTED |
+| Windows (`win32`) | CPython 3.15.2 | 465 passed, 15 skipped at HEAD `e7e7686` | 245 tests, OK (9 skipped) | EXECUTED (historical) |
 | Linux | 3.11 / 3.12 / 3.13 | — | — | UNVERIFIED |
 | macOS | 3.11 / 3.12 / 3.13 | — | — | UNVERIFIED |
 | Windows | 3.11 / 3.12 / 3.13 | — | — | UNVERIFIED |
