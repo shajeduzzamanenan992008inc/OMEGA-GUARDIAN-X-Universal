@@ -11,11 +11,11 @@
 | Item | Value |
 | --- | --- |
 | Starting `main` SHA | `71fcbbc` (merge of PR #18, CodeQL scope fix) |
-| Current `origin/main` at report time | `8645385` (merge of PR #19, owner-initiated deletion of a nested release-notes file) |
+| Current `origin/main` at report time | `9dfcfc1` (owner merge of PR #20) |
 | Branch base | `71fcbbc` |
 | Branch name | `feat/universal-lifecycle-orchestration` |
-| Branch head at report time | PR #20 head (code commit `b13a53e` plus documentation commits) |
-| Pull request | #20 opened, **not merged**; **16/16 checks passed**, including on the final documentation head |
+| Branch head at report time | `206bf98` (reliability follow-up on a branch recreated after PR #20's branch was deleted on merge) |
+| Pull requests | **#20 merged by the owner** (4 commits, 16/16 checks); **#21 open, not merged** (follow-up; 18/18 checks on `206bf98`) |
 | Direct edits to `main` | none |
 | Merge performed by this agent | none |
 | Force-push / tag deletion | none |
@@ -24,8 +24,9 @@
 | Release published | none |
 
 PR #19 landed while this pass was running and is unrelated to the code in this
-branch (it deletes `GUARDIAN-X/GUARDIAN-X/.github/RELEASE_NOTES.md`). The files
-in this branch do not overlap that path.
+branch (it deletes `GUARDIAN-X/GUARDIAN-X/.github/RELEASE_NOTES.md`). PR #20 was
+merged by the owner during the enforcement pass; GitHub deleted its head branch,
+so the follow-up commit was pushed to a recreated branch and opened as PR #21.
 
 ## 2. What was implemented in this pass
 
@@ -130,7 +131,8 @@ for the symlink path, which is skipped on unprivileged Windows.
 | `ogx patch --help` / `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
 | Hosted CI at `71fcbbc` | OGX CI #84 success, OGX Code Security #83 success, Configuration Validation #13 success |
-| Hosted CI at `b13a53e` and the final head (PR #20) | **16/16 checks passed** on both: OGX CI (Python 3.11/3.12/3.13, drop-in, wheel, profile checks; run #91 on the fix), CodeQL Python analysis (push and PR), Dependency Review, code scanning results |
+| Hosted CI on PR #20 | **16/16 checks passed** at `b13a53e` and its final documentation head: OGX CI (Python 3.11/3.12/3.13, drop-in, wheel, profile checks; run #91 on the symlink fix), CodeQL Python analysis (push and PR), Dependency Review, code scanning results |
+| Hosted CI on PR #21 | **18/18 checks passed** at `206bf98`: OGX CI matrix, drop-in, wheel, CodeQL, Dependency Review and code scanning results |
 | Dependency Review | run #17 success (PR #19) |
 | Live GitHub probe without a token | failed closed with `credential_required` as designed; no authenticated live call was possible |
 
