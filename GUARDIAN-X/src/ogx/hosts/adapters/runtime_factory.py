@@ -7,8 +7,9 @@ from .filesystem_runtime import FilesystemHostAdapter
 from .git_runtime import GitHostAdapter
 from .github_runtime import GitHubHostAdapter
 from .provider_runtime import PROVIDER_HOST_TYPES, ProviderGitHostAdapter
+from .ssh_runtime import SshHostAdapter
 
-SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git", "github") + PROVIDER_HOST_TYPES
+SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git", "github", "remote_ssh") + PROVIDER_HOST_TYPES
 
 
 def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapter:
@@ -20,4 +21,6 @@ def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapte
         return GitHubHostAdapter(config)
     if host_type in PROVIDER_HOST_TYPES:
         return ProviderGitHostAdapter(config, provider_id=host_type)
+    if host_type == "remote_ssh":
+        return SshHostAdapter(config)
     raise UnsupportedHostTypeError(host_type)

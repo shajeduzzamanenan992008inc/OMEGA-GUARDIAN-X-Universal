@@ -20,6 +20,7 @@ class HostType(str, Enum):
     AWS_CODECOMMIT = "aws_codecommit"
     GENERIC_GIT = "generic_git"
     REMOTE_WORKSPACE = "remote_workspace"
+    REMOTE_SSH = "remote_ssh"
     CLOUD_WORKSPACE = "cloud_workspace"
     UNKNOWN = "unknown"
 
