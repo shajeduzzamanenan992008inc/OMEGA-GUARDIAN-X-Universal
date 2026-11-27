@@ -4,11 +4,14 @@
 `shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal`.
 
 **Snapshot:** 2026-11-27. The earlier pass started from `71fcbbc`; the owner
-merged PR #19, #20, #21, #22, #23 and #24. The follow-up pass for the GitHub
-host write lifecycle starts from `origin/main` `4e764de` (merge of PR #22) and
-the current feature branch is `feat/github-write-lifecycle` at `ccfcb6d`
-(HOST-06: implement GitHub host write operations with approval gates), merged
-into `main` as PR #24 (`1d6b07c`). No direct `main` edits were made.
+merged PR #19, #20, #21, #22, #23 and #24. The GitHub host write lifecycle pass
+ran on `feat/github-write-lifecycle` at `ccfcb6d` and was merged as PR #24
+(`1d6b07c`).
+
+The current pass implements the host-adapter phase of
+`OMEGA_GUARDIAN_X_MEGA_REMAINING_WORK_LIST.md` on branch
+`feat/docker-host-adapter` (HOST-09 Docker at `169eb74`, HOST-10 Kubernetes at
+`53dbd7a`). No direct `main` edits were made and nothing was pushed.
 
 This tracker is an evidence table, not a roadmap. A row is only `VERIFIED`
 when a command or external system was checked in this pass (or an explicitly
@@ -34,9 +37,11 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **754 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2) — added 47 GitHub write lifecycle tests |
+| Canonical suite `python -m pytest -q` | **884 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2) — includes HOST-09 Docker (29) and HOST-10 Kubernetes (83) adapter suites |
 | Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py tests/test_github_write_lifecycle.py -q` | **136 passed**, exit 0; four files collect 29 + 47 + 47 tests |
-| Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
+| Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (75.24 s, re-run in this pass) |
+| Host regression `python -m pytest tests/test_host_kubernetes_runtime.py tests/test_host_docker_runtime.py tests/test_host_ssh_runtime.py tests/test_host_contract.py tests/test_host_lifecycle.py -q` | **155 passed**, exit 0 |
+| Kubernetes CLI registration (temp `OGX_HOME`) | `ogx host register --type kubernetes --provider local --name k8s-test` → host id + `machine_host_id`, exit 0; `host list`, `host status`, `host capabilities <id>` exit 0; `host connect <id>` exits 1 with `kubectl executable was not found on PATH` (fail-closed) |
 | Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`: `IMPORT_OK 0.8.0a1`, `ogx patch --help` and `ogx workflow --help` both exit 0 |
 | Performance baseline | `_dev/tools/benchmark_baseline.py --files 1000 --runs 3`: 1,021 files scanned in **3.53 s** median (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, workflow create 56.9 ms / status 29.7 ms; see `docs/PERFORMANCE_BASELINE.md` |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
@@ -54,7 +59,9 @@ limited (for example mocked transport or one OS).
 
 Not executed in this pass: Python 3.11–3.13 locally (hosted CI runs them on
 `ubuntu-latest`), macOS, a second drive/removable volume, Docker sandbox
-execution, any live provider API call with credentials, release signing.
+execution, **live SSH / Docker / Kubernetes host operations** (no authorized
+SSH target, no Docker daemon, no kubectl binary or cluster on this machine),
+any live provider API call with credentials, release signing.
 
 ## Phase 0 — Repository inventory
 
@@ -120,7 +127,7 @@ execution, any live provider API call with credentials, release signing.
 | HOST-07 | GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit host adapters | `hosts/adapters/provider_runtime.py` wraps each canonical provider adapter: shared read surface + one approval-gated PR/merge-request write, capabilities derived from adapter introspection | `tests/test_host_provider_runtime.py` (mocked transport); no live provider call | TESTED |
 | HOST-08 | Remote SSH host | `hosts/adapters/ssh_runtime.py` (`SshHostAdapter`): OpenSSH client, StrictHostKeyChecking=yes, BatchMode=yes, key auth, known_hosts, bounded commands, traversal guards, redaction; registered in `runtime_factory.py` as `remote_ssh`; capability matrix entry added. Live SSH verification remains BLOCKED (no authorized target). | `tests/test_host_ssh_runtime.py` (18 passed, mocked transport) | TESTED |
 | HOST-09 | Docker host | `hosts/adapters/docker_runtime.py` (`DockerHostAdapter`): Docker CLI, fail-closed daemon validation (docker info), argument arrays (no shell), bounded output, redacted errors, container/image inspection, container file read via docker cp with tar parsing and traversal guards; registered in `runtime_factory.py` as `docker`; capability matrix entry added. Live Docker verification remains BLOCKED (no Docker daemon available). Mutations/exec/pull/build intentionally not implemented. | `tests/test_host_docker_runtime.py` (29 passed, mocked transport) | TESTED |
-| HOST-10 | Kubernetes host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
+| HOST-10 | Kubernetes host | `hosts/adapters/kubernetes_runtime.py` (`KubernetesHostAdapter`, ~1780 lines): read-only, namespace-scoped inspection of namespaces, pods, deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs, services, ingresses, network policies, configmaps (metadata only), secrets (metadata only), PVC/PV/storage classes. Pinned and verified context; TLS verification always on (`insecure-skip-tls-verify` rejected); `--kubeconfig` trusted-path only; argument arrays (no shell); bounded output, `--tail`/`--limit-bytes` pod logs; LBAC-style label-selector grammar with `in`/`notin`; namespace allowlist; cluster-scope operations refused; Secret values never returned; JWT/token/password redaction in logs and errors; typed `kubectl_failed` mapping; mutation/exec/port-forward/Helm not implemented or advertised. Registered in `runtime_factory.py` as `kubernetes`, `HostType.KUBERNETES`, `HostCapability` members, capability-matrix row and the CLI `host register --type` choices. Live cluster verification remains BLOCKED (no kubectl binary and no authorized cluster on this machine). | `tests/test_host_kubernetes_runtime.py` (83 passed, mocked transport); CLI register/list/status/capabilities verified; `host connect` fails closed without kubectl | TESTED |
 | HOST-11 | Cloud workspace hosts | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-12 | Health, recovery, session lifecycle | `hosts/lifecycle.py` 12 states, bounded health/recovery | lifecycle suite | TESTED |
 | HOST-13 | Cross-process failover/reconnect | process-local sessions only | — | UNSUPPORTED |
