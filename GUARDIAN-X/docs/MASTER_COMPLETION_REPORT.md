@@ -625,3 +625,42 @@ ID-10/11/12/13 remain **PARTIAL or BLOCKED** for physical/external evidence:
 second volume, removable media, second machine and a GitHub token are all absent.
 ID-14 needs an owner decision on whether signed attestation is required, and
 ID-15 needs the owner to ratify D1–D12; neither is invented here.
+
+## 18. Addendum — Release artifact checksums (REL-02)
+
+**Date:** 2026-11-27
+
+Checksums were previously copied from build output by hand. Now they are
+generated and verified by code.
+
+- `src/ogx/artifacts.py`: `sha256_file`, `describe_artifacts`, `render_sums`,
+  `render_manifest`, `write_manifests`, `parse_sums`, `verify_sums`.
+- `ogx release manifest <files> [--sums PATH] [--manifest PATH] [--version V]`
+  writes a `sha256sum`-compatible `SHA256SUMS` and an optional JSON manifest with
+  schema version, release version and exact names/sizes/digests.
+- `ogx release verify <SHA256SUMS> [--directory DIR]` returns exit 0 only when
+  every entry matches, exit 1 on mismatch/missing/unsafe, exit 2 on a malformed
+  manifest.
+- `_dev/tools/make_dist.py` writes `<zip>.sha256` automatically and prints the
+  digest; `.github/workflows/ci.yml` gained a "Verify artifact checksums" step
+  that runs `sha256sum -c` and `ogx release verify` on the built drop-in.
+
+Reproducibility: the JSON manifest has no timestamp and artifacts are sorted by
+name, so identical inputs produce identical manifest bytes (asserted by test).
+
+Hostile input: verification rejects `..`, path separators, drive prefixes,
+reserved names, symlinks, duplicate entries and malformed lines, so a manifest
+cannot be used to hash files outside the artifact directory.
+
+Verification executed:
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests/test_artifacts.py -q` | **20 passed, 1 skipped** |
+| `python -m pytest tests -q` | **971 passed, 21 skipped, 119 subtests passed**, exit 0 (168.68 s) |
+| `python _dev/tools/make_dist.py /tmp/dropin-test.zip` + `sha256sum -c` | 346 files, `dropin-test.zip: OK` |
+| `python -m ogx release verify /tmp/dropin-test.zip.sha256 --directory /tmp` | exit 0, `all_ok: true` |
+
+REL-02 is `TESTED` for locally built artifacts. Signing/provenance (REL-04) and
+reproducible builds (REL-05) remain `UNSUPPORTED`, and publishing (REL-07)
+remains `BLOCKED` on owner authorization.
