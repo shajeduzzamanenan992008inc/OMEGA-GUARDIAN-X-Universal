@@ -37,7 +37,7 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **904 passed, 19 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 149.45 s) — includes HOST-09 Docker (29), HOST-10 Kubernetes (83) and HOST-13 leases (20) suites |
+| Canonical suite `python -m pytest tests -q` | **942 passed, 20 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 167.76 s) — includes HOST-09 Docker (29), HOST-10 Kubernetes (83), HOST-13 leases (20) and SEC-12/AI-05 sandbox isolation (38 passed, 1 skipped) suites |
 | Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py tests/test_github_write_lifecycle.py -q` | **136 passed**, exit 0; four files collect 29 + 47 + 47 tests |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (75.24 s, re-run in this pass) |
 | Host regression `python -m pytest tests/test_host_kubernetes_runtime.py tests/test_host_docker_runtime.py tests/test_host_ssh_runtime.py tests/test_host_contract.py tests/test_host_lifecycle.py -q` | **155 passed**, exit 0 |
@@ -89,10 +89,10 @@ any live provider API call with credentials, release signing.
 | SEC-09 | Approval-gated remote writes | `platform/operations.py`; GitHub host `create_pull_request(approved=...)` | `tests/test_host_github_runtime.py` | TESTED |
 | SEC-10 | Differential secret scanning | GitHub secret scanning | UI 0 open / 0 closed | VERIFIED |
 | SEC-11 | Dependency vulnerability/malware scanning | GitHub Dependabot | UI 0 open / 0 closed each | VERIFIED |
-| SEC-12 | Container sandbox for project execution | `sandbox.py` immutable image + no network + dropped capabilities | no Docker locally; fail-closed code only | PARTIAL |
+| SEC-12 | Container sandbox for project execution | `sandbox.py`: digest-pinned image (tags rejected), daemon preflight, no implicit pull, `--network none`, `--ipc none`, read-only root, `--cap-drop ALL`, `no-new-privileges`, pids 96, memory + swap equal, CPU cap, non-root uid/gid 10001, `noexec/nosuid` tmpfs, explicit env allowlist (no host env forwarded), no socket/volume mount, disposable snapshot, named container force-removed on success/timeout/cancel/daemon failure, 20k output bound, argument-array-only execution. Snapshot excludes VCS/dependency dirs, `.ssh/.aws/.gnupg/.kube/.docker`, `.env*`, key/credential files and never follows symlinks. | `tests/test_sandbox_isolation.py` (38 passed, 1 skipped: symlink creation) with a mocked Docker client; `ogx sandbox plan` exit 0. **Live Docker daemon/image verification and SEC-12's runtime enforcement proof remain BLOCKED** (no docker binary on this machine). Docs: `docs/SECURITY_MODEL.md` T-10..T-12. | TESTED (mocked; live BLOCKED) |
 | SEC-13 | OS-level isolation claim | none claimed; container is documented as a restricted boundary | `docs/SECURITY_MODEL.md` | VERIFIED |
 | SEC-14 | Independent security review | not performed | requires an external reviewer | BLOCKED |
-| SEC-15 | Threat model | `docs/SECURITY_MODEL.md` | new section covers patch engine, lease reclaim, GitHub host and state data; not an independent review | PARTIAL |
+| SEC-15 | Threat model | `docs/SECURITY_MODEL.md` §"Threat model (SEC-15)": 10 trust boundaries (TB-1..TB-10), assumed attacker capabilities, 20 threats (T-01..T-20) each with enforced control, test mapping and residual risk, abuse cases out of scope, and an explicit list of documented-but-not-enforced controls (SEC-14, REL-04/05, ENT-02..06, WORM audit, seccomp/network allowlisting). | documentation review: every cited test file exists except where the row says no suite exists (T-13 plugins); controls cross-checked against `sandbox.py`, lease store, host adapters, transport and audit code | IMPLEMENTED (not an independent review) |
 
 ## Phase 2 — Universal project identity
 
@@ -156,7 +156,7 @@ any live provider API call with credentials, release signing.
 | AI-02 | Root-cause/planning/impact | `impact.py`, `guardian.plan_safe_fixes`, triage | impact/pipeline tests | TESTED |
 | AI-03 | Controlled patch application and rollback | `patching.py` (exact-match, hash, backup, audit) | 12 tests + CLI tests | TESTED |
 | AI-04 | Generic automated patch generation from findings | only narrow `.env` ignore fix exists | `guardian.apply_safe_fixes` | PARTIAL |
-| AI-05 | Sandboxed test execution | orchestrator `test` stage uses pinned-image sandbox | Docker unavailable locally; stage fails closed | PARTIAL |
+| AI-05 | Sandboxed test execution | orchestrator `stage_test` requires a configured argument-array command + pinned image and fails closed with `sandbox_unavailable`/`missing_sandbox_image`/`missing_test_command`; execution goes through the hardened `run_in_sandbox` (timeouts, cancellation cleanup, resource caps, deterministic env, read-only root, no network, disposable snapshot). | `tests/test_sandbox_isolation.py` (38 passed, 1 skipped) + `tests/test_orchestrator.py` (33 passed with universal modules); live Docker run of a real test command remains BLOCKED | TESTED (mocked; live BLOCKED) |
 | AI-06 | Static security gate | `secure` stage + scanner | orchestrator tests | TESTED |
 | AI-07 | Review with diff/risk/approval | workflow `review` stage, approvals, audit | orchestrator tests | PARTIAL |
 | AI-08 | Evolution with versioned changes and rollback | patch plans + audit + workflow summary; no migration engine | tests | PARTIAL |

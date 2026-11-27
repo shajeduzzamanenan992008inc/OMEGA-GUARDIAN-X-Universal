@@ -130,3 +130,89 @@ implement mutating operations (start/stop/rm/build/pull/exec/mounts). Docker
 daemon access itself can grant substantial host privileges; treat any reachable
 daemon as a high-trust boundary and do not expose it to untrusted analyzed
 code. Live verification of the adapter is blocked in this environment.
+
+## Threat model (SEC-15)
+
+This section is the maintained threat model for 0.8.0a1. It is an internal
+engineering artefact: it maps every material threat to a control and, where a
+control exists, to the test that exercises it. It is **not** an independent
+security review (SEC-14 remains blocked on an external reviewer).
+
+### Trust boundaries
+
+| # | Boundary | Trusted side | Untrusted side |
+| --- | --- | --- | --- |
+| TB-1 | Repository content | OGX process | files, names, README text, prompts, configs inside a target repository |
+| TB-2 | Local host / filesystem | user-owned OS | project files, symlinks, mounts, other users' processes |
+| TB-3 | Provider APIs (GitHub and six others) | OGX transport with validated DNS and TLS | provider responses, repository metadata, webhook payloads |
+| TB-4 | Host adapters (SSH / Docker / Kubernetes) | local client binaries and kubeconfig/docker config | remote hosts, clusters, container images, daemon responses |
+| TB-5 | Container sandbox | Docker daemon + host kernel | project test code executing inside the container |
+| TB-6 | Plugin / skill runtime | signed and permissioned manifests | third-party plugin code and manifests |
+| TB-7 | Identity and relocation | owner-approved identity record | copied state directories, USB media, second machines, Git remotes |
+| TB-8 | Enterprise data plane | authenticated tenant context | API clients, dashboard sessions, queue payloads, worker input |
+| TB-9 | Release pipeline | owner-approved signing keys | build environment, dependencies, artefact consumers |
+| TB-10 | Cross-process host session | lease holder with current fencing token | other local processes, crashed or partitioned holders |
+
+### Attacker capabilities assumed
+
+- Can write arbitrary files, names, branches and prompts inside a target
+  repository (TB-1), including `.env`, `AGENTS.md`, test scripts and symlinks.
+- Can reach the network from the host (not from the sandbox), and can serve
+  malicious provider or registry responses.
+- Can obtain a provider token with limited scopes (not the owner's full rights).
+- Can run a local process as the same user and race the CLI/worker.
+- Cannot read kernel memory, cannot forge TLS certificates, and does not control
+  the Docker daemon unless explicitly stated.
+
+### Threats, controls and verification
+
+| ID | Threat | Boundary | Control (enforced in code) | Verification | Residual risk |
+| --- | --- | --- | --- | --- | --- |
+| T-01 | Path traversal / symlink escape when reading project files | TB-1, TB-2 | resolved-root containment, `allowed_roots`, symlink refusal, bounded sizes | `tests/test_engines.py`, `tests/test_scanner.py`, `tests/test_patching.py`, `tests/test_host_contract.py` | TOCTOU between check and read remains possible on a hostile host |
+| T-02 | Secret values leak into reports, logs or audit events | TB-1, TB-3 | value redaction before persistence, redacted host/provider errors, no secret in sandbox env | `tests/test_patching.py`, `tests/test_host_kubernetes_runtime.py`, `tests/test_sandbox_isolation.py` | Heuristic redaction can miss novel formats |
+| T-03 | Prompt injection inside scanned content overrides agent rules | TB-1 | content is data: reports and prompts never execute repository instructions | `tests/test_intelligence_integration.py` | Model-level prompt injection cannot be fully eliminated |
+| T-04 | DNS rebinding / SSRF to internal services | TB-3 | resolve-once, address validation, redirect refusal, no proxy support | `tests/test_network_policy.py`, `tests/test_transport_bounds.py` | A compromised resolver can still lie once |
+| T-05 | Provider token compromise or cross-provider reuse | TB-3 | per-provider env vars, token never logged or persisted, minimum-scope guidance | `tests/test_provider_contract.py`, `tests/test_transport_bounds.py` | A stolen token is usable until revoked; no revocation feed |
+| T-06 | Webhook replay or forged delivery | TB-3, TB-8 | HMAC verification over the raw body, delivery-id dedupe, timestamp window | `tests/test_webhooks.py` | Local dedupe store is not a distributed nonce service |
+| T-07 | Unsafe Docker host operations (privileged containers, socket mounts, exec) | TB-4 | read-only inspection only; no exec/start/stop/rm/build/pull; argument arrays; bounded output | `tests/test_host_docker_runtime.py` | Daemon access itself is high privilege |
+| T-08 | Kubernetes Secret disclosure or cluster-wide reach | TB-4 | Secret metadata only, namespace allowlist, cluster-scope refusal, TLS always verified, pinned context | `tests/test_host_kubernetes_runtime.py` | A cluster admin kubeconfig still grants admin |
+| T-09 | SSH host-key substitution / MITM | TB-4 | `StrictHostKeyChecking=yes`, `BatchMode=yes`, known_hosts required, bounded commands | `tests/test_host_ssh_runtime.py` | A poisoned known_hosts entry is trusted |
+| T-10 | Malicious project code escapes the sandbox | TB-5 | network none, read-only root, all capabilities dropped, `no-new-privileges`, pids/memory/cpu caps, swap disabled, `ipc none`, non-root user, disposable snapshot, no socket mount | `tests/test_sandbox_isolation.py` | Kernel/Docker daemon exploits are out of scope; not a VM |
+| T-11 | Credentials or home directories copied into the sandbox snapshot | TB-5 | excluded dirs/names/suffixes, no symlink following, per-file and total caps | `tests/test_sandbox_isolation.py` | A credential in an unexpected filename inside a copied file is not detected |
+| T-12 | Container left running after timeout, cancel or client crash | TB-5 | named container, force-remove on timeout/cancel/finally, `--rm` for the normal path | `tests/test_sandbox_isolation.py` | Daemon unreachable at cleanup time leaves the container until daemon recovery |
+| T-13 | Unsigned or over-privileged plugin execution | TB-6 | plugin execution stays disabled; manifests validated, permissions declared, revocation recorded | none yet: no plugin test suite exists; plugin execution remains disabled (see PLG-02..05 rows) | PLG-06 restriction preserved; no third-party execution |
+| T-14 | Replayed or stale approval authorises a different change | TB-1, TB-9 | approval bound to plan hash + base revision + expiry; stale approval rejected | `tests/test_patching.py`, `tests/test_github_write_lifecycle.py` | A human can still approve a malicious but correctly hashed plan |
+| T-15 | Identity forgery during relocation | TB-7 | signed identity record, hash-chained journal, verification before adoption | `tests/test_identity_vectors.py`, `tests/test_identity_lifecycle_cli.py`, `tests/test_relocation_engine.py` | Owner ratification (ID-15) is a human decision, still open |
+| T-16 | Cross-tenant data access | TB-8 | organization-scoped queries, membership checks, tenant-scoped caches/queues in the local prototype | `tests/test_enterprise_governance.py` | Not verified against a real PostgreSQL/IdP deployment |
+| T-17 | Concurrent or stale host-session mutation | TB-10 | SQLite lease + monotonic fencing token, validate before connect/health, fail closed on theft, dead-PID recovery | `tests/test_host_leases.py` | Wall-clock expiry, PID reuse and non-locking network filesystems |
+| T-18 | Malicious repository content drives an unbounded scan | TB-1 | file/byte caps, excluded directories, bounded output, timeouts | `tests/test_scanner.py`, `tests/test_pipeline.py` | Extremely large single files can still cost I/O |
+| T-19 | Supply-chain compromise of a dependency or image | TB-9 | digest-pinned images, no implicit pull, dependency review CI, CodeQL | `.github/workflows/`, `tests/test_sandbox_isolation.py` | No reproducible-build or signing evidence yet (REL-02/04/05) |
+| T-20 | Audit log tampering | TB-1, TB-8 | hash-chained audit records, `ogx platform audit` verification | `tests/test_platform_engine.py` | Not signed, not WORM, truncation of newest records undetected |
+
+### Abuse cases explicitly out of scope
+
+- A hostile local administrator, kernel compromise or a compromised Docker
+  daemon.
+- Denial of service from an attacker who can already run arbitrary code as the
+  same user.
+- Forging TLS certificates or defeating the pinned transport's DNS validation.
+- Recovering secrets that were already exfiltrated before OGX ran.
+
+
+### Documented-but-not-enforced controls
+
+These are described in documentation only and must not be claimed as enforced:
+
+- Independent security review and penetration test (SEC-14, PRD-02).
+- Signed release provenance and reproducible builds (REL-04, REL-05).
+- Full OS-level isolation on Windows without Docker.
+- Seccomp profile management and network allowlisting inside the sandbox.
+- Immutable (WORM) or externally anchored audit storage.
+- Live enterprise SSO/MFA, real tenant isolation and KMS-backed encryption
+  (ENT-02..06 remain not started).
+
+### Maintenance rule
+
+A new trust boundary, a new external input or a new privileged operation
+requires a threat-model row before it is merged. A control row without a test
+or a documented residual risk is a defect in this document.
