@@ -51,6 +51,10 @@ CAPABILITY_METHODS: dict[Capability, str] = {
     Capability.COMMIT_INSPECT: "get_commit",
     Capability.FILE_READ: "read_file",
     Capability.TREE_READ: "read_tree",
+    Capability.BRANCH_CREATE: "create_branch",
+    Capability.FILE_WRITE: "write_file",
+    Capability.COMMIT_CREATE: "create_commit",
+    Capability.REF_UPDATE: "update_reference",
     Capability.PULL_REQUEST_LIST: "list_pull_requests",
     Capability.PULL_REQUEST_CREATE: "create_pull_request",
     Capability.ISSUE_LIST: "list_issues",
@@ -370,6 +374,70 @@ class ProviderAdapter:
         )
 
     # ----------------------------------------------------------- write contract
+    def create_branch(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        from_branch: str | None = None,
+        from_sha: str | None = None,
+    ) -> Branch:
+        self.require(Capability.BRANCH_CREATE)
+        raise CapabilityUnavailableError(
+            f"{self.provider_id} does not implement branch creation.",
+            provider=self.provider_id,
+            capability=Capability.BRANCH_CREATE.value,
+        )
+
+    def write_file(
+        self,
+        repository: str,
+        *,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        expected_sha: str | None = None,
+    ) -> dict[str, Any]:
+        self.require(Capability.FILE_WRITE)
+        raise CapabilityUnavailableError(
+            f"{self.provider_id} does not implement single-file writes.",
+            provider=self.provider_id,
+            capability=Capability.FILE_WRITE.value,
+        )
+
+    def create_commit(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        message: str,
+        files: Any,
+        expected_parent: str | None = None,
+    ) -> Any:
+        self.require(Capability.COMMIT_CREATE)
+        raise CapabilityUnavailableError(
+            f"{self.provider_id} does not implement commit creation.",
+            provider=self.provider_id,
+            capability=Capability.COMMIT_CREATE.value,
+        )
+
+    def update_reference(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        sha: str,
+        expected_old_sha: str | None = None,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        self.require(Capability.REF_UPDATE)
+        raise CapabilityUnavailableError(
+            f"{self.provider_id} does not implement reference updates.",
+            provider=self.provider_id,
+            capability=Capability.REF_UPDATE.value,
+        )
+
     def create_pull_request(
         self, repository: str, *, title: str, body: str, head: str, base: str
     ) -> PullRequest:
