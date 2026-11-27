@@ -389,3 +389,278 @@ unsupported (`HOST-07` unchanged). Remote/cloud hosts (`HOST-08..11`), merge,
 deployment and force-push remain absent. The overall classification remains
 **DEVELOPMENT INCOMPLETE — PRODUCTION VERIFICATION BLOCKED**; nothing here is
 a production-readiness claim.
+
+## 14. Addendum — Host adapter pass (HOST-09, HOST-10)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter` (continues the Docker HOST-09 work)
+**HEAD after this pass:** `53dbd7a` — `feat(hosts): implement Kubernetes host
+adapter (HOST-10)`
+**Base `main`:** `df618f8`; no direct `main` edits, no push, no PR, no merge, no
+tag, no release, no visibility change, no `LICENSE` change.
+
+### 14.1 What was implemented
+
+| ID | Before | After | Evidence |
+| --- | --- | --- | --- |
+| HOST-09 Docker host | `TESTED` (adapter committed at `169eb74`) | unchanged: `TESTED` | `tests/test_host_docker_runtime.py` 29 passed (mocked transport) |
+| HOST-10 Kubernetes host | `DESCRIPTOR_ONLY` | `TESTED` — real runtime adapter | `tests/test_host_kubernetes_runtime.py` 83 passed (mocked transport); CLI registration verified |
+
+`KubernetesHostAdapter` (`src/ogx/hosts/adapters/kubernetes_runtime.py`)
+performs read-only, namespace-scoped inspection through a locally installed
+`kubectl`:
+
+- namespaces, pods, deployments, replicasets, statefulsets, daemonsets, jobs,
+  cronjobs, services, ingresses, network policies, configmaps and secrets
+  (**metadata only**), PVCs, PVs and storage classes;
+- pinned context that is verified against the live cluster before use;
+- TLS verification enforced (`--insecure-skip-tls-verify` rejected, `https`
+  endpoints required); `--kubeconfig` accepted only from trusted paths;
+- argument arrays only (no shell), bounded timeouts and output caps, `--tail` /
+  `--limit-bytes` for pod logs;
+- label-selector grammar (`key=value`, `!=`, `in`, `notin`) validated before it
+  reaches kubectl; namespace allowlist; cluster-scope operations refused;
+- Secret values are never fetched or returned (metadata only); JWT, bearer
+  token and password-shaped values are redacted from logs and errors;
+- typed error mapping (`kubectl_failed`, `kubectl_timeout`,
+  `kubectl_unavailable`); mutation, exec, port-forward and Helm operations are
+  neither implemented nor advertised.
+
+Registration: `runtime_factory.py` (`kubernetes`), `HostType.KUBERNETES`,
+`HostCapability` members, capability-matrix row, CLI `host register --type`
+choices, and remote host sessions no longer require a local filesystem root.
+
+Bugs fixed while integrating: duplicate `kubernetes_workspace` provider family
+(registry `DuplicateEntityError`), capability ids missing from `HostCapability`
+(host registration failed), `HostHealth.latency_ms` absence, Deployment `spec`
+assumed to be a mapping, `kubectl get -o json` List objects not unwrapped, and
+the adapter rejecting its own `--output=json` flag.
+
+### 14.2 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests -q` | **884 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 125.73 s) |
+| `python -m pytest tests/test_host_kubernetes_runtime.py -q` | **83 passed**, exit 0 |
+| `python -m pytest tests/test_host_docker_runtime.py tests/test_host_ssh_runtime.py tests/test_host_contract.py tests/test_host_lifecycle.py -q` | **72 passed**, exit 0 |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK — structure, versions and packaging declarations agree |
+| CLI `host register --type kubernetes` → `host list` → `host status` → `host capabilities` (temporary `OGX_HOME`) | exit 0; capabilities and host id printed |
+| CLI `host connect <id>` without kubectl | exit 1, `kubectl executable was not found on PATH` (fail-closed) |
+
+The previous `tests/test_host_kubernetes_runtime.py` could not be collected at
+all (`re.PatternError` at import time from a malformed label-selector pattern,
+plus contradictory assertions), so it provided no valid evidence. It was
+replaced by a coherent contract and security suite covering configuration
+validation, context pinning, TLS policy, namespace allowlists, secret
+redaction, injection, timeouts, output bounds, capability truth and the
+factory/capability-matrix agreement.
+
+### 14.3 Blocked verification
+
+| Requirement | Blocker | What exists instead |
+| --- | --- | --- |
+| HOST-08 live SSH | no authorized SSH target | adapter + 18 mocked tests |
+| HOST-09 live Docker | no Docker daemon / `docker` binary on PATH | adapter + 29 mocked tests |
+| HOST-10 live Kubernetes | no `kubectl` binary and no authorized cluster/context | adapter + 83 mocked tests |
+
+No live host operation was performed in this pass, and no mocked result is
+presented as live evidence.
+
+### 14.4 Accounting after this pass
+
+HOST-10 moved `DESCRIPTOR_ONLY` → `TESTED`. HOST-11 (cloud workspace hosts)
+remains `DESCRIPTOR_ONLY`; HOST-13/14/15 were not attempted in this pass. The
+remaining backlog families (SEC-12/14/15, ID-10..15, PROV-05/07, AI-04/05/07/
+08/10, ORC-13, PLG-02..05, ENT-02..10, UI-04..06, TST-06/07/11, PRF-03/04,
+DOC-05, REL-02/04/05/07, PRD-01..06) are untouched by this pass and stay
+`NOT_STARTED` in the tracker. The overall classification remains **DEVELOPMENT
+INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
+
+## 15. Addendum — Cross-process host leases (HOST-13) and GitHub CLI registration (HOST-15)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter` (same host-adapter phase)
+
+### 15.1 HOST-13 — implemented
+
+`src/ogx/hosts/leases.py` adds a durable, SQLite-backed lease store under
+`OGX_HOME/hosts/leases.db` with monotonic fencing tokens, and
+`HostSessionManager` now enforces ownership:
+
+| Moment | Behaviour |
+| --- | --- |
+| `create_session` | lease acquired before the session is usable; released if registration fails |
+| `connect` | lease validated before the idempotent "already connected" return, renewed after a successful connect |
+| `health` | validated and renewed |
+| `recover` | re-acquired (steals only when recoverable) — the failover path |
+| `disconnect` / `shutdown` / `dispose` | released |
+| lease violation | `LeaseLostError`, audit `host.session.lease_lost`, fail closed |
+
+Dead local processes are detected by PID liveness (Windows uses
+`OpenProcess` + `GetExitCodeProcess`; `os.kill(pid, 0)` is never used because on
+Windows it terminates the target). A dead owner's lease is recoverable
+immediately; a remote owner's lease is recoverable only by TTL expiry.
+`get_session_manager()` uses the durable store and releases this process's
+leases via `atexit`, so a short CLI command does not leave a lease behind.
+
+Limitations are documented in `docs/HOST_CROSS_PROCESS_LEASES.md`: leases are a
+coordination mechanism, not a security boundary; expiry depends on the local
+clock; a shared network state directory is unsupported; there is no consensus or
+quorum; PID reuse delays (but cannot defeat) recovery.
+
+### 15.2 HOST-15 — verified
+
+Executed in a temporary `OGX_HOME`:
+
+| Command | Result |
+| --- | --- |
+| `ogx host register --type github --provider github --name gh-test --identifier shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal` | exit 0, host id + machine host id |
+| `ogx host list` | exit 0, host listed with capabilities |
+| `ogx host status <id> --json` | exit 0, `persisted_status: registered`, capability statuses |
+| `ogx host sessions` | exit 0, `No live host sessions in this process.` |
+| `ogx host connect <id>` | exit 1, fail-closed `GitHub host sessions require a credential in OGX_GITHUB_TOKEN` |
+
+This is CLI registration evidence only. Live authenticated GitHub operations
+(`HOST-14`) remain `BLOCKED`: no owner-authorized token was supplied.
+
+### 15.3 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests -q` | **904 passed, 19 skipped, 119 subtests passed**, exit 0 (149.45 s) |
+| `python -m pytest tests/test_host_leases.py -q` | **20 passed, 1 skipped** (symlink creation unavailable) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK |
+| 6 concurrent OS processes acquiring one host lease | exactly one winner (`won 1`), five `LeaseHeldError`; token stays 1 |
+| Child process killed while holding a 2 s lease | recovered by another process with fencing token 2 |
+| Dead local PID behind a 600 s lease | recovered immediately, token 2 |
+| Stale owner after theft | `health`/`connect` raise `LeaseLostError`; audit `host.session.lease_lost` |
+| 3 sequential `ogx host connect` CLI processes | exit 0 each, final fencing token 3, no lease left behind |
+
+### 15.4 Accounting after this pass
+
+HOST-13 `UNSUPPORTED` → `TESTED`. HOST-15 `IMPLEMENTED` → `TESTED`.
+HOST-14 stays `BLOCKED` (no authorized token). HOST-11 (cloud workspace hosts)
+stays `DESCRIPTOR_ONLY` because selecting a workspace provider is an owner
+decision that has not been given. Overall classification remains **DEVELOPMENT
+INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
+
+## 16. Addendum — Sandbox hardening (SEC-12 / AI-05) and threat model (SEC-15)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter`
+
+### 16.1 SEC-12 / AI-05 — what changed in `src/ogx/sandbox.py`
+
+The sandbox existed but had gaps this pass closed:
+
+| Gap | Fix |
+| --- | --- |
+| Daemon failure was reported as "image missing" | `docker info` preflight with its own message; image check is separate |
+| A killed docker client could leave the container running | container is named (`ogx-sandbox-<12 hex>`), `--rm` on the normal path, `docker rm -f` on timeout, cancellation and in `finally` |
+| KeyboardInterrupt abandoned the container | caught with `BaseException`, container removed, exception re-raised |
+| Swap could exceed the memory cap | `--memory-swap` equals `--memory` |
+| Shared IPC namespace allowed cross-container IPC | `--ipc none` |
+| Host environment could leak into the container | explicit allowlist only: `HOME=/tmp`, `TMPDIR=/tmp`, `PYTHONDONTWRITEBYTECODE=1` |
+| Snapshot copied `.npmrc`, `.pypirc`, `.netrc`, `kubeconfig`, `*.pem`, `*.key`, `.ssh/.aws/.gnupg/.kube/.docker` | extended name/suffix/dir exclusions, exclusions reported in the result |
+| A shell string could be passed as the command | argument-array-only validation rejects `str`/`bytes` commands (a str was previously iterated character by character) |
+| Output was bounded only in some paths | single `_bounded` helper caps stdout/stderr at 20k |
+
+`ogx sandbox plan` now publishes the enforced policy, the snapshot policy and the
+limitations (`available: false` on this machine).
+
+### 16.2 SEC-15 — threat model
+
+`docs/SECURITY_MODEL.md` gained a full section: 10 trust boundaries, assumed
+attacker capabilities, 20 threats each with enforced control, test mapping and
+residual risk, abuse cases declared out of scope, and an explicit list of
+documented-but-not-enforced controls. This is an internal artefact and is **not**
+SEC-14; the independent review is still blocked on an external reviewer.
+
+### 16.3 Verification executed
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests/test_sandbox_isolation.py -q` | **38 passed, 1 skipped** (symlink creation unavailable) |
+| `python -m pytest tests/test_universal_modules.py tests/test_orchestrator.py -q` | **33 passed** |
+| `python -m pytest tests -q` | **942 passed, 20 skipped, 119 subtests passed**, exit 0 (167.76 s) |
+| `PYTHONPATH=src ... main(['sandbox','plan'])` | exit 0, hardened policy printed, `available: false` |
+| `python _dev/tools/sync_core_from_src.py --check` | OK (sandbox is not part of the drop-in subset) |
+
+### 16.4 Blockers preserved
+
+Live Docker daemon/image verification for SEC-12, AI-05 and ORC-13 remains
+**BLOCKED**: no `docker` binary or daemon on this machine. The mocked tests prove
+which flags OGX passes and how failures are handled; they do not prove the daemon
+enforces them. SEC-14 stays `BLOCKED` (independent reviewer unavailable).
+
+## 17. Addendum — Relocation media edge cases (ID-10 / ID-11 / ID-12)
+
+**Date:** 2026-11-27
+
+The relocation engine already had plan/apply/verify/recover, a journal, rollback
+and hash-verified idempotent copy. This pass added the media-failure and
+path-independence coverage that the backlog asks for, using simulated media
+because this machine has one fixed volume and no removable drive, second machine
+or authorized GitHub credential.
+
+`tests/test_relocation_media_edges.py` (9 passed):
+
+| Scenario | Assertion |
+| --- | --- |
+| Project moved to a new path | PID, identity hash and raw identity bytes unchanged; no absolute path or hostname in `identity.json` |
+| Copy to a differently named mount path (`MNT/usb-stick/proj`) | identity preserved, content matches, same PID |
+| Permission failure (EACCES) during copy of a move | error propagates, destination rolled back (`rollback: done`), source retained, `source_deleted` false |
+| Full volume (ENOSPC) during copy | rollback, source retained |
+| Device disconnect (EIO) mid-copy | destination removed, source intact, a clean retry completes and verifies |
+| Target that cannot be created (file in place of the media directory) | fails closed, source and blocker untouched |
+| Partial destination | refused with `destination_exists`, no merge |
+| USB reconnected at a new mount path | duplicate identity detected through `verify_relocation`, not a silent fork |
+| Second-machine import copy | PID preserved, no hostname invented |
+
+ID-10/11/12/13 remain **PARTIAL or BLOCKED** for physical/external evidence:
+second volume, removable media, second machine and a GitHub token are all absent.
+ID-14 needs an owner decision on whether signed attestation is required, and
+ID-15 needs the owner to ratify D1–D12; neither is invented here.
+
+## 18. Addendum — Release artifact checksums (REL-02)
+
+**Date:** 2026-11-27
+
+Checksums were previously copied from build output by hand. Now they are
+generated and verified by code.
+
+- `src/ogx/artifacts.py`: `sha256_file`, `describe_artifacts`, `render_sums`,
+  `render_manifest`, `write_manifests`, `parse_sums`, `verify_sums`.
+- `ogx release manifest <files> [--sums PATH] [--manifest PATH] [--version V]`
+  writes a `sha256sum`-compatible `SHA256SUMS` and an optional JSON manifest with
+  schema version, release version and exact names/sizes/digests.
+- `ogx release verify <SHA256SUMS> [--directory DIR]` returns exit 0 only when
+  every entry matches, exit 1 on mismatch/missing/unsafe, exit 2 on a malformed
+  manifest.
+- `_dev/tools/make_dist.py` writes `<zip>.sha256` automatically and prints the
+  digest; `.github/workflows/ci.yml` gained a "Verify artifact checksums" step
+  that runs `sha256sum -c` and `ogx release verify` on the built drop-in.
+
+Reproducibility: the JSON manifest has no timestamp and artifacts are sorted by
+name, so identical inputs produce identical manifest bytes (asserted by test).
+
+Hostile input: verification rejects `..`, path separators, drive prefixes,
+reserved names, symlinks, duplicate entries and malformed lines, so a manifest
+cannot be used to hash files outside the artifact directory.
+
+Verification executed:
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests/test_artifacts.py -q` | **20 passed, 1 skipped** |
+| `python -m pytest tests -q` | **971 passed, 21 skipped, 119 subtests passed**, exit 0 (168.68 s) |
+| `python _dev/tools/make_dist.py /tmp/dropin-test.zip` + `sha256sum -c` | 346 files, `dropin-test.zip: OK` |
+| `python -m ogx release verify /tmp/dropin-test.zip.sha256 --directory /tmp` | exit 0, `all_ok: true` |
+
+REL-02 is `TESTED` for locally built artifacts. Signing/provenance (REL-04) and
+reproducible builds (REL-05) remain `UNSUPPORTED`, and publishing (REL-07)
+remains `BLOCKED` on owner authorization.

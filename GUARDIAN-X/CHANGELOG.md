@@ -234,3 +234,8 @@ New (not part of the original engine):
 - Routed confirmed repair, integration and selected Git/platform writes through email approval by default.
 - Added regression coverage for approval tampering, changed project/Git state, mail delivery failure, identity separation and six-pillar governance.
 - Documented the local-alpha maturity boundary and production SSO, managed database, key management, audit and security requirements.
+
+## Unreleased — Docker host adapter (HOST-09)
+
+- Added `src/ogx/hosts/adapters/docker_runtime.py` (`DockerHostAdapter`): read-only Docker host adapter driving the local Docker CLI with `shell=False`, bounded timeouts/output, identifier validation, path-traversal rejection and redacted errors. Supports daemon validation, container/image listing and inspection, and bounded container file reads via `docker cp` with tar parsing. Registered in `runtime_factory.py` as `docker`; `HostType.DOCKER` and a capability-matrix entry added. Mutating operations (start/stop/rm/build/pull/exec, mounts, networks, volumes) and privileged containers are intentionally not implemented. Live Docker verification is BLOCKED (no daemon available).
+- Added `tests/test_host_docker_runtime.py` (29 tests, mocked transport).

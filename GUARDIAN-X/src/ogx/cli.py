@@ -37,6 +37,7 @@ from .licenses import inventory_licenses
 from .toolchains import discover_toolchains
 from .compatibility import compatibility_report
 from .sandbox import sandbox_plan, run_in_sandbox
+from .artifacts import ArtifactError, verify_sums, write_manifests
 from .enterprise.store import EnterpriseStore
 from .enterprise.approvals import ApprovalManager
 from .enterprise.governance import framework_document
@@ -2173,6 +2174,32 @@ def cmd_sandbox(args: argparse.Namespace) -> int:
         print(f"Sandbox operation failed: {exc}", file=sys.stderr); return 2
 
 
+def cmd_release(args: argparse.Namespace) -> int:
+    """Generate or verify release artifact checksums (REL-02)."""
+    try:
+        action = args.release_action
+        if action == "manifest":
+            artifacts = [Path(item) for item in args.artifacts]
+            sums_path = Path(args.sums) if args.sums else artifacts[0].parent / "SHA256SUMS"
+            result = write_manifests(
+                artifacts,
+                version=args.version or __version__,
+                sums_path=sums_path,
+                manifest_path=Path(args.manifest) if args.manifest else None,
+            )
+            _json_print(result)
+            return 0
+        manifest = Path(args.manifest)
+        text = manifest.read_text(encoding="utf-8")
+        report = verify_sums(text, args.directory or manifest.parent)
+        report["manifest"] = str(manifest)
+        _json_print(report)
+        return 0 if report["all_ok"] else 1
+    except (OSError, ArtifactError) as exc:
+        print(f"Release artifact operation failed: {exc}", file=sys.stderr)
+        return 2
+
+
 def cmd_guardian(args: argparse.Namespace) -> int:
     """Run universal Guardian audits, guarded repairs and Git upgrade workflows."""
     try:
@@ -3171,6 +3198,19 @@ def build_parser() -> argparse.ArgumentParser:
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_action", required=True)
     sandbox_plan_cmd = sandbox_sub.add_parser("plan", help="Inspect local sandbox capability and defaults")
     sandbox_plan_cmd.set_defaults(func=cmd_sandbox)
+
+    release = sub.add_parser("release", help="Generate or verify release artifact checksums")
+    release_sub = release.add_subparsers(dest="release_action", required=True)
+    rel_manifest = release_sub.add_parser("manifest", help="Write SHA256SUMS and a JSON manifest for built artifacts")
+    rel_manifest.add_argument("artifacts", nargs="+", help="Artifact files to checksum")
+    rel_manifest.add_argument("--sums", help="Output path for the sha256sum-compatible file (default: alongside the first artifact)")
+    rel_manifest.add_argument("--manifest", help="Optional JSON manifest output path")
+    rel_manifest.add_argument("--version", help="Release version recorded in the JSON manifest")
+    rel_manifest.set_defaults(func=cmd_release)
+    rel_verify = release_sub.add_parser("verify", help="Verify artifacts against a checksum manifest")
+    rel_verify.add_argument("manifest", help="SHA256SUMS file to verify")
+    rel_verify.add_argument("--directory", help="Directory holding the artifacts (default: the manifest's directory)")
+    rel_verify.set_defaults(func=cmd_release)
     sandbox_run = sandbox_sub.add_parser("run", help="Run a command against a disposable source snapshot")
     sandbox_run.add_argument("path")
     sandbox_run.add_argument("--image", required=True, help="Pre-pulled immutable image@sha256:digest")
