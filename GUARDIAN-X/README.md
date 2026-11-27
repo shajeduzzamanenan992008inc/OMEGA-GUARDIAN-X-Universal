@@ -112,11 +112,14 @@ Docs: `docs/HOST_SESSION_LIFECYCLE.md`, `docs/LOCAL_FILESYSTEM_HOST.md`,
 `docs/HOST_LIFECYCLE_CI_VALIDATION.md`, `docs/HOST_LIFECYCLE_VERIFICATION_REPORT.md`,
 `docs/HOST_ARCHITECTURE.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`.
 
-**Host sessions today:** local filesystem, local Git and a GitHub read surface
-with one approval-gated draft-PR write. The GitHub adapter is covered by mocked
-transport tests only; no live credential was verified. Remote SSH, Docker and
-Kubernetes hosts are **not** implemented, and GitLab/Bitbucket/Gitea/Forgejo/
-Azure DevOps/CodeCommit have provider adapters but no host lifecycle adapter.
+**Host sessions today:** local filesystem, local Git, and an approval-gated Git
+host for **all seven** verified providers — GitHub, GitLab, Bitbucket, Gitea,
+Forgejo, Azure DevOps and AWS CodeCommit. Each remote host exposes the same
+read-only surface (metadata, bounded file read, tree, branches, commits, pull
+requests) plus one approval-gated pull/merge-request write; branch creation,
+file writes, push, merge and deployment are reported as `unsupported`. All seven
+adapters are covered by mocked transport tests only; no live credential was
+verified. Remote SSH, Docker and Kubernetes hosts are **not** implemented.
 Separately, the Git-provider API layer
 (`src/ogx/platform/adapters/`) implements read-only GitHub, GitLab, Bitbucket Cloud,
 Azure DevOps Repos, AWS CodeCommit, Gitea and Forgejo contracts with
@@ -124,6 +127,13 @@ approval-gated writes; `ogx providers list` reports 7 `verified` Git-hosting
 providers and 21 `descriptor_only` entries whose lifecycle operations are declared
 unsupported rather than emulated. No live provider call has been verified from this
 machine (0 credentials configured).
+
+Inbound webhook authenticity is implemented in `ogx.platform.webhooks` for
+GitHub, GitLab, Bitbucket, Gitea and Forgejo (HMAC-SHA256 or shared token,
+constant-time comparison, bounded bodies, event allowlist, optional delivery-id
+replay guard). Azure DevOps and CodeCommit do not sign payloads, so they are
+refused explicitly instead of being treated as verified. No HTTP receiver is
+included; the verifier is a library the caller invokes before parsing a body.
 
 ## Universal provider engine (Milestone G)
 
