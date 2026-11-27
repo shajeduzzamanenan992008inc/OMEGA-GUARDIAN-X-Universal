@@ -179,6 +179,46 @@ class Commit:
 
 
 @dataclass(frozen=True, slots=True)
+class FileChange:
+    """One bounded file change in a commit plan.
+
+    ``expected_sha`` is the blob SHA the operator observed. ``None`` means the
+    path must not exist yet, so an accidental overwrite is refused.
+    """
+
+    path: str
+    content: str
+    expected_sha: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "bytes": len(self.content.encode("utf-8")),
+            "expected_sha": self.expected_sha,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CommitResult:
+    """A commit created through the provider's Git data API."""
+
+    commit_sha: str
+    tree_sha: str
+    parent_sha: str
+    branch: str
+    files: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "commit_sha": self.commit_sha,
+            "tree_sha": self.tree_sha,
+            "parent_sha": self.parent_sha,
+            "branch": self.branch,
+            "files": list(self.files),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class FileContent:
     path: str
     sha: str
@@ -356,7 +396,11 @@ class Page:
 
 @dataclass(frozen=True, slots=True)
 class WritePlan:
-    """Validated plan for a state-changing remote operation."""
+    """Validated plan for a state-changing remote operation.
+
+    ``fingerprint()`` binds an approval to this exact operation and payload; an
+    approval recorded for one plan can never authorise a modified one.
+    """
 
     operation: str
     provider_id: str
@@ -365,6 +409,26 @@ class WritePlan:
     payload: Mapping[str, Any]
     required_permission: str
     destructive: bool = False
+
+    def fingerprint(self) -> str:
+        """Stable SHA-256 over the operation, provider, repository and payload."""
+
+        import hashlib
+        import json
+
+        canonical = json.dumps(
+            {
+                "operation": self.operation,
+                "provider_id": self.provider_id,
+                "repository": self.repository,
+                "destructive": self.destructive,
+                "payload": _clean(dict(self.payload)),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -376,6 +440,7 @@ class WritePlan:
             "required_permission": self.required_permission,
             "destructive": self.destructive,
             "approval_required": True,
+            "plan_fingerprint": self.fingerprint(),
         }
 
 
