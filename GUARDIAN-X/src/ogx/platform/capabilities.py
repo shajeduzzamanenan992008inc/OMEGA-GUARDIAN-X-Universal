@@ -73,6 +73,10 @@ class Capability(str, Enum):
     ISSUE_LIST = "issue_list"
 
     # Git hosting: write (approval-gated)
+    BRANCH_CREATE = "branch_create"
+    FILE_WRITE = "file_write"
+    COMMIT_CREATE = "commit_create"
+    REF_UPDATE = "ref_update"
     PULL_REQUEST_CREATE = "pull_request_create"
     ISSUE_CREATE = "issue_create"
     ISSUE_UPDATE = "issue_update"
@@ -111,6 +115,10 @@ UNAUTHENTICATED_CAPABILITIES: frozenset[Capability] = frozenset(
 #: Capabilities that change remote state and therefore require approval.
 WRITE_CAPABILITIES: frozenset[Capability] = frozenset(
     {
+        Capability.BRANCH_CREATE,
+        Capability.FILE_WRITE,
+        Capability.COMMIT_CREATE,
+        Capability.REF_UPDATE,
         Capability.PULL_REQUEST_CREATE,
         Capability.ISSUE_CREATE,
         Capability.ISSUE_UPDATE,

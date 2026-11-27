@@ -33,6 +33,7 @@ from ..lifecycle import (
 )
 from ...config import state_dir
 from ...platform.capabilities import Capability, CapabilityState
+from ...platform.models import FileChange
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,99})/[A-Za-z0-9_.-]{1,100}$")
 _READ_CAPABILITIES: dict[str, Capability] = {
@@ -42,13 +43,15 @@ _READ_CAPABILITIES: dict[str, Capability] = {
     "commit_read": Capability.COMMIT_LIST,
     "file_read": Capability.FILE_READ,
 }
+_WRITE_CAPABILITIES: dict[str, Capability] = {
+    "branch_create": Capability.BRANCH_CREATE,
+    "file_write": Capability.FILE_WRITE,
+    "commit_create": Capability.COMMIT_CREATE,
+    "push": Capability.REF_UPDATE,
+}
 #: Declared but not implemented by the platform GitHub adapter.
 _UNSUPPORTED = (
-    "file_write",
-    "branch_create",
     "branch_delete",
-    "commit_create",
-    "push",
     "pull_request_merge",
     "deployment",
     "testing",
@@ -181,6 +184,8 @@ class GitHubHostAdapter(HostAdapter):
         result: dict[str, str] = {}
         for name, capability in _READ_CAPABILITIES.items():
             result[name] = _state_of(states.get(capability, CapabilityState.UNSUPPORTED))
+        for name, capability in _WRITE_CAPABILITIES.items():
+            result[name] = _state_of(states.get(capability, CapabilityState.UNSUPPORTED))
         result["pull_request_create"] = _state_of(
             states.get(Capability.PULL_REQUEST_CREATE, CapabilityState.UNSUPPORTED)
         )
@@ -285,3 +290,141 @@ class GitHubHostAdapter(HostAdapter):
             audit_path=state_dir() / "platform" / "audit.jsonl",
         )
         return result.to_dict()
+
+    # -------------------------------------------- write lifecycle (HOST-06)
+    def _audit_path(self):
+        return state_dir() / "platform" / "audit.jsonl"
+
+    def create_branch(
+        self,
+        *,
+        branch: str,
+        from_branch: str,
+        approved: bool,
+        expected_base_sha: str | None = None,
+        actor_subject: str | None = None,
+    ) -> dict:
+        """Create a feature branch from a base branch. Requires approval."""
+
+        self._require_connected()
+        from ...platform.operations import execute_branch_create, plan_branch_create
+
+        adapter = self._platform()
+        plan = plan_branch_create(
+            adapter,
+            self._repository,
+            branch=branch,
+            from_branch=from_branch,
+            expected_base_sha=expected_base_sha,
+        )
+        return execute_branch_create(
+            plan,
+            adapter,
+            approved=approved,
+            actor_subject=actor_subject,
+            audit_path=self._audit_path(),
+            approved_fingerprint=plan.fingerprint(),
+        ).to_dict()
+
+    def write_file(
+        self,
+        *,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        approved: bool,
+        expected_sha: str | None = None,
+        actor_subject: str | None = None,
+    ) -> dict:
+        """Create or update one file. Requires approval and a blob precondition."""
+
+        self._require_connected()
+        from ...platform.operations import execute_file_update, plan_file_update
+
+        adapter = self._platform()
+        plan = plan_file_update(
+            adapter,
+            self._repository,
+            path=path,
+            content=content,
+            message=message,
+            branch=branch,
+            expected_sha=expected_sha,
+        )
+        return execute_file_update(
+            plan,
+            adapter,
+            approved=approved,
+            actor_subject=actor_subject,
+            audit_path=self._audit_path(),
+            approved_fingerprint=plan.fingerprint(),
+        ).to_dict()
+
+    def commit_files(
+        self,
+        *,
+        branch: str,
+        message: str,
+        files: list,
+        approved: bool,
+        expected_parent_sha: str | None = None,
+        actor_subject: str | None = None,
+    ) -> dict:
+        """Create one commit over several files and fast-forward the branch."""
+
+        self._require_connected()
+        from ...platform.operations import execute_file_commit, plan_file_commit
+
+        adapter = self._platform()
+        changes = [
+            item if isinstance(item, FileChange) else FileChange(**dict(item))
+            for item in (files or ())
+        ]
+        plan = plan_file_commit(
+            adapter,
+            self._repository,
+            branch=branch,
+            message=message,
+            files=changes,
+            expected_parent_sha=expected_parent_sha,
+        )
+        return execute_file_commit(
+            plan,
+            adapter,
+            approved=approved,
+            actor_subject=actor_subject,
+            audit_path=self._audit_path(),
+            approved_fingerprint=plan.fingerprint(),
+        ).to_dict()
+
+    def push(
+        self,
+        *,
+        branch: str,
+        sha: str,
+        approved: bool,
+        expected_old_sha: str | None = None,
+        actor_subject: str | None = None,
+    ) -> dict:
+        """Fast-forward a branch ref to an existing commit. Never force-pushes."""
+
+        self._require_connected()
+        from ...platform.operations import execute_ref_update, plan_ref_update
+
+        adapter = self._platform()
+        plan = plan_ref_update(
+            adapter,
+            self._repository,
+            branch=branch,
+            sha=sha,
+            expected_old_sha=expected_old_sha,
+        )
+        return execute_ref_update(
+            plan,
+            adapter,
+            approved=approved,
+            actor_subject=actor_subject,
+            audit_path=self._audit_path(),
+            approved_fingerprint=plan.fingerprint(),
+        ).to_dict()
