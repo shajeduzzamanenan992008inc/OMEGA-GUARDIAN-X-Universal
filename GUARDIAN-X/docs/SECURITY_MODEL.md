@@ -119,3 +119,14 @@ anchored. The patch engine prevents path escape but is not an OS sandbox.
 Limits: the chain is not signing, not WORM storage and not externally anchored;
 rewriting the entire file or truncating the newest records is not prevented.
 There is still no address allowlist, certificate pinning or credential vault.
+
+## Docker host adapter (HOST-09) security notes
+
+The Docker host adapter (src/ogx/hosts/adapters/docker_runtime.py) drives the
+local Docker CLI with `shell=False`, bounded timeouts/output, identifier
+validation, path-traversal rejection and redacted errors. It does not mount the
+Docker socket or host root, does not enable privileged containers, and does not
+implement mutating operations (start/stop/rm/build/pull/exec/mounts). Docker
+daemon access itself can grant substantial host privileges; treat any reachable
+daemon as a high-trust boundary and do not expose it to untrusted analyzed
+code. Live verification of the adapter is blocked in this environment.
