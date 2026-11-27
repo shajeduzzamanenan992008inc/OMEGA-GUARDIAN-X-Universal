@@ -19,7 +19,9 @@ real state, not a roadmap claim.
 | Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
 | GitHub | git host | READ/WRITE SURFACE OPERATIONAL (mocked) — lifecycle adapter over the canonical provider engine; metadata/file/tree/branch/commit/PR reads and approval-gated writes (branch create, file write, commit, push/ref-update). Merge writes unsupported; **no live credential verified** |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract |
-| GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |
+| GitHub Codespaces, Gitpod, Kubernetes | cloud workspace | DESCRIPTOR_ONLY |
+| Docker host (CLI) | local/container host | TESTED (mocked) — read-only inspection via Docker CLI; daemon validation, container/image inspection, container file read; mutations/exec/pull/build not implemented; no live daemon verified |
+| remote SSH | remote host | TESTED (mocked) — see HOST-08 |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit host sessions | git host | UNSUPPORTED — provider adapters exist, but no lifecycle host adapter is registered, so `host connect` fails closed |
 | SourceHut | git host | DESCRIPTOR_ONLY |
 
@@ -219,3 +221,7 @@ Branch creation, file writes, commit creation, push, merge, deployment and
 arbitrary execution are **not** implemented for these hosts and are reported as
 `unsupported`. All six adapters are covered by mocked transport tests; no live
 provider call has been verified from this checkout.
+
+## 11. Docker host adapter (HOST-09)
+
+`src/ogx/hosts/adapters/docker_runtime.py` (`DockerHostAdapter`) drives the locally installed Docker CLI. It is read-only by default: daemon validation via `docker info`, container listing/inspection, image listing/inspection, and bounded container file reads through `docker cp` with tar parsing. All subprocess calls use argument arrays (`shell=False`), bounded timeouts and output caps, identifier validation, path-traversal rejection and redacted errors. Mutating operations (start/stop/rm/build/pull/exec, mounts, networks, volumes) and privileged containers are intentionally not implemented and reported as `unsupported`/`requires_auth`. Live Docker verification is BLOCKED in this environment (no Docker daemon). Test evidence: `tests/test_host_docker_runtime.py` (29 passed, mocked transport). Docker daemon access can grant substantial host privileges; treat it as a high-trust boundary. HOST-09 is distinct from SEC-12 (Docker sandbox execution).

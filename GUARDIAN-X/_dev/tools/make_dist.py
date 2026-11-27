@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import sys
 import zipfile
 from pathlib import Path
@@ -45,11 +46,26 @@ def build_archive(root: Path, out: Path) -> int:
     return count
 
 
+def write_checksum(out: Path) -> tuple[str, Path]:
+    """Write a sha256sum-compatible sidecar next to the artifact (REL-02)."""
+    digest = hashlib.sha256()
+    with open(out, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    hexdigest = digest.hexdigest()
+    sidecar = out.with_name(out.name + ".sha256")
+    sidecar.write_text(f"{hexdigest}  {out.name}\n", encoding="utf-8", newline="\n")
+    return hexdigest, sidecar
+
+
 def main() -> int:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "dist" / f"omega-shield-{version}-dropin.zip"
     count = build_archive(ROOT, out)
+    digest, sidecar = write_checksum(out)
     print(f"wrote {out} ({count} files)")
+    print(f"sha256 {digest}")
+    print(f"wrote {sidecar}")
     return 0
 
 
