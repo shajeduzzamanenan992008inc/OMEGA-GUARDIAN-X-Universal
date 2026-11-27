@@ -123,8 +123,10 @@ Truths that hold despite the `OPERATIONAL` labels:
 
 - The local hosts are **read-only**. No local host adapter here supports writes,
   execution, push/branch operations, or remote/network operations. The GitHub
-  host adapter performs network reads and one approval-gated draft-PR write;
-  it does not implement branch creation, file updates, push or merge.
+  host adapter performs network reads and approval-gated writes: branch
+  creation, single-file update, multi-file commit and fast-forward ref update
+  (push recovery), plus draft-PR creation. Merge, deployment, force-push and
+  permission changes remain unsupported; no live credential has been verified.
 - `effective_capabilities()` returns the adapter's reported values only while
   connected/degraded; otherwise every declared capability is `unavailable`.
 - Registration does **not** mark a host `active`; new registrations start at
