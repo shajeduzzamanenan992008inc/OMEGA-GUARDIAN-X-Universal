@@ -32,8 +32,8 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **707 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 200.81 s) — the follow-up pass added 76 tests in two new files |
-| Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py -q` | **89 passed**, exit 0; the two new files collect 29 + 47 tests |
+| Canonical suite `python -m pytest -q` | **754 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2) — added 47 GitHub write lifecycle tests |
+| Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py tests/test_github_write_lifecycle.py -q` | **136 passed**, exit 0; four files collect 29 + 47 + 47 tests |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
 | Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`: `IMPORT_OK 0.8.0a1`, `ogx patch --help` and `ogx workflow --help` both exit 0 |
 | Performance baseline | `_dev/tools/benchmark_baseline.py --files 1000 --runs 3`: 1,021 files scanned in **3.53 s** median (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, workflow create 56.9 ms / status 29.7 ms; see `docs/PERFORMANCE_BASELINE.md` |
@@ -114,7 +114,7 @@ execution, any live provider API call with credentials, release signing.
 | HOST-03 | Local Git host (read-only) | `git_runtime.py`, no writes/remotes | 21 tests | TESTED |
 | HOST-04 | GitHub host read surface | `hosts/adapters/github_runtime.py` over canonical transport; requires `OGX_GITHUB_TOKEN` because the provider engine refuses unauthenticated repository operations | `tests/test_host_github_runtime.py` (mocked transport) | TESTED |
 | HOST-05 | GitHub host approval-gated PR creation | validated plan + explicit approval + audit | same suite: unapproved refused, approved executed | TESTED |
-| HOST-06 | GitHub host branch/file/push writes | not implemented or advertised | capability map returns `unsupported` | UNSUPPORTED |
+| HOST-06 | GitHub host branch/file/push writes | `github_runtime.py` implements `create_branch`, `write_file`, `commit_files`, `push` with validated plans, approval gates, audit trail and stale-ref/expected-SHA checks | `tests/test_github_write_lifecycle.py` (47 passed), `test_host_github_runtime.py` host-layer tests | TESTED |
 | HOST-07 | GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit host adapters | `hosts/adapters/provider_runtime.py` wraps each canonical provider adapter: shared read surface + one approval-gated PR/merge-request write, capabilities derived from adapter introspection | `tests/test_host_provider_runtime.py` (mocked transport); no live provider call | TESTED |
 | HOST-08 | Remote SSH host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-09 | Docker host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
