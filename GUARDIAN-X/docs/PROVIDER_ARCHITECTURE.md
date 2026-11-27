@@ -107,3 +107,51 @@ branch, permission changes, deployments) are not implemented anywhere.
 - Existing registry, approval and enterprise modules are reused rather than
   duplicated: `RegistryV2`, `state_dir()`, `ApprovalManager` and the
   `platform.pr` approval operation.
+
+## Inbound webhook verification
+
+`ogx.platform.webhooks` authenticates deliveries that arrive *from* a provider.
+It is a library, not an HTTP server: the caller receives the raw body, verifies
+it, and only then parses it.
+
+| Provider | Mechanism | Signature header | Event header |
+| --- | --- | --- | --- |
+| GitHub | HMAC-SHA256 (`sha256=<hex>`) | `X-Hub-Signature-256` | `X-GitHub-Event` |
+| GitLab | shared secret token | `X-Gitlab-Token` | `X-Gitlab-Event` |
+| Bitbucket Cloud | HMAC-SHA256 (`sha256=<hex>`) | `X-Hub-Signature` | `X-Event-Key` |
+| Gitea | HMAC-SHA256 (hex) | `X-Gitea-Signature` | `X-Gitea-Event` |
+| Forgejo | HMAC-SHA256 (hex) | `X-Forgejo-Signature` | `X-Forgejo-Event` |
+| Azure DevOps | none in the delivery contract | — | — |
+| AWS CodeCommit (SNS) | none in the HTTP headers | — | — |
+
+```python
+from ogx.platform.webhooks import DeliveryReplayGuard, WebhookVerifier
+
+verifier = WebhookVerifier(
+    "github",
+    secret,
+    allowed_events={"push", "pull_request"},
+    replay_guard=DeliveryReplayGuard(),
+)
+event = verifier.verify(request.headers, request.body)  # raises on failure
+payload = event.json()  # only after the signature was accepted
+```
+
+Guarantees and limits:
+
+* comparison is constant-time (`hmac.compare_digest`); a missing, malformed or
+truncated signature never passes;
+* bodies must be `bytes` (re-encoding changes the signature), and are bounded
+  (`max_body_bytes`, default 1 MiB) before hashing;
+* secrets shorter than 16 bytes, unknown providers and unsigned providers raise
+  `WebhookVerificationError` with a stable `code`; error text never includes the
+  secret or the body;
+* the event header is read only after the signature passes and is checked
+  against the caller's allowlist;
+* the replay guard is bounded, TTL-scoped, process-local memory — a multi-worker
+  receiver needs shared storage;
+* payload contents are still untrusted input, not instructions.
+
+Azure DevOps service hooks and CodeCommit/SNS notifications are rejected at
+construction (`unsupported_provider`); authenticate those at the transport or
+gateway layer instead of pretending the payload is signed.

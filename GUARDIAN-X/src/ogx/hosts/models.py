@@ -16,6 +16,8 @@ class HostType(str, Enum):
     BITBUCKET = "bitbucket"
     GITEA = "gitea"
     FORGEJO = "forgejo"
+    AZURE_DEVOPS = "azure_devops"
+    AWS_CODECOMMIT = "aws_codecommit"
     GENERIC_GIT = "generic_git"
     REMOTE_WORKSPACE = "remote_workspace"
     CLOUD_WORKSPACE = "cloud_workspace"
@@ -29,6 +31,8 @@ class ProviderType(str, Enum):
     BITBUCKET = "bitbucket"
     GITEA = "gitea"
     FORGEJO = "forgejo"
+    AZURE_DEVOPS = "azure_devops"
+    AWS_CODECOMMIT = "aws_codecommit"
     GENERIC_GIT = "generic_git"
     LOCAL = "local"
 
