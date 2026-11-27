@@ -115,6 +115,17 @@ ALLOWED_TRANSITIONS: Dict[HostLifecycleState, frozenset[HostLifecycleState]] = {
 }
 
 
+from .leases import (
+    DEFAULT_LEASE_TTL_SECONDS,
+    HostLease,
+    HostLeaseStore,
+    LeaseError,
+    LeaseHeldError,
+    LeaseLostError,
+    default_owner,
+)
+
+
 class HostLifecycleError(RuntimeError):
     """Base error with a stable machine-readable code."""
 
@@ -220,6 +231,12 @@ class HostSession:
     last_health: HealthState = HealthState.UNKNOWN
     last_error: Optional[str] = None
     adapter: Optional["HostAdapter"] = field(default=None, repr=False)
+    lease: Optional[HostLease] = field(default=None)
+
+    @property
+    def fencing_token(self) -> Optional[int]:
+        """Monotonic token proving this process still owns the host lease."""
+        return self.lease.fencing_token if self.lease is not None else None
 
     def to_dict(self, *, include_config: bool = True) -> dict:
         payload = {
@@ -236,6 +253,7 @@ class HostSession:
             "last_health": self.last_health.value,
             "last_error": self.last_error,
             "audit_correlation": str(self.audit_correlation),
+            "lease": self.lease.to_dict() if self.lease is not None else None,
         }
         if include_config:
             payload["config"] = {
@@ -311,12 +329,84 @@ class HostSessionManager:
         registry: Optional[Any] = None,
         adapter_factory: Optional[Callable[[str, HostSessionConfig], HostAdapter]] = None,
         audit_sink: Optional[Callable[[dict], None]] = None,
+        lease_store: Optional[HostLeaseStore] = None,
+        lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
+        lease_owner: Optional[str] = None,
     ) -> None:
         self._registry = registry or get_host_registry()
         self._factory = adapter_factory or self._default_factory
         self._audit_sink = audit_sink
+        self._lease_store = lease_store
+        self._lease_ttl = max(1.0, float(lease_ttl_seconds))
+        self._lease_owner = lease_owner or default_owner()
         self._sessions: Dict[UUID, HostSession] = {}
         self._lock = threading.RLock()
+
+    # ------------------------------------------------------------------ leases
+    @property
+    def lease_store(self) -> Optional[HostLeaseStore]:
+        return self._lease_store
+
+    def _acquire_lease(self, host_id: UUID) -> Optional[HostLease]:
+        if self._lease_store is None:
+            return None
+        return self._lease_store.acquire(
+            str(host_id), ttl_seconds=self._lease_ttl, owner=self._lease_owner
+        )
+
+    def _renew_lease(self, session: HostSession) -> None:
+        if self._lease_store is None or session.lease is None:
+            return
+        session.lease = self._lease_store.renew(
+            str(session.host_id),
+            session.lease.lease_id,
+            session.lease.fencing_token,
+            ttl_seconds=self._lease_ttl,
+        )
+
+    def _release_lease(self, session: HostSession) -> bool:
+        if self._lease_store is None or session.lease is None:
+            return False
+        released = self._lease_store.release(
+            str(session.host_id), session.lease.lease_id, session.lease.fencing_token
+        )
+        session.lease = None
+        return released
+
+    def release_lease(self, session_id: UUID | str) -> bool:
+        """Release this process's lease without changing the session state."""
+
+        with self._lock:
+            session = self._get(session_id)
+            released = self._release_lease(session)
+            if released:
+                self._audit("host.session.lease_released", session)
+            return released
+
+    def _assert_lease(self, session: HostSession) -> None:
+        """Fail closed when another process owns (or stole) this host lease."""
+
+        if self._lease_store is None:
+            return
+        if session.lease is None:
+            raise LeaseLostError(
+                f"Host {session.host_id} has no lease held by this process",
+                host_id=str(session.host_id),
+            )
+        if self._lease_store.validate(
+            str(session.host_id), session.lease.lease_id, session.lease.fencing_token
+        ):
+            return
+        self._audit(
+            "host.session.lease_lost",
+            session,
+            fencing_token=session.lease.fencing_token,
+        )
+        raise LeaseLostError(
+            f"Host lease for {session.host_id} is no longer held by this process",
+            host_id=str(session.host_id),
+            fencing_token=session.lease.fencing_token,
+        )
 
     # ------------------------------------------------------------------ factory
     @staticmethod
@@ -424,18 +514,32 @@ class HostSessionManager:
                 adapter=adapter,
             )
             self._transition(session, HostLifecycleState.CONFIGURED)
+            # Cross-process ownership is taken before the session becomes
+            # usable, so a second process can never mutate the same host.
+            session.lease = self._acquire_lease(hid)
             self._sessions[session.session_id] = session
             self._audit("host.session.created", session)
+            if session.lease is not None:
+                self._audit(
+                    "host.session.leased",
+                    session,
+                    owner=session.lease.owner,
+                    fencing_token=session.lease.fencing_token,
+                )
             try:
                 self._registry.update_host_status(hid, HostLifecycleState.REGISTERED.value)
             except Exception:
                 self._sessions.pop(session.session_id, None)
+                self._release_lease(session)
                 raise
             return session
 
     def connect(self, session_id: UUID | str) -> HostSession:
         with self._lock:
             session = self._get(session_id)
+            # Ownership is checked before the idempotent return so a session
+            # whose lease was stolen never looks healthy to its old owner.
+            self._assert_lease(session)
             if session.state is HostLifecycleState.CONNECTED:
                 return session
             if session.state not in {
@@ -456,6 +560,7 @@ class HostSessionManager:
                 session.capabilities = self._adapter_capabilities(session)
                 self._transition(session, HostLifecycleState.CONNECTED)
                 session.last_error = None
+                self._renew_lease(session)
                 health = self._safe_health(adapter)
                 self._record_health(session, health)
                 if health.state is not HealthState.HEALTHY:
@@ -496,6 +601,8 @@ class HostSessionManager:
             self._transition(session, HostLifecycleState.DISCONNECTED)
             session.disconnected_at = _now()
             session.capabilities = self._unavailable_capabilities(session)
+            if self._release_lease(session):
+                self._audit("host.session.lease_released", session)
             self._audit("host.session.disconnected", session)
             try:
                 self._registry.update_host_status(
@@ -520,6 +627,8 @@ class HostSessionManager:
             adapter = session.adapter
             if adapter is None:
                 raise HostLifecycleError("Session has no adapter", code="missing_adapter")
+            self._assert_lease(session)
+            self._renew_lease(session)
             health = self._safe_health(adapter)
             self._record_health(session, health)
             if health.state is HealthState.HEALTHY:
@@ -569,6 +678,22 @@ class HostSessionManager:
             adapter = session.adapter
             if adapter is None:
                 raise HostLifecycleError("Session has no adapter", code="missing_adapter")
+
+            # Recovery is also the cross-process failover path: re-acquire the
+            # host lease, stealing it only when the previous owner's lease has
+            # expired (crash / restart), which increments the fencing token.
+            if self._lease_store is not None:
+                if session.lease is None:
+                    session.lease = self._acquire_lease(session.host_id)
+                else:
+                    self._renew_lease(session)
+                if session.lease is not None:
+                    self._audit(
+                        "host.session.lease_recovered",
+                        session,
+                        owner=session.lease.owner,
+                        fencing_token=session.lease.fencing_token,
+                    )
 
             attempts = max(1, min(int(attempts), 5))
             self._transition(session, HostLifecycleState.RECOVERING)
@@ -629,6 +754,7 @@ class HostSessionManager:
                     if session.state is not HostLifecycleState.CLOSED:
                         self._transition(session, HostLifecycleState.CLOSED)
                     session.capabilities = self._unavailable_capabilities(session)
+                    self._release_lease(session)
                     self._audit("host.session.closed", session)
                     closed.append(str(session.session_id))
                 except Exception as exc:
@@ -643,6 +769,7 @@ class HostSessionManager:
             session = self._get(session_id)
             if session.state not in TERMINAL_STATES:
                 raise InvalidTransitionError(session.state, HostLifecycleState.CLOSED)
+            self._release_lease(session)
             self._sessions.pop(session.session_id, None)
 
     def get_session(self, session_id: UUID | str) -> HostSession:
@@ -684,9 +811,29 @@ def get_session_manager() -> HostSessionManager:
     """Return the process-wide session manager (sessions are process-local)."""
     global _session_manager
     if _session_manager is None:
+        import atexit
+
+        from ..config import state_dir
         from ..platform.operations import append_audit
-        _session_manager = HostSessionManager(audit_sink=append_audit)
+
+        manager = HostSessionManager(
+            audit_sink=append_audit,
+            lease_store=HostLeaseStore.default(state_dir()),
+        )
+        # A CLI process exits right after `host connect`; release the lease on
+        # the way out so the next process does not have to wait for the TTL.
+        atexit.register(_release_all_leases_quietly, manager)
+        _session_manager = manager
     return _session_manager
+
+
+def _release_all_leases_quietly(manager: HostSessionManager) -> None:
+    for session in manager.list_sessions():
+        try:
+            manager.release_lease(session.session_id)
+        except Exception:
+            # Shutdown paths must never raise; TTL expiry remains the fallback.
+            pass
 
 
 def reset_session_manager() -> None:

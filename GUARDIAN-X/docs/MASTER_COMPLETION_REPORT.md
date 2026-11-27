@@ -477,3 +477,73 @@ remaining backlog families (SEC-12/14/15, ID-10..15, PROV-05/07, AI-04/05/07/
 DOC-05, REL-02/04/05/07, PRD-01..06) are untouched by this pass and stay
 `NOT_STARTED` in the tracker. The overall classification remains **DEVELOPMENT
 INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
+
+## 15. Addendum — Cross-process host leases (HOST-13) and GitHub CLI registration (HOST-15)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter` (same host-adapter phase)
+
+### 15.1 HOST-13 — implemented
+
+`src/ogx/hosts/leases.py` adds a durable, SQLite-backed lease store under
+`OGX_HOME/hosts/leases.db` with monotonic fencing tokens, and
+`HostSessionManager` now enforces ownership:
+
+| Moment | Behaviour |
+| --- | --- |
+| `create_session` | lease acquired before the session is usable; released if registration fails |
+| `connect` | lease validated before the idempotent "already connected" return, renewed after a successful connect |
+| `health` | validated and renewed |
+| `recover` | re-acquired (steals only when recoverable) — the failover path |
+| `disconnect` / `shutdown` / `dispose` | released |
+| lease violation | `LeaseLostError`, audit `host.session.lease_lost`, fail closed |
+
+Dead local processes are detected by PID liveness (Windows uses
+`OpenProcess` + `GetExitCodeProcess`; `os.kill(pid, 0)` is never used because on
+Windows it terminates the target). A dead owner's lease is recoverable
+immediately; a remote owner's lease is recoverable only by TTL expiry.
+`get_session_manager()` uses the durable store and releases this process's
+leases via `atexit`, so a short CLI command does not leave a lease behind.
+
+Limitations are documented in `docs/HOST_CROSS_PROCESS_LEASES.md`: leases are a
+coordination mechanism, not a security boundary; expiry depends on the local
+clock; a shared network state directory is unsupported; there is no consensus or
+quorum; PID reuse delays (but cannot defeat) recovery.
+
+### 15.2 HOST-15 — verified
+
+Executed in a temporary `OGX_HOME`:
+
+| Command | Result |
+| --- | --- |
+| `ogx host register --type github --provider github --name gh-test --identifier shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal` | exit 0, host id + machine host id |
+| `ogx host list` | exit 0, host listed with capabilities |
+| `ogx host status <id> --json` | exit 0, `persisted_status: registered`, capability statuses |
+| `ogx host sessions` | exit 0, `No live host sessions in this process.` |
+| `ogx host connect <id>` | exit 1, fail-closed `GitHub host sessions require a credential in OGX_GITHUB_TOKEN` |
+
+This is CLI registration evidence only. Live authenticated GitHub operations
+(`HOST-14`) remain `BLOCKED`: no owner-authorized token was supplied.
+
+### 15.3 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests -q` | **904 passed, 19 skipped, 119 subtests passed**, exit 0 (149.45 s) |
+| `python -m pytest tests/test_host_leases.py -q` | **20 passed, 1 skipped** (symlink creation unavailable) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK |
+| 6 concurrent OS processes acquiring one host lease | exactly one winner (`won 1`), five `LeaseHeldError`; token stays 1 |
+| Child process killed while holding a 2 s lease | recovered by another process with fencing token 2 |
+| Dead local PID behind a 600 s lease | recovered immediately, token 2 |
+| Stale owner after theft | `health`/`connect` raise `LeaseLostError`; audit `host.session.lease_lost` |
+| 3 sequential `ogx host connect` CLI processes | exit 0 each, final fencing token 3, no lease left behind |
+
+### 15.4 Accounting after this pass
+
+HOST-13 `UNSUPPORTED` → `TESTED`. HOST-15 `IMPLEMENTED` → `TESTED`.
+HOST-14 stays `BLOCKED` (no authorized token). HOST-11 (cloud workspace hosts)
+stays `DESCRIPTOR_ONLY` because selecting a workspace provider is an owner
+decision that has not been given. Overall classification remains **DEVELOPMENT
+INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
