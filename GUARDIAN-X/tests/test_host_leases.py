@@ -522,3 +522,35 @@ def test_manager_without_a_lease_store_keeps_previous_behaviour(tmp_path):
     finally:
         manager.shutdown()
         registry.close()
+
+
+def test_initialise_waits_out_a_locked_database(tmp_path):
+    """A concurrent initialiser that holds the database lock must not fail the store."""
+
+    import sqlite3
+    import threading
+
+    db = tmp_path / "hosts" / "leases.db"
+    db.parent.mkdir(parents=True)
+    blocker = sqlite3.connect(str(db), isolation_level=None, timeout=1.0, check_same_thread=False)
+    blocker.execute("CREATE TABLE IF NOT EXISTS warmup (id INTEGER)")
+    blocker.execute("BEGIN EXCLUSIVE")
+    released = threading.Event()
+
+    def release_soon() -> None:
+        time.sleep(0.4)
+        blocker.execute("COMMIT")
+        blocker.close()
+        released.set()
+
+    thread = threading.Thread(target=release_soon, daemon=True)
+    thread.start()
+    try:
+        store = HostLeaseStore(db)
+    finally:
+        thread.join(timeout=5)
+
+    assert released.is_set(), "the store did not wait for the competing initialiser"
+    assert store.path == db
+    lease = store.acquire("host-lock-wait", owner="owner", ttl_seconds=60)
+    assert lease.fencing_token == 1

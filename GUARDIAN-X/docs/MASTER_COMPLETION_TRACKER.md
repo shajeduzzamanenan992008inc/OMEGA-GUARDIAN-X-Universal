@@ -354,6 +354,11 @@ Implemented and tested in this pass (evidence rows above):
   verification, deterministic drop-in archives and `_dev/tools/repro_check.py`.
 * **TST-06** — macOS CI job added to the authoritative root workflow
   (implemented, not executed on GitHub in this pass).
+* **HOST-13 robustness (CI follow-up)** — `HostLeaseStore` now waits out a
+  concurrent initialiser with a bounded retry instead of failing with
+  `database is locked` when several processes convert a fresh lease database to
+  WAL at once; deterministic regression test added. Pushed CI run on Python 3.12
+  (Linux and macOS) exposed this pre-existing race.
 
 Still not implemented, and not claimed: HOST-11 (real cloud workspace adapter),
 ENT-02..06 and ENT-08..10 (PostgreSQL, IdP/MFA, full RBAC, service identities/KMS,

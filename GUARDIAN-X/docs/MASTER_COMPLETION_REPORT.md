@@ -720,4 +720,20 @@ Live verification remains BLOCKED for: relocation (second drive/USB/machine),
 macOS CI execution, live provider calls, PostgreSQL/IdP/KMS, Docker/Kubernetes,
 independent security review and signed release publication.
 
+
+### CI follow-up (2026-11-27)
+
+The first PR run failed only `test_concurrent_processes_produce_exactly_one_winner`
+on Python 3.12 (Linux and macOS): six processes converting a fresh lease database to
+WAL raced and SQLite reported `database is locked` without consulting the busy
+timeout. `HostLeaseStore._initialize` now retries WAL/schema setup with bounded
+exponential backoff (`LEASE_INIT_TIMEOUT_SECONDS = 30`), and a deterministic
+regression test holds an exclusive lock while the store opens.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest tests/test_host_leases.py -q` | 21 passed, 1 skipped, exit 0 |
+| `python -m pytest tests/test_host_leases.py::test_concurrent_processes_produce_exactly_one_winner -q` ×5 | 5/5 passed |
+| `python -m pytest -q` | **1101 passed, 22 skipped, 119 subtests**, exit 0 (141 s) |
+
 **Classification for this pass: DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS.**
