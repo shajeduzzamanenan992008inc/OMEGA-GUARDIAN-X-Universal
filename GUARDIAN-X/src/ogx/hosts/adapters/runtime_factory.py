@@ -10,7 +10,7 @@ from .provider_runtime import PROVIDER_HOST_TYPES, ProviderGitHostAdapter
 from .ssh_runtime import SshHostAdapter
 from .docker_runtime import DockerHostAdapter
 
-SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git", "github", "remote_ssh", "docker") + PROVIDER_HOST_TYPES
+SUPPORTED_HOST_TYPES = ("local_filesystem", "local_git", "github", "remote_ssh", "docker", "kubernetes") + PROVIDER_HOST_TYPES
 
 
 def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapter:
@@ -26,4 +26,7 @@ def create_host_adapter(host_type: str, config: HostSessionConfig) -> HostAdapte
         return SshHostAdapter(config)
     if host_type == "docker":
         return DockerHostAdapter(config)
+    if host_type == "kubernetes":
+        from .kubernetes_runtime import KubernetesHostAdapter
+        return KubernetesHostAdapter(config)
     raise UnsupportedHostTypeError(host_type)
