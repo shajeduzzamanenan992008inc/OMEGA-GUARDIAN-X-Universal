@@ -265,18 +265,40 @@ def _commit_responses(existing=None, blob_shas=("1" * 40, "2" * 40), new_commit=
         *[response(status=201, payload={"sha": sha}) for sha in blob_shas],
         response(status=201, payload={"sha": "8" * 40}),
         response(status=201, payload={"sha": new_commit}),
+        # update_reference calls _branch_sha first to check current SHA
+        ref(BASE),
+        # Then PATCH to update the ref
         response(payload={"ref": "refs/heads/feat/x", "object": {"sha": new_commit}}),
     ]
 
 def _commit_responses_one_blob(existing=None, blob_sha="1" * 40, new_commit="9" * 40):
     tree_entries = [{"path": path, "type": "blob", "sha": sha} for path, sha in (existing or {}).items()]
+    # create_commit needs:
+    # 1. _branch_sha - GET /git/ref/heads/branch -> ref(BASE)
+    # 2. GET /git/commits/{parent} -> commit data with tree
+    # 3. _tree_blob_shas - GET /git/trees/{ref} -> tree entries
+    # 4. POST /git/blobs -> blob SHA
+    # 5. POST /git/trees -> tree SHA
+    # 6. POST /git/commits -> commit SHA
+    # update_reference needs:
+    # 7. _branch_sha - GET /git/ref/heads/branch -> ref(BASE)
+    # 8. PATCH /git/refs/heads/branch -> updated ref
     return [
+        # For _branch_sha in create_commit
         ref(BASE),
+        # For GET /git/commits/{parent}
         response(payload={"sha": BASE, "tree": {"sha": TREE}}),
+        # For _tree_blob_shas
         response(payload={"sha": TREE, "tree": tree_entries, "truncated": False}),
+        # For POST /git/blobs
         response(status=201, payload={"sha": blob_sha}),
+        # For POST /git/trees
         response(status=201, payload={"sha": "8" * 40}),
+        # For POST /git/commits
         response(status=201, payload={"sha": new_commit}),
+        # For _branch_sha in update_reference
+        ref(BASE),
+        # For PATCH /git/refs/heads/branch
         response(payload={"ref": "refs/heads/feat/x", "object": {"sha": new_commit}}),
     ]
 
@@ -309,19 +331,22 @@ def test_multi_file_commit_then_fast_forward(tmp_path):
         ],
         expected_parent_sha=BASE,
     )
+    # expected_old_sha should be the OLD branch head (BASE), not the new commit
     result = execute_file_commit(
         plan, instance, approved=True, actor_subject="tester", audit_path=tmp_path / "audit.jsonl",
-        expected_old_sha="9" * 40,
-        blob_sha="2" * 40,
+        expected_old_sha=BASE,
     )
     assert result.ok is True
-    assert result.result["commit_sha"] == BASE
+    assert result.result["commit_sha"] == "9" * 40  # new_commit from _commit_responses
     assert result.result["ref"] == "refs/heads/feat/x"
     assert result.result["files"] == ["README.md", "src/new.py"]
     assert result.result["previous_sha"] == BASE
     patch_body = json.loads(recorder.calls[-1]["body"])
-    assert patch_body == {"sha": BASE, "force": False}
-    assert result.result["paths"] == ["README.md", "src/new.py"]
+    assert patch_body == {"sha": "9" * 40, "force": False}
+    # paths are recorded in the audit entry, not in the result
+    audit_text = (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+    assert "README.md" in audit_text
+    assert "src/new.py" in audit_text
 
 
 
@@ -331,25 +356,19 @@ def test_multi_file_commit_then_fast_forward(tmp_path):
 def test_commit_rejects_a_stale_parent():
     instance, recorder = adapter(_commit_responses(existing={"a.txt": BLOB_OLD}))
 
-
+    # Use a different expected_parent_sha to simulate stale parent
     plan = plan_file_commit(
         instance,
         REPO,
         branch="feat/x",
         message="M",
         files=[FileChange(path="a.txt", content="x")],
-        expected_parent_sha=BASE,
+        expected_parent_sha="0" * 40,  # different from BASE
     )
     with pytest.raises(ConflictError):
-        execute_file_commit(plan, instance, approved=True, expected_old_sha=BASE, blob_sha="2" * 40)
-    assert recorder.calls[-1]["method"] == "PATCH"
-    assert recorder.calls[-1]["method"] == "PATCH"
-
-
-
-
-
-    assert len(recorder.calls) == 7
+        execute_file_commit(plan, instance, approved=True, expected_old_sha="0" * 40)
+    # The PATCH to update ref should not be called due to the conflict
+    assert recorder.calls[-1]["method"] != "PATCH"
 
 
 
@@ -523,8 +542,6 @@ def test_write_file_execution_audits_and_never_retries(tmp_path):
 
 def test_audit_never_contains_file_content(tmp_path):
     secret = "sk-live-do-not-log-this-value"
-    instance, _ = adapter(_commit_responses(blob_shas=("1" * 40,), new_commit=BASE))
-
     instance, _ = adapter(_commit_responses(blob_shas=("1" * 40,), new_commit=BASE))
     plan = plan_file_commit(
         instance, REPO, branch="feat/x", message="Add config",
@@ -809,8 +826,10 @@ def test_ref_update_execution_is_approved_and_audited(tmp_path):
 
 # ---------------------------------------------------------------- failures/audit
 def test_write_file_execution_audits_and_never_retries(tmp_path):
+    from ogx.platform.errors import TransportError
+
     def raise_transport(*args, **kwargs):
-        raise ConnectionError("transport failure")
+        raise TransportError("transport failure", provider="github", correlation_id="test")
 
     instance = GitHubAdapter(
         request_fn=raise_transport,
@@ -819,18 +838,19 @@ def test_write_file_execution_audits_and_never_retries(tmp_path):
         sleep=lambda _seconds: None,
     )
     plan = plan_file_update(instance, REPO, path="a.txt", content="x", message="M", branch="feat/x")
-    with pytest.raises(ConnectionError):
+    with pytest.raises(TransportError):
         execute_file_update(plan, instance, approved=True, audit_path=tmp_path / "audit.jsonl")
     text = (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
     assert "platform.write.requested" in text
     assert "platform.write.failed" in text
+    # For file_write, the path is in the plan payload, not a separate paths list
     assert "a.txt" in text
     assert "sk-live-do-not-log-this-value" not in text
 
 
 def test_audit_never_contains_file_content(tmp_path):
     secret = "sk-live-do-not-log-this-value"
-    instance, _ = adapter(_commit_responses(blob_shas=("1" * 40,), new_commit=BASE))
+    instance, _ = adapter(_commit_responses_one_blob(new_commit=BASE))
     plan = plan_file_commit(
         instance,
         REPO,

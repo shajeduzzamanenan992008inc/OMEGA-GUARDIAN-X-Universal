@@ -86,16 +86,25 @@ unbounded cursor chain.
 
 ## Writes
 
-Only pull/merge request creation is implemented. The path is:
+Approval-gated write operations are implemented for GitHub. The path is:
 
-1. `plan_pull_request()` validates the capability, branch names, payload size
-   and refuses protected/default head branches. It performs no I/O.
-2. `execute_pull_request()` refuses unless `approved=True`, then writes an audit
-   event, performs exactly one provider call, and records completion or failure.
+1. `plan_*()` functions validate the capability, branch names, payload size
+   and refuse protected/default head branches. They perform no I/O.
+2. `execute_*()` functions refuse unless `approved=True`, then write an audit
+   event, perform the provider call(s), and record completion or failure.
+
+Implemented write operations for GitHub:
+
+- **Pull/Merge Request creation** (`plan_pull_request` / `execute_pull_request`) — draft PR only
+- **Branch creation** (`plan_branch_create` / `execute_branch_create`) — from a base branch or commit SHA
+- **File create/update** (`plan_file_update` / `execute_file_update`) — Contents API path, single file
+- **Multi-file commit** (`plan_file_commit` / `execute_file_commit`) — Git database API, bounded (max 20 files, 4 MiB total)
+- **Fast-forward ref update** (`plan_ref_update` / `execute_ref_update`) — recovery for failed push, never force-pushes
 
 Audit records are appended to `<state_dir>/platform/audit.jsonl`
-(`OGX_HOME` aware). Destructive operations (delete, merge, push to a protected
-branch, permission changes, deployments) are not implemented anywhere.
+(`OGX_HOME` aware) with hash-chaining and secret redaction. Destructive operations
+(delete, merge PR, force push, permission changes, deployments) are not
+implemented anywhere.
 
 ## Compatibility
 

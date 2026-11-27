@@ -2,19 +2,22 @@
 
 ## 1. Status statement
 
-**No cloud, remote or write-capable host adapter is declared operational in
-`0.8.0a1`.** The two local hosts are operational for their documented read-only
-surface: connect, read, health, recover and CLI operations are implemented and
-covered by dedicated suites. A shared host contract suite
-(`tests/test_host_contract.py`, 12 tests) covers the registry plus both local
-adapters' metadata/capability surface. This document records the real state,
-not a roadmap claim.
+**GitHub host write operations (branch create, file write, commit, push) are
+implemented and tested in `0.8.0a1`.** The two local hosts are operational for
+their documented read-only surface. The GitHub host adapter implements a full
+approval-gated write lifecycle: branch creation, single-file updates, multi-file
+commits and fast-forward ref updates. All writes require a validated plan,
+explicit `approved=True` and produce a hash-chained audit record. No cloud,
+remote or other write-capable host adapter is declared operational. A shared
+host contract suite (`tests/test_host_contract.py`, 12 tests) covers the registry
+plus both local adapters' metadata/capability surface. This document records the
+real state, not a roadmap claim.
 
 | Host | Category | Status |
 | --- | --- | --- |
 | Local filesystem | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/exec/branch ops unsupported |
 | Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
-| GitHub | git host | READ SURFACE OPERATIONAL (mocked) — lifecycle adapter over the canonical provider engine; metadata/file/tree/branch/commit/PR reads and one approval-gated draft-PR write. Branch/file/push/merge writes unsupported; **no live credential verified** |
+| GitHub | git host | READ/WRITE SURFACE OPERATIONAL (mocked) — lifecycle adapter over the canonical provider engine; metadata/file/tree/branch/commit/PR reads and approval-gated writes (branch create, file write, commit, push/ref-update). Merge writes unsupported; **no live credential verified** |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract |
 | GitHub Codespaces, Gitpod, Docker, Kubernetes, remote SSH | cloud workspace | DESCRIPTOR_ONLY |
 | GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit host sessions | git host | UNSUPPORTED — provider adapters exist, but no lifecycle host adapter is registered, so `host connect` fails closed |
