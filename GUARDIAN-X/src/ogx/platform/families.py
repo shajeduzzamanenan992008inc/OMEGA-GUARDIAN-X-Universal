@@ -52,17 +52,17 @@ FAMILY_SPECS: tuple[FamilySpec, ...] = (
         api_version="v1.43",
     ),
     FamilySpec(
-        "kubernetes_workspace", "Kubernetes workspace", ProviderKind.CLOUD_WORKSPACE,
-        "", ("OGX_KUBERNETES_TOKEN",),
-        "https://kubernetes.io/docs/reference/using-api/",
-        "Pod/namespace lifecycle is not implemented; no cluster is contacted.",
-        api_version="v1",
-    ),
-    FamilySpec(
         "remote_ssh_workspace", "Remote SSH workspace", ProviderKind.CLOUD_WORKSPACE,
         "", ("OGX_SSH_AGENT_SOCKET",),
         "",
         "Remote shell execution is intentionally out of scope; only a contract exists.",
+    ),
+    FamilySpec(
+        "kubernetes_workspace", "Kubernetes workspace", ProviderKind.CLOUD_WORKSPACE,
+        "", ("OGX_KUBERNETES_TOKEN",),
+        "https://kubernetes.io/docs/reference/using-api/",
+        "Read-only, namespace-scoped inspection only. No mutations, exec, port-forward, Helm or Secret values. TLS verification is enforced; insecure-skip-tls-verify is not permitted. Live cluster operations require kubectl and an authorized context; this descriptor records the contract only.",
+        api_version="v1",
     ),
     # ---------------------------------------------------------------- CI/CD
     FamilySpec(

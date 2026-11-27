@@ -42,6 +42,8 @@ class HealthState(str, Enum):
     UNKNOWN = "unknown"
 
 
+_LOCAL_ROOT_HOST_TYPES = frozenset({"local_filesystem", "local_git"})
+
 ACTIVE_STATES = frozenset({
     HostLifecycleState.REGISTERED,
     HostLifecycleState.CONFIGURED,
@@ -187,14 +189,18 @@ class HostHealth:
     checked_at: datetime
     issues: tuple[str, ...] = ()
     details: Dict[str, Any] = field(default_factory=dict)
+    latency_ms: Optional[int] = None
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "state": self.state.value,
             "checked_at": self.checked_at.isoformat(),
             "issues": list(self.issues),
             "details": dict(self.details),
         }
+        if self.latency_ms is not None:
+            payload["latency_ms"] = self.latency_ms
+        return payload
 
 
 @dataclass
@@ -392,7 +398,12 @@ class HostSessionManager:
                 if existing.host_id == hid and existing.state in ACTIVE_STATES:
                     raise DuplicateSessionError(hid)
 
+            # Local adapters require a real root path; remote/workspace adapters
+            # address their target through metadata (context, daemon, kubeconfig)
+            # and use the host id only as an opaque session label.
             root_value = root if root is not None else host.get("normalized_identifier")
+            if not str(root_value or "").strip():
+                root_value = "" if host_type in _LOCAL_ROOT_HOST_TYPES else f"host:{hid}"
             config = HostSessionConfig(
                 root=str(root_value or ""),
                 allowed_roots=tuple(allowed_roots or ()),
