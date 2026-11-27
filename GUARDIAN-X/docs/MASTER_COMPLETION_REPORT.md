@@ -547,3 +547,52 @@ HOST-14 stays `BLOCKED` (no authorized token). HOST-11 (cloud workspace hosts)
 stays `DESCRIPTOR_ONLY` because selecting a workspace provider is an owner
 decision that has not been given. Overall classification remains **DEVELOPMENT
 INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
+
+## 16. Addendum — Sandbox hardening (SEC-12 / AI-05) and threat model (SEC-15)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter`
+
+### 16.1 SEC-12 / AI-05 — what changed in `src/ogx/sandbox.py`
+
+The sandbox existed but had gaps this pass closed:
+
+| Gap | Fix |
+| --- | --- |
+| Daemon failure was reported as "image missing" | `docker info` preflight with its own message; image check is separate |
+| A killed docker client could leave the container running | container is named (`ogx-sandbox-<12 hex>`), `--rm` on the normal path, `docker rm -f` on timeout, cancellation and in `finally` |
+| KeyboardInterrupt abandoned the container | caught with `BaseException`, container removed, exception re-raised |
+| Swap could exceed the memory cap | `--memory-swap` equals `--memory` |
+| Shared IPC namespace allowed cross-container IPC | `--ipc none` |
+| Host environment could leak into the container | explicit allowlist only: `HOME=/tmp`, `TMPDIR=/tmp`, `PYTHONDONTWRITEBYTECODE=1` |
+| Snapshot copied `.npmrc`, `.pypirc`, `.netrc`, `kubeconfig`, `*.pem`, `*.key`, `.ssh/.aws/.gnupg/.kube/.docker` | extended name/suffix/dir exclusions, exclusions reported in the result |
+| A shell string could be passed as the command | argument-array-only validation rejects `str`/`bytes` commands (a str was previously iterated character by character) |
+| Output was bounded only in some paths | single `_bounded` helper caps stdout/stderr at 20k |
+
+`ogx sandbox plan` now publishes the enforced policy, the snapshot policy and the
+limitations (`available: false` on this machine).
+
+### 16.2 SEC-15 — threat model
+
+`docs/SECURITY_MODEL.md` gained a full section: 10 trust boundaries, assumed
+attacker capabilities, 20 threats each with enforced control, test mapping and
+residual risk, abuse cases declared out of scope, and an explicit list of
+documented-but-not-enforced controls. This is an internal artefact and is **not**
+SEC-14; the independent review is still blocked on an external reviewer.
+
+### 16.3 Verification executed
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests/test_sandbox_isolation.py -q` | **38 passed, 1 skipped** (symlink creation unavailable) |
+| `python -m pytest tests/test_universal_modules.py tests/test_orchestrator.py -q` | **33 passed** |
+| `python -m pytest tests -q` | **942 passed, 20 skipped, 119 subtests passed**, exit 0 (167.76 s) |
+| `PYTHONPATH=src ... main(['sandbox','plan'])` | exit 0, hardened policy printed, `available: false` |
+| `python _dev/tools/sync_core_from_src.py --check` | OK (sandbox is not part of the drop-in subset) |
+
+### 16.4 Blockers preserved
+
+Live Docker daemon/image verification for SEC-12, AI-05 and ORC-13 remains
+**BLOCKED**: no `docker` binary or daemon on this machine. The mocked tests prove
+which flags OGX passes and how failures are handled; they do not prove the daemon
+enforces them. SEC-14 stays `BLOCKED` (independent reviewer unavailable).
