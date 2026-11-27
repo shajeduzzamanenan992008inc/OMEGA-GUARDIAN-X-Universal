@@ -87,7 +87,9 @@ rotation.
 - **GitHub host.** Reads use the provider transport (pinned host, refused
   redirects, size caps, credential from `OGX_GITHUB_TOKEN` only). Draft-PR
   creation requires a validated plan and explicit approval; branch creation,
-  file update, push, merge and deployment are reported as unsupported.
+  file update, multi-file commit and fast-forward ref update (push recovery)
+  also require a validated plan and explicit approval. Merge and deployment
+  remain unsupported. No live credential has been verified.
 - **State data.** Workflow rows contain project paths, stage outputs and
   actor identities, not provider tokens. Stage output is capped before storage.
 

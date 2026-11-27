@@ -250,9 +250,14 @@ provider, single OS, or Windows-only execution). They are not counted as
    (`HOST-08/09/10/11`).
 3. **Provider host adapters** — read surface and approval-gated PR creation are
    implemented for all six providers (`HOST-07`, TESTED with mocked transport).
-   Branch/file/commit/push writes remain unimplemented (`HOST-06`).
-4. **GitHub write completeness** — branch creation, file update, push,
-   workflow dispatch (`HOST-06`).
+   Branch/file/commit/push writes are now implemented for GitHub (`HOST-06`,
+   TESTED with mocked transport); the six non-GitHub providers still report
+   those writes as unsupported.
+4. **GitHub write completeness** — branch creation, single-file update,
+   multi-file commit, fast-forward ref update and draft-PR creation are
+   implemented (`HOST-06`, TESTED, mocked transport). Merge, deployment,
+   force-push, workflow dispatch and live credential verification remain out
+   of scope.
 5. **Plugin runtime** — isolation, signatures, publisher trust, revocation
    (`PLG-02..05`).
 6. **Live verification** — provider APIs, cross-drive/USB relocation,
@@ -335,8 +340,52 @@ macOS, Python 3.11–3.13 locally, Docker sandbox execution, signing/provenance.
 ### 12.3 What this changes in the accounting
 
 HOST-07 moved `UNSUPPORTED` → `TESTED` (mocked transport) and PROV-06 moved
-`UNSUPPORTED` → `TESTED` (deterministic crypto, no live delivery). Two
-capabilities remain genuinely absent: GitHub branch/file/commit/push writes
-(`HOST-06`) and any remote/cloud host (`HOST-08..11`). The overall
-classification remains **DEVELOPMENT INCOMPLETE — PRODUCTION VERIFICATION
-BLOCKED**; nothing here is a production-readiness claim.
+`UNSUPPORTED` → `TESTED` (deterministic crypto, no live delivery). GitHub
+branch/file/commit/push writes (`HOST-06`) were implemented in the next
+follow-up pass (section 13). Remote/cloud hosts (`HOST-08..11`) remain absent.
+The overall classification remains **DEVELOPMENT INCOMPLETE — PRODUCTION
+VERIFICATION BLOCKED**; nothing here is a production-readiness claim.
+
+## 13. Follow-up pass — GitHub host write lifecycle
+
+**Branch:** `feat/github-write-lifecycle`, based on `origin/main` `4e764de`
+(merge of PR #22). No direct `main` edit, merge, release or settings change.
+
+### 13.1 Implemented
+
+| Capability | File | Requirement |
+| --- | --- | --- |
+| Branch creation (`create_branch`) | `src/ogx/hosts/adapters/github_runtime.py`, `src/ogx/platform/adapters/github.py` | HOST-06 |
+| Single-file update (`write_file`) | same | HOST-06 |
+| Multi-file commit (`commit_files`) | same | HOST-06 |
+| Fast-forward ref update (`push`) | same | HOST-06 |
+| Validated plans, approval gates, audit trail, stale-ref/expected-SHA checks | same | HOST-06 |
+
+Each write requires a validated plan, explicit `approved=True` and produces a
+hash-chained audit record. Destructive operations (merge, deployment,
+force-push, permission changes) remain unimplemented and reported as
+unsupported. No live credential was verified.
+
+### 13.2 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` | **754 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2) |
+| `python -m pytest tests/test_github_write_lifecycle.py tests/test_host_cli_lifecycle.py -q` | **53 passed**, exit 0 |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK — versions, layout and packaging declarations agree |
+| Wheel build `python -m pip wheel . --no-deps` | exit 0; **142 entries** |
+
+Not executed: any live provider call (0 credentials), macOS, Python 3.11–3.13
+locally, Docker sandbox execution, signing/provenance, cross-drive relocation.
+
+### 13.3 What this changes in the accounting
+
+HOST-06 moved `UNSUPPORTED` → `TESTED` (mocked transport, approval-gated
+writes with stale-ref/expected-SHA checks and hash-chained audit). The six
+non-GitHub providers still report branch/file/commit/push writes as
+unsupported (`HOST-07` unchanged). Remote/cloud hosts (`HOST-08..11`), merge,
+deployment and force-push remain absent. The overall classification remains
+**DEVELOPMENT INCOMPLETE — PRODUCTION VERIFICATION BLOCKED**; nothing here is
+a production-readiness claim.
