@@ -3,11 +3,10 @@
 **Scope:** OMEGA-GUARDIAN-X Universal, repository
 `shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal`.
 
-**Snapshot:** 2026-11-27. Starting `main` was `71fcbbc` (merge of PR #18);
-the owner merged PR #19 and then PR #20 during this pass, so current
-`origin/main` is `9dfcfc1`. PR #20's head branch was deleted on merge; the
-follow-up was pushed to a recreated `feat/universal-lifecycle-orchestration`
-and opened as PR #21 (no direct `main` edits).
+**Snapshot:** 2026-11-27. The earlier pass started from `71fcbbc`; the owner
+merged PR #19, #20 and #21, so the follow-up pass starts from `origin/main`
+`7377d48` (merge of PR #21). The follow-up branch is
+`feat/provider-hosts-webhooks`; no direct `main` edits were made.
 
 This tracker is an evidence table, not a roadmap. A row is only `VERIFIED`
 when a command or external system was checked in this pass (or an explicitly
@@ -33,13 +32,14 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest -q` | **631 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 151.71 s) |
+| Canonical suite `python -m pytest -q` | **707 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 200.81 s) — the follow-up pass added 76 tests in two new files |
+| Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py -q` | **89 passed**, exit 0; the two new files collect 29 + 47 tests |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
 | Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`: `IMPORT_OK 0.8.0a1`, `ogx patch --help` and `ogx workflow --help` both exit 0 |
 | Performance baseline | `_dev/tools/benchmark_baseline.py --files 1000 --runs 3`: 1,021 files scanned in **3.53 s** median (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, workflow create 56.9 ms / status 29.7 ms; see `docs/PERFORMANCE_BASELINE.md` |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.` |
-| Wheel build `python -m pip wheel . --no-deps` | exit 0; 140 entries; new modules present; no `tests/` or `_dev/` entries |
+| Wheel build `python -m pip wheel . --no-deps` | exit 0; **142 entries**; `platform/webhooks.py` and `hosts/adapters/provider_runtime.py` present; no `tests/` or `_dev/` entries |
 | `ogx patch --help`, `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
 | Code scanning (GitHub UI) | **0 Open / 13 Closed** after branch head `b13a53e`, "All alerts are resolved." |
@@ -115,7 +115,7 @@ execution, any live provider API call with credentials, release signing.
 | HOST-04 | GitHub host read surface | `hosts/adapters/github_runtime.py` over canonical transport; requires `OGX_GITHUB_TOKEN` because the provider engine refuses unauthenticated repository operations | `tests/test_host_github_runtime.py` (mocked transport) | TESTED |
 | HOST-05 | GitHub host approval-gated PR creation | validated plan + explicit approval + audit | same suite: unapproved refused, approved executed | TESTED |
 | HOST-06 | GitHub host branch/file/push writes | not implemented or advertised | capability map returns `unsupported` | UNSUPPORTED |
-| HOST-07 | GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit host adapters | provider adapters exist; no lifecycle host adapter | `runtime_factory.py` rejects them | UNSUPPORTED |
+| HOST-07 | GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit host adapters | `hosts/adapters/provider_runtime.py` wraps each canonical provider adapter: shared read surface + one approval-gated PR/merge-request write, capabilities derived from adapter introspection | `tests/test_host_provider_runtime.py` (mocked transport); no live provider call | TESTED |
 | HOST-08 | Remote SSH host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-09 | Docker host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-10 | Kubernetes host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
@@ -134,7 +134,7 @@ execution, any live provider API call with credentials, release signing.
 | PROV-03 | Capability truth by introspection | `platform/base.descriptor()` | `test_provider_contract.py`, `test_platform_engine.py` | TESTED |
 | PROV-04 | Rate limits, retries, health checks | transport + adapters | transport/provider tests | TESTED |
 | PROV-05 | Live provider integrations | no credentials configured (`platform status`: 0) | — | BLOCKED |
-| PROV-06 | Webhook verification | not implemented | — | UNSUPPORTED |
+| PROV-06 | Webhook verification | `platform/webhooks.py`: HMAC-SHA256 / shared-token check for GitHub, GitLab, Bitbucket, Gitea, Forgejo; constant-time compare, bounded body, event allowlist, optional bounded delivery-id replay guard; unsigned providers refused explicitly | `tests/test_webhooks.py`; no live delivery exercised | TESTED |
 | PROV-07 | Token refresh/rotation | env credentials only | — | UNSUPPORTED |
 | PROV-08 | Credential isolation between providers | per-provider env policy | `test_platform_engine.py` | TESTED |
 | PROV-09 | No meaningless stubs added | 21 families remain descriptors | `platform status` | VERIFIED |

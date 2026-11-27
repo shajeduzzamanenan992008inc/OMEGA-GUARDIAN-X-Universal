@@ -81,8 +81,10 @@ locally testable verification rows.
   when the probe fails.
 - Pull-request creation uses the existing validated plan, explicit approval and
   audit path; unapproved calls raise `ApprovalRequiredError`.
-- The lifecycle factory now supports `github`; GitLab and the other providers
-  still have no host adapter and continue to fail closed.
+- The lifecycle factory supports `github` plus GitLab, Bitbucket, Gitea,
+  Forgejo, Azure DevOps and AWS CodeCommit (follow-up pass, §12).
+- Inbound webhook authenticity verification was added in the follow-up pass
+  (§12); Azure DevOps and CodeCommit do not sign payloads and are refused.
 
 ### 2.4 Crash recovery, leases and resource handling
 
@@ -121,13 +123,13 @@ for the symlink path, which is skipped on unprivileged Windows.
 
 | Check | Result |
 | --- | --- |
-| `python -m pytest -q` | **631 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 151.71 s, exit 0) |
-| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (92.36 s) |
+| `python -m pytest -q` | **707 passed, 18 skipped, 119 subtests passed** (Windows, CPython 3.15.2, 200.81 s, exit 0) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (125.96 s) |
 | Clean-venv wheel install | fresh venv, `pip install --no-index <wheel>`; import OK (0.8.0a1); `ogx patch --help` and `ogx workflow --help` exit 0 |
 | Performance baseline | `benchmark_baseline.py --files 1000 --runs 3`: scan **3.53 s** median for 1,021 files (1.22 MiB peak), workflow 3.74 s, patch cycle 0.221 s, state create 56.9 ms / status 29.7 ms |
 | `python -m compileall -q src core tests _dev/tests` | exit 0 |
 | `python _dev/tools/sync_core_from_src.py --check` | OK: versions, packages, layout and packaging declarations agree |
-| Wheel build | exit 0, 140 entries, new modules present, no test/CI entries |
+| Wheel build | exit 0, **142 entries**, `platform/webhooks.py` and `hosts/adapters/provider_runtime.py` present, no test/CI entries |
 | `ogx patch --help` / `ogx workflow --help` | exit 0 |
 | Drop-in `init.py status` | exit 0 |
 | Hosted CI at `71fcbbc` | OGX CI #84 success, OGX Code Security #83 success, Configuration Validation #13 success |
@@ -176,7 +178,7 @@ Residual security limits, not hidden:
 | Local filesystem | Operational, read-only | lifecycle + adapter suite |
 | Local Git | Operational, read-only | lifecycle + adapter suite |
 | GitHub | Read surface implemented; one approval-gated write (draft PR); requires `OGX_GITHUB_TOKEN` because the provider engine refuses unauthenticated repository operations | mocked transport tests; live unauthenticated probe refused with `credential_required`; no credential available |
-| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit | Provider adapters only; no host lifecycle adapter | `runtime_factory` rejects the host type |
+| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit | Read surface + one approval-gated PR write per host (follow-up pass) | `tests/test_host_provider_runtime.py` (mocked transport); no live credential |
 | Remote SSH | Descriptor only | `platform/families.py` |
 | Docker / Kubernetes | Descriptor only | `platform/families.py` |
 | Cloud workspaces (Codespaces, Gitpod) | Descriptor only | `platform/families.py` |
@@ -225,15 +227,16 @@ From `docs/MASTER_COMPLETION_TRACKER.md` (140 rows):
 
 | Status | Count |
 | --- | --- |
-| VERIFIED | 26 |
-| TESTED | 54 |
+| VERIFIED | 32 |
+| TESTED | 56 |
 | IMPLEMENTED | 1 |
 | PARTIAL | 17 |
 | DESCRIPTOR_ONLY | 4 |
-| UNSUPPORTED | 22 |
+| UNSUPPORTED | 20 |
 | BLOCKED | 14 |
 | NOT_STARTED | 0 |
 | ACCEPTED | 2 |
+| **Total rows** | **146** |
 
 `TESTED` rows are real passing tests with a named environment limit (mocked
 provider, single OS, or Windows-only execution). They are not counted as
@@ -245,8 +248,9 @@ provider, single OS, or Windows-only execution). They are not counted as
    queue/workers, REST API, dashboard (`ENT-02/03/06/07/08`, `UI-04/05`).
 2. **Remote and cloud hosts** — SSH, Docker, Kubernetes, cloud workspaces
    (`HOST-08/09/10/11`).
-3. **Provider host adapters** — GitLab, Bitbucket, Gitea/Forgejo, Azure DevOps,
-   CodeCommit host lifecycle wrappers and write operations (`HOST-07`).
+3. **Provider host adapters** — read surface and approval-gated PR creation are
+   implemented for all six providers (`HOST-07`, TESTED with mocked transport).
+   Branch/file/commit/push writes remain unimplemented (`HOST-06`).
 4. **GitHub write completeness** — branch creation, file update, push,
    workflow dispatch (`HOST-06`).
 5. **Plugin runtime** — isolation, signatures, publisher trust, revocation
@@ -282,3 +286,57 @@ What *is* true: the four CodeQL alerts are resolved (0 open), dependency and
 secret scanning show 0 open, canonical and drop-in suites pass, the wheel
 builds with the new modules, and the new capabilities have executable tests.
 This is real progress with evidence, not a completion claim.
+
+## 12. Follow-up pass — provider hosts and inbound webhook verification
+
+**Branch:** `feat/provider-hosts-webhooks`, based on `origin/main` `7377d48`
+(merge of PR #21). No direct `main` edit, merge, release or settings change.
+
+### 12.1 Implemented
+
+| Capability | File | Requirement |
+| --- | --- | --- |
+| Host lifecycle adapters for GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps and AWS CodeCommit | `src/ogx/hosts/adapters/provider_runtime.py` | HOST-07 |
+| Runtime factory builds all seven verified Git hosts | `src/ogx/hosts/adapters/runtime_factory.py` | HOST-07 |
+| `HostType`/`ProviderType` members for Azure DevOps and AWS CodeCommit | `src/ogx/hosts/models.py` | HOST-07 |
+| Inbound webhook authenticity (5 signed providers), replay guard, bounds | `src/ogx/platform/webhooks.py` | PROV-06 |
+| Package exports | `src/ogx/platform/__init__.py` | PROV-06 |
+
+`ProviderGitHostAdapter` subclasses the GitHub host adapter's read surface and
+replaces the transport with the matching canonical provider adapter, so there
+is one HTTP stack, one credential policy and one approval/audit path. Each host
+reports `file_write`, `branch_create`, `commit_create`, `push`, `merge` and
+`deployment` as `unsupported`; that is the adapter's real state, not a policy
+placeholder. `connect()` refuses without a credential and never reports a
+session connected after a failed probe.
+
+Webhook verification accepts GitHub/Bitbucket (`X-Hub-Signature[-256]`,
+HMAC-SHA256), Gitea/Forgejo (hex HMAC-SHA256) and GitLab (shared token). It
+compares with `hmac.compare_digest`, requires `bytes` bodies, bounds the body
+before hashing, reads the event header only after the signature passes, enforces
+an optional event allowlist and refuses unsigned providers (Azure DevOps,
+CodeCommit) rather than treating them as verified. Errors never contain the
+secret or the body.
+
+### 12.2 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` | **707 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 200.81 s) |
+| `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py -q` | **89 passed**, exit 0 |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | `Ran 289 tests`, **OK (skipped=9)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK — versions, layout and packaging declarations agree |
+| Wheel build `python -m pip wheel . --no-deps` | exit 0; **142 entries**; both new modules present; no `tests/` entries |
+
+Not executed: any live provider call (0 credentials), a live webhook delivery,
+macOS, Python 3.11–3.13 locally, Docker sandbox execution, signing/provenance.
+
+### 12.3 What this changes in the accounting
+
+HOST-07 moved `UNSUPPORTED` → `TESTED` (mocked transport) and PROV-06 moved
+`UNSUPPORTED` → `TESTED` (deterministic crypto, no live delivery). Two
+capabilities remain genuinely absent: GitHub branch/file/commit/push writes
+(`HOST-06`) and any remote/cloud host (`HOST-08..11`). The overall
+classification remains **DEVELOPMENT INCOMPLETE — PRODUCTION VERIFICATION
+BLOCKED**; nothing here is a production-readiness claim.

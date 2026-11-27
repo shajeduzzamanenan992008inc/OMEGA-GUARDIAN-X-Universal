@@ -175,3 +175,42 @@ as complete if it overstates the evidence.
 4. Add mocked contract tests for every required behaviour above, including
    failure paths.
 5. Update this table and `docs/CAPABILITY_MATRIX.md` with the verified status.
+
+## 10. Provider-backed Git hosts (GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit)
+
+`ogx.hosts.adapters.provider_runtime.ProviderGitHostAdapter` wraps the canonical
+provider adapter for each verified Git host. It adds no second HTTP stack, no
+second credential store and no new write path.
+
+| Host type | Provider adapter | Identifier | Credential env |
+| --- | --- | --- | --- |
+| `gitlab` | `GitLabAdapter` | `owner/repository` (subgroups allowed) | `OGX_GITLAB_TOKEN` |
+| `bitbucket` | `BitbucketAdapter` | `workspace/repository` | `OGX_BITBUCKET_TOKEN` |
+| `gitea` | `GiteaAdapter` | `owner/repository` | `OGX_GITEA_TOKEN` |
+| `forgejo` | `ForgejoAdapter` | `owner/repository` | `OGX_FORGEJO_TOKEN` |
+| `azure_devops` | `AzureDevOpsAdapter` | `project/repository` | `OGX_AZURE_DEVOPS_TOKEN` (+ `OGX_AZURE_DEVOPS_ORG`) |
+| `aws_codecommit` | `CodeCommitAdapter` | repository name | AWS credential env vars |
+
+Shared behaviour:
+
+* `validate()` checks the identifier and the API base without network I/O;
+* `connect()` requires a credential and a successful remote health probe, so a
+  session is never reported connected after a failed probe;
+* reads (metadata, bounded file read, tree, branches, commits, pull requests)
+  delegate to the provider adapter;
+* `capabilities()` is derived from the adapter's own introspection: a missing
+  operation is reported `unsupported`, never emulated;
+* the only write is approval-gated pull/merge-request creation through
+  `plan_pull_request()` + `execute_pull_request()`, which writes an audit record
+  and refuses `approved=False`.
+
+```bash
+ogx host register --type gitlab --provider gitlab --name upstream \
+  --identifier group/project --json
+ogx host connect <host-id>     # requires OGX_GITLAB_TOKEN
+```
+
+Branch creation, file writes, commit creation, push, merge, deployment and
+arbitrary execution are **not** implemented for these hosts and are reported as
+`unsupported`. All six adapters are covered by mocked transport tests; no live
+provider call has been verified from this checkout.

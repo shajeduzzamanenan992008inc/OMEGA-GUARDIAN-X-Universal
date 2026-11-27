@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased — provider hosts and webhook verification
+
+- Added `src/ogx/hosts/adapters/provider_runtime.py`: host lifecycle adapters for
+  GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps and AWS CodeCommit, wrapping
+  the canonical provider engine. Each host exposes the shared read surface
+  (metadata, bounded file read, tree, branches, commits, pull requests) and one
+  approval-gated pull/merge-request write. `runtime_factory` now constructs all
+  seven verified Git hosts; branch/file/commit/push writes remain `unsupported`
+  and are advertised as such.
+- Added `src/ogx/platform/webhooks.py`: inbound webhook authenticity for GitHub,
+  Bitbucket, Gitea and Forgejo (HMAC-SHA256) and GitLab (shared token), with
+  constant-time comparison, rejected non-`bytes` bodies, a body-size bound, an
+  event allowlist, a bounded TTL delivery-id replay guard and error messages
+  that never contain the secret or the body. Azure DevOps and CodeCommit are
+  refused (`unsupported_provider`) because they do not sign payloads.
+- Added `HostType.AZURE_DEVOPS`, `HostType.AWS_CODECOMMIT` and the matching
+  `ProviderType` members so `ogx host register --type ...` accepts them.
+- Added `tests/test_webhooks.py` (29 tests) and
+  `tests/test_host_provider_runtime.py` (47 tests). Updated
+  `tests/test_host_lifecycle.py` so the unsupported-host case uses a remote
+  workspace instead of GitLab. Canonical suite: 707 passed / 18 skipped;
+  drop-in suite: 289 tests OK (9 skipped).
+- Docs: `README.md`, `docs/HOST_ARCHITECTURE.md`,
+  `docs/PROVIDER_ARCHITECTURE.md`, the tracker and this report now describe the
+  provider hosts and the webhook verifier, including their limits.
+
 ## Unreleased — controlled patching, durable workflows and GitHub host
 
 - Added `src/ogx/patching.py`: immutable patch plans, exact-single-match checks,

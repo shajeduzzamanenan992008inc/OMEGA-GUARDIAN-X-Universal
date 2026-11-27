@@ -133,9 +133,12 @@ def test_invalid_transition_is_rejected(manager, tmp_path):
 
 
 def test_unsupported_host_type_fails_closed(manager, tmp_path):
-    # GitHub now has a read-capable adapter; GitLab still has no host adapter.
+    # The seven verified Git hosts have lifecycle adapters; other host families
+    # (remote/cloud workspaces) still have no host adapter.
     manager, hosts, _, _ = manager
-    host = hosts.register_host(uuid4(), "gitlab", "gitlab", "GitLab", "https://gitlab.com/acme")
+    host = hosts.register_host(
+        uuid4(), "remote_workspace", "local", "Remote workspace", "ssh://example.invalid"
+    )
     with pytest.raises(UnsupportedHostTypeError):
         manager.create_session(host.host_id)
 

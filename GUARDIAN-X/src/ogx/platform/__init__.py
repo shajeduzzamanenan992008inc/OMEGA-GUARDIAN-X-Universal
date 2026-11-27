@@ -65,6 +65,13 @@ from .operations import (
 from .registry import UniversalProviderRegistry, get_provider_registry
 from .security import CredentialPolicy, redact, redact_mapping, validate_api_base
 from .transport import HttpTransport
+from .webhooks import (
+    SUPPORTED_PROVIDERS,
+    DeliveryReplayGuard,
+    VerifiedWebhook,
+    WebhookVerificationError,
+    WebhookVerifier,
+)
 
 __all__ = [
     "ProviderAdapter",
@@ -119,4 +126,9 @@ __all__ = [
     "redact_mapping",
     "validate_api_base",
     "HttpTransport",
+    "SUPPORTED_PROVIDERS",
+    "DeliveryReplayGuard",
+    "VerifiedWebhook",
+    "WebhookVerificationError",
+    "WebhookVerifier",
 ]
