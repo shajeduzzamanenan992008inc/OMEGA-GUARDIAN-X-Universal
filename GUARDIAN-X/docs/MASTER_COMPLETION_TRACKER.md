@@ -37,7 +37,7 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
-| Canonical suite `python -m pytest tests -q` | **942 passed, 20 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 167.76 s) — includes HOST-09 Docker (29), HOST-10 Kubernetes (83), HOST-13 leases (20) and SEC-12/AI-05 sandbox isolation (38 passed, 1 skipped) suites |
+| Canonical suite `python -m pytest tests -q` | **971 passed, 21 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 168.68 s) — includes HOST-09 Docker (29), HOST-10 Kubernetes (83), HOST-13 leases (20), SEC-12/AI-05 sandbox isolation (38 passed, 1 skipped), REL-02 artifacts (20 passed, 1 skipped) and relocation media edges (9) suites |
 | Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py tests/test_github_write_lifecycle.py -q` | **136 passed**, exit 0; four files collect 29 + 47 + 47 tests |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (75.24 s, re-run in this pass) |
 | Host regression `python -m pytest tests/test_host_kubernetes_runtime.py tests/test_host_docker_runtime.py tests/test_host_ssh_runtime.py tests/test_host_contract.py tests/test_host_lifecycle.py -q` | **155 passed**, exit 0 |
