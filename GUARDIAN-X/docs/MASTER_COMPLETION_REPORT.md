@@ -664,3 +664,82 @@ Verification executed:
 REL-02 is `TESTED` for locally built artifacts. Signing/provenance (REL-04) and
 reproducible builds (REL-05) remain `UNSUPPORTED`, and publishing (REL-07)
 remains `BLOCKED` on owner authorization.
+
+## 2026-11-27 addendum — remaining-backlog implementation pass
+
+This addendum supersedes the branch and test-count claims above for the current
+work. The earlier sections are preserved as history.
+
+| Item | Value |
+| --- | --- |
+| Starting `main` | `7d98612` (merge of PR #26), clean tree |
+| Branch | `feat/remaining-backlog-implementation` |
+| Push / PR / merge / tag / release | none |
+| `LICENSE` changes | none |
+| Repository visibility | unchanged (public) |
+
+### Implemented in this pass
+
+| Area | Requirements | Status |
+| --- | --- | --- |
+| Plugin runtime | PLG-02, PLG-03, PLG-04, PLG-05 | TESTED (PLG-05 mocked; live container BLOCKED) |
+| AI core | AI-04, AI-07, AI-08, AI-10 | TESTED offline (no live model) |
+| Providers | PROV-07 | TESTED offline (no live refresh) |
+| Queue/backpressure | ENT-07, PRF-03 | TESTED (SQLite backend; Postgres absent) |
+| Incremental analysis | PRF-04 | TESTED |
+| Supply chain | REL-04, REL-05 | IMPLEMENTED / TESTED (no signing key) |
+| CI | TST-06 | IMPLEMENTED, not executed on GitHub |
+
+New modules: `src/ogx/plugins/*`, `src/ogx/ai/*`, `src/ogx/platform/credentials.py`,
+`src/ogx/jobs.py`, `src/ogx/cache.py`, `src/ogx/provenance.py`,
+`_dev/tools/repro_check.py`. Tests: `tests/test_plugins.py`,
+`tests/test_ai_core.py`, `tests/test_credentials.py`, `tests/test_jobs.py`,
+`tests/test_cache.py`, `tests/test_release_supply_chain.py`.
+
+### Verification actually run (Windows, CPython 3.15.2)
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | 1100 passed, 22 skipped, 119 subtests passed, exit 0 (184 s) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | 289 tests OK, 9 skipped, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK, exit 0 |
+| `python _dev/tools/repro_check.py` | identical digests, exit 0 |
+| `python -m pip wheel . --no-deps` + fresh-venv install | import of `ogx`, `ogx.ai`, `ogx.plugins`, `ogx.jobs`, `ogx.cache`, `ogx.provenance` OK; `ogx --version`, `--help`, `providers list` exit 0 |
+
+The 22 skips are Windows-only capability skips (symlink creation, POSIX modes,
+drive-relative path cases), unchanged in nature from the previous pass.
+
+### Not implemented — no claim made
+
+HOST-11; ENT-02..06 and ENT-08..10; UI-04..06; ID-10..15; ORC-13; PROV-05/TST-07;
+TST-11; SEC-14; SEC-15/DOC-05; REL-07; PRD-01..06. `SEC-12`, `AI-05` and `HOST-14`
+remain as previously recorded and were not weakened.
+
+Live verification remains BLOCKED for: relocation (second drive/USB/machine),
+macOS CI execution, live provider calls, PostgreSQL/IdP/KMS, Docker/Kubernetes,
+independent security review and signed release publication.
+
+
+### CI follow-up (2026-11-27)
+
+The first PR run failed only `test_concurrent_processes_produce_exactly_one_winner`
+on Python 3.12 (Linux and macOS): six processes converting a fresh lease database to
+WAL raced and SQLite reported `database is locked` without consulting the busy
+timeout. `HostLeaseStore._initialize` now retries WAL/schema setup with bounded
+exponential backoff (`LEASE_INIT_TIMEOUT_SECONDS = 30`), and a deterministic
+regression test holds an exclusive lock while the store opens.
+
+The same run exposed two macOS-only defects, both fixed: the plugin process
+backend aborted when macOS refused `RLIMIT_NPROC`/`RLIMIT_AS` (limits are now
+best-effort and the session is created with `start_new_session=True`), and two
+`test_manifest` assertions compared the unresolved temp path even though
+discovery resolves the project root (`/var` -> `/private/var` on macOS).
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest tests/test_host_leases.py -q` | 21 passed, 1 skipped, exit 0 |
+| `python -m pytest tests/test_host_leases.py::test_concurrent_processes_produce_exactly_one_winner -q` ×5 | 5/5 passed |
+| `python -m pytest -q` | **1101 passed, 23 skipped, 119 subtests**, exit 0 (152 s) |
+
+**Classification for this pass: DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS.**
