@@ -21,6 +21,7 @@ class HostType(str, Enum):
     GENERIC_GIT = "generic_git"
     REMOTE_WORKSPACE = "remote_workspace"
     REMOTE_SSH = "remote_ssh"
+    DOCKER = "docker"
     CLOUD_WORKSPACE = "cloud_workspace"
     UNKNOWN = "unknown"
 
