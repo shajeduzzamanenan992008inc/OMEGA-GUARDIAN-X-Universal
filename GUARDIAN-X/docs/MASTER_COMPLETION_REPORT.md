@@ -389,3 +389,91 @@ unsupported (`HOST-07` unchanged). Remote/cloud hosts (`HOST-08..11`), merge,
 deployment and force-push remain absent. The overall classification remains
 **DEVELOPMENT INCOMPLETE — PRODUCTION VERIFICATION BLOCKED**; nothing here is
 a production-readiness claim.
+
+## 14. Addendum — Host adapter pass (HOST-09, HOST-10)
+
+**Date:** 2026-11-27
+**Branch:** `feat/docker-host-adapter` (continues the Docker HOST-09 work)
+**HEAD after this pass:** `53dbd7a` — `feat(hosts): implement Kubernetes host
+adapter (HOST-10)`
+**Base `main`:** `df618f8`; no direct `main` edits, no push, no PR, no merge, no
+tag, no release, no visibility change, no `LICENSE` change.
+
+### 14.1 What was implemented
+
+| ID | Before | After | Evidence |
+| --- | --- | --- | --- |
+| HOST-09 Docker host | `TESTED` (adapter committed at `169eb74`) | unchanged: `TESTED` | `tests/test_host_docker_runtime.py` 29 passed (mocked transport) |
+| HOST-10 Kubernetes host | `DESCRIPTOR_ONLY` | `TESTED` — real runtime adapter | `tests/test_host_kubernetes_runtime.py` 83 passed (mocked transport); CLI registration verified |
+
+`KubernetesHostAdapter` (`src/ogx/hosts/adapters/kubernetes_runtime.py`)
+performs read-only, namespace-scoped inspection through a locally installed
+`kubectl`:
+
+- namespaces, pods, deployments, replicasets, statefulsets, daemonsets, jobs,
+  cronjobs, services, ingresses, network policies, configmaps and secrets
+  (**metadata only**), PVCs, PVs and storage classes;
+- pinned context that is verified against the live cluster before use;
+- TLS verification enforced (`--insecure-skip-tls-verify` rejected, `https`
+  endpoints required); `--kubeconfig` accepted only from trusted paths;
+- argument arrays only (no shell), bounded timeouts and output caps, `--tail` /
+  `--limit-bytes` for pod logs;
+- label-selector grammar (`key=value`, `!=`, `in`, `notin`) validated before it
+  reaches kubectl; namespace allowlist; cluster-scope operations refused;
+- Secret values are never fetched or returned (metadata only); JWT, bearer
+  token and password-shaped values are redacted from logs and errors;
+- typed error mapping (`kubectl_failed`, `kubectl_timeout`,
+  `kubectl_unavailable`); mutation, exec, port-forward and Helm operations are
+  neither implemented nor advertised.
+
+Registration: `runtime_factory.py` (`kubernetes`), `HostType.KUBERNETES`,
+`HostCapability` members, capability-matrix row, CLI `host register --type`
+choices, and remote host sessions no longer require a local filesystem root.
+
+Bugs fixed while integrating: duplicate `kubernetes_workspace` provider family
+(registry `DuplicateEntityError`), capability ids missing from `HostCapability`
+(host registration failed), `HostHealth.latency_ms` absence, Deployment `spec`
+assumed to be a mapping, `kubectl get -o json` List objects not unwrapped, and
+the adapter rejecting its own `--output=json` flag.
+
+### 14.2 Verification executed in this pass
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest tests -q` | **884 passed, 18 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 125.73 s) |
+| `python -m pytest tests/test_host_kubernetes_runtime.py -q` | **83 passed**, exit 0 |
+| `python -m pytest tests/test_host_docker_runtime.py tests/test_host_ssh_runtime.py tests/test_host_contract.py tests/test_host_lifecycle.py -q` | **72 passed**, exit 0 |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK — structure, versions and packaging declarations agree |
+| CLI `host register --type kubernetes` → `host list` → `host status` → `host capabilities` (temporary `OGX_HOME`) | exit 0; capabilities and host id printed |
+| CLI `host connect <id>` without kubectl | exit 1, `kubectl executable was not found on PATH` (fail-closed) |
+
+The previous `tests/test_host_kubernetes_runtime.py` could not be collected at
+all (`re.PatternError` at import time from a malformed label-selector pattern,
+plus contradictory assertions), so it provided no valid evidence. It was
+replaced by a coherent contract and security suite covering configuration
+validation, context pinning, TLS policy, namespace allowlists, secret
+redaction, injection, timeouts, output bounds, capability truth and the
+factory/capability-matrix agreement.
+
+### 14.3 Blocked verification
+
+| Requirement | Blocker | What exists instead |
+| --- | --- | --- |
+| HOST-08 live SSH | no authorized SSH target | adapter + 18 mocked tests |
+| HOST-09 live Docker | no Docker daemon / `docker` binary on PATH | adapter + 29 mocked tests |
+| HOST-10 live Kubernetes | no `kubectl` binary and no authorized cluster/context | adapter + 83 mocked tests |
+
+No live host operation was performed in this pass, and no mocked result is
+presented as live evidence.
+
+### 14.4 Accounting after this pass
+
+HOST-10 moved `DESCRIPTOR_ONLY` → `TESTED`. HOST-11 (cloud workspace hosts)
+remains `DESCRIPTOR_ONLY`; HOST-13/14/15 were not attempted in this pass. The
+remaining backlog families (SEC-12/14/15, ID-10..15, PROV-05/07, AI-04/05/07/
+08/10, ORC-13, PLG-02..05, ENT-02..10, UI-04..06, TST-06/07/11, PRF-03/04,
+DOC-05, REL-02/04/05/07, PRD-01..06) are untouched by this pass and stay
+`NOT_STARTED` in the tracker. The overall classification remains **DEVELOPMENT
+INCOMPLETE — EXTERNAL VERIFICATION BLOCKED**.
