@@ -730,10 +730,16 @@ timeout. `HostLeaseStore._initialize` now retries WAL/schema setup with bounded
 exponential backoff (`LEASE_INIT_TIMEOUT_SECONDS = 30`), and a deterministic
 regression test holds an exclusive lock while the store opens.
 
+The same run exposed two macOS-only defects, both fixed: the plugin process
+backend aborted when macOS refused `RLIMIT_NPROC`/`RLIMIT_AS` (limits are now
+best-effort and the session is created with `start_new_session=True`), and two
+`test_manifest` assertions compared the unresolved temp path even though
+discovery resolves the project root (`/var` -> `/private/var` on macOS).
+
 | Command | Result |
 | --- | --- |
 | `python -m pytest tests/test_host_leases.py -q` | 21 passed, 1 skipped, exit 0 |
 | `python -m pytest tests/test_host_leases.py::test_concurrent_processes_produce_exactly_one_winner -q` ×5 | 5/5 passed |
-| `python -m pytest -q` | **1101 passed, 22 skipped, 119 subtests**, exit 0 (141 s) |
+| `python -m pytest -q` | **1101 passed, 23 skipped, 119 subtests**, exit 0 (152 s) |
 
 **Classification for this pass: DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS.**
