@@ -118,7 +118,7 @@ execution, any live provider API call with credentials, release signing.
 | HOST-05 | GitHub host approval-gated PR creation | validated plan + explicit approval + audit | same suite: unapproved refused, approved executed | TESTED |
 | HOST-06 | GitHub host branch/file/push writes | `github_runtime.py` implements `create_branch`, `write_file`, `commit_files`, `push` with validated plans, approval gates, audit trail and stale-ref/expected-SHA checks | `tests/test_github_write_lifecycle.py` (47 passed), `test_host_github_runtime.py` host-layer tests | TESTED |
 | HOST-07 | GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit host adapters | `hosts/adapters/provider_runtime.py` wraps each canonical provider adapter: shared read surface + one approval-gated PR/merge-request write, capabilities derived from adapter introspection | `tests/test_host_provider_runtime.py` (mocked transport); no live provider call | TESTED |
-| HOST-08 | Remote SSH host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
+| HOST-08 | Remote SSH host | `hosts/adapters/ssh_runtime.py` (`SshHostAdapter`): OpenSSH client, StrictHostKeyChecking=yes, BatchMode=yes, key auth, known_hosts, bounded commands, traversal guards, redaction; registered in `runtime_factory.py` as `remote_ssh`; capability matrix entry added. Live SSH verification remains BLOCKED (no authorized target). | `tests/test_host_ssh_runtime.py` (18 passed, mocked transport) | TESTED |
 | HOST-09 | Docker host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-10 | Kubernetes host | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
 | HOST-11 | Cloud workspace hosts | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
