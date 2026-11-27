@@ -307,6 +307,8 @@ def _execute_plan(
     files = plan.payload.get("files")
     if isinstance(files, (list, tuple)):
         entry["paths"] = [str(item.get("path", "")) for item in files if isinstance(item, dict)]
+    elif plan.payload.get("path"):
+        entry["paths"] = [str(plan.payload.get("path", ""))]
     append_audit(entry, path=audit_path_value)
 
     try:
@@ -485,7 +487,7 @@ def execute_file_commit(
             sha=commit.commit_sha,
             expected_old_sha=expected_old_sha or commit.parent_sha,
         )
-        return {**commit.to_dict(), "ref": ref["ref"], "sha": ref["sha"]}
+        return {**commit.to_dict(), "ref": ref["ref"], "sha": ref["sha"], "previous_sha": ref.get("previous_sha")}
 
     return _execute_plan(
         plan,
