@@ -208,3 +208,10 @@ jobs:
               sys.exit(1)
           print(f"drop-in files={len(names)}")
           PY
+
+      - name: Verify artifact checksums
+        run: |
+          cd "$RUNNER_TEMP"
+          test -s dropin.zip.sha256
+          sha256sum -c dropin.zip.sha256
+          PYTHONPATH="$GITHUB_WORKSPACE/src" python -m ogx release verify dropin.zip.sha256 --directory .

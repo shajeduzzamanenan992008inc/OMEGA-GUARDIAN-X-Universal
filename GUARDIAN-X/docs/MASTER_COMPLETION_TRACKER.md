@@ -266,7 +266,7 @@ any live provider API call with credentials, release signing.
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
 | REL-01 | Wheel build includes new modules | setuptools stdlib-only package | 140 entries, required modules present, no tests | VERIFIED |
-| REL-02 | Artifact checksums | computed manually | SHA-256 shown in build output | PARTIAL |
+| REL-02 | Artifact checksums | `src/ogx/artifacts.py` (+ `ogx release manifest|verify`): SHA-256 for every artifact, sorted `sha256sum`-compatible `SHA256SUMS` (LF endings), JSON manifest carrying schema version, release version and exact names/sizes/digests with no timestamp so identical inputs produce identical bytes; verification rejects `..`, separators, drive prefixes, reserved names, symlinks, duplicates and malformed lines, and reports ok/mismatched/missing/unsafe. `make_dist.py` now writes a `.sha256` sidecar automatically and CI runs `sha256sum -c` plus `ogx release verify` on the built drop-in. | `tests/test_artifacts.py` (20 passed, 1 skipped: symlink creation) including tamper, missing, hostile-name, duplicate and CLI round-trip cases; local `make_dist.py` → `sha256sum -c` OK and `ogx release verify` exit 0 (971-test suite green) | TESTED |
 | REL-03 | SBOM generation | `ogx sbom` | existing suite | TESTED |
 | REL-04 | Artifact signing / provenance | none | — | UNSUPPORTED |
 | REL-05 | Reproducible builds | not established | — | UNSUPPORTED |
