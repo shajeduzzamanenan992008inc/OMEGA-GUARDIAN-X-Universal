@@ -596,3 +596,32 @@ Live Docker daemon/image verification for SEC-12, AI-05 and ORC-13 remains
 **BLOCKED**: no `docker` binary or daemon on this machine. The mocked tests prove
 which flags OGX passes and how failures are handled; they do not prove the daemon
 enforces them. SEC-14 stays `BLOCKED` (independent reviewer unavailable).
+
+## 17. Addendum — Relocation media edge cases (ID-10 / ID-11 / ID-12)
+
+**Date:** 2026-11-27
+
+The relocation engine already had plan/apply/verify/recover, a journal, rollback
+and hash-verified idempotent copy. This pass added the media-failure and
+path-independence coverage that the backlog asks for, using simulated media
+because this machine has one fixed volume and no removable drive, second machine
+or authorized GitHub credential.
+
+`tests/test_relocation_media_edges.py` (9 passed):
+
+| Scenario | Assertion |
+| --- | --- |
+| Project moved to a new path | PID, identity hash and raw identity bytes unchanged; no absolute path or hostname in `identity.json` |
+| Copy to a differently named mount path (`MNT/usb-stick/proj`) | identity preserved, content matches, same PID |
+| Permission failure (EACCES) during copy of a move | error propagates, destination rolled back (`rollback: done`), source retained, `source_deleted` false |
+| Full volume (ENOSPC) during copy | rollback, source retained |
+| Device disconnect (EIO) mid-copy | destination removed, source intact, a clean retry completes and verifies |
+| Target that cannot be created (file in place of the media directory) | fails closed, source and blocker untouched |
+| Partial destination | refused with `destination_exists`, no merge |
+| USB reconnected at a new mount path | duplicate identity detected through `verify_relocation`, not a silent fork |
+| Second-machine import copy | PID preserved, no hostname invented |
+
+ID-10/11/12/13 remain **PARTIAL or BLOCKED** for physical/external evidence:
+second volume, removable media, second machine and a GitHub token are all absent.
+ID-14 needs an owner decision on whether signed attestation is required, and
+ID-15 needs the owner to ratify D1–D12; neither is invented here.

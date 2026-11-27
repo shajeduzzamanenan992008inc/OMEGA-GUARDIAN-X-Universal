@@ -107,10 +107,10 @@ any live provider API call with credentials, release signing.
 | ID-07 | Move / copy / clone / fork distinction | relocation operations + explicit `identity fork` | `test_identity_lifecycle_cli.py` | TESTED |
 | ID-08 | Conflict detection and duplicate prevention | `DuplicateEntityError`, normalized repository keys | `test_registry.py` | TESTED |
 | ID-09 | Identity explainability | `identity explain` evidence report | CLI test `verified` classification | TESTED |
-| ID-10 | C: → D: relocation | no second volume available | — | BLOCKED |
-| ID-11 | USB/removable relocation | no removable volume available | — | BLOCKED |
-| ID-12 | Machine-to-machine migration | single machine | — | BLOCKED |
-| ID-13 | Local ↔ GitHub end-to-end identity | link/duplicate logic only; no live provider credentials | — | BLOCKED |
+| ID-10 | C: → D: relocation | relocation engine (`plan`/`apply`/`verify`/`recover`) with journal, rollback, hash-verified copy, source-retained default and explicit delete confirmation; simulated-media coverage added for permission failure (EACCES), full volume (ENOSPC), disconnect mid-copy (EIO) with clean retry, uncreatable target, partial destination, and path-independent identity (no absolute path in `identity.json`). **Physical second-volume run remains BLOCKED** (single fixed volume). | `tests/test_relocation_engine.py` (17) + `tests/test_relocation_media_edges.py` (9 passed) | PARTIAL (simulated; physical BLOCKED) |
+| ID-11 | USB/removable relocation | same engine: copy to a differently named mount path preserves PID/identity hash, remount at a new path is detected as a duplicate identity (not a silent fork), no absolute drive path is treated as identity. **Real removable media run remains BLOCKED.** | `tests/test_relocation_media_edges.py` (9 passed) | PARTIAL (simulated; physical BLOCKED) |
+| ID-12 | Machine-to-machine migration | identity import/adoption primitives (`adopt_host_identity`, identity schema vectors) and a copy-relocation fixture that keeps the PID, carries no hostname, and reports host-local differences. **Second-machine run remains BLOCKED** (single machine). | `tests/test_identity_vectors.py`, `tests/test_identity_lineage.py`, `tests/test_relocation_media_edges.py` | PARTIAL (simulated; second machine BLOCKED) |
+| ID-13 | Local ↔ GitHub end-to-end identity | registry linking and duplicate detection logic only; no authorized least-privilege credential was supplied, so remote registration/link/clone/reconcile could not be exercised. | — | BLOCKED (no credential) |
 | ID-14 | Signed identity attestation | not implemented (D2 recommendation: optional later) | — | UNSUPPORTED |
 | ID-15 | Owner ratification of D1–D12 | recommendations documented only | §Decision register | BLOCKED |
 
