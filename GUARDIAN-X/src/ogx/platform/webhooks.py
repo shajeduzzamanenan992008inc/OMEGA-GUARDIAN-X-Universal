@@ -29,9 +29,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Optional
 
 DEFAULT_MAX_BODY_BYTES = 1024 * 1024
@@ -173,29 +175,42 @@ def _hex_signature(value: str, *, prefix: str) -> bytes:
     return bytes.fromhex(candidate)
 
 
-class DeliveryReplayGuard:
-    """Bounded, TTL-scoped memory of accepted delivery ids (process-local)."""
+class ReplayStore:
+    """Contract for a delivery-id replay store.
+
+    A multi-worker receiver can implement this over shared storage (for example
+    a database table with a unique key and an expiry column). The verifier never
+    requires a specific backend, and local mode needs no external service.
+
+    ``add_if_absent`` must be atomic for one key: return ``True`` only when the
+    key was not already present and was recorded.
+    """
+
+    def add_if_absent(self, key: str, *, ttl_seconds: float) -> bool:
+        raise NotImplementedError
+
+
+class InMemoryReplayStore(ReplayStore):
+    """Bounded, TTL-scoped, thread-safe local store (single process only)."""
 
     def __init__(
         self,
         *,
-        window_seconds: float = DEFAULT_REPLAY_WINDOW_SECONDS,
         max_entries: int = DEFAULT_MAX_REPLAY_ENTRIES,
         clock: Any = time.monotonic,
     ) -> None:
-        if window_seconds <= 0:
-            raise ValueError("window_seconds must be positive")
         if max_entries <= 0:
             raise ValueError("max_entries must be positive")
-        self._window = float(window_seconds)
         self._max = int(max_entries)
         self._clock = clock
         self._seen: dict[str, float] = {}
         self._lock = threading.Lock()
 
-    def check_and_remember(self, key: str) -> bool:
-        """Return ``False`` when ``key`` was already accepted inside the window."""
-
+    def add_if_absent(self, key: str, *, ttl_seconds: float) -> bool:
+        if not isinstance(key, str) or not key:
+            raise ValueError("A replay key must be a non-empty string")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
         now = self._clock()
         with self._lock:
             expired = [name for name, expiry in self._seen.items() if expiry <= now]
@@ -206,8 +221,156 @@ class DeliveryReplayGuard:
             if len(self._seen) >= self._max:
                 oldest = min(self._seen, key=self._seen.__getitem__)
                 self._seen.pop(oldest, None)
-            self._seen[key] = now + self._window
+            self._seen[key] = now + float(ttl_seconds)
             return True
+
+
+class FileReplayStore(ReplayStore):
+    """Durable single-host store for receivers with several local workers.
+
+    Entries live in one JSON-lines file and are replaced atomically
+    (``os.replace``) under an exclusive lock file. Expired entries are dropped
+    on every write, and the file is bounded by ``max_entries``. It is *not* a
+    distributed store: workers on different hosts need shared storage.
+    """
+
+    def __init__(
+        self,
+        path,
+        *,
+        max_entries: int = DEFAULT_MAX_REPLAY_ENTRIES,
+        clock: Any = time.time,
+        lock_timeout: float = 2.0,
+    ) -> None:
+        self.path = Path(path)
+        if self.path.exists() and self.path.is_symlink():
+            raise WebhookVerificationError(
+                "The replay store path must not be a symlink.", code="invalid_replay_store"
+            )
+        if max_entries <= 0:
+            raise ValueError("max_entries must be positive")
+        self._max = int(max_entries)
+        self._clock = clock
+        self._lock_path = self.path.with_name(self.path.name + ".lock")
+        self._lock_timeout = float(lock_timeout)
+
+    def _acquire(self):
+        deadline = time.monotonic() + self._lock_timeout
+        while True:
+            try:
+                descriptor = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(descriptor)
+                return
+            except FileExistsError:
+                try:
+                    age = time.time() - self._lock_path.stat().st_mtime
+                except OSError:
+                    age = 0.0
+                if age > 30:
+                    try:
+                        self._lock_path.unlink()
+                    except OSError:
+                        pass
+                    continue
+                if time.monotonic() >= deadline:
+                    raise WebhookVerificationError(
+                        "The replay store is locked by another writer.",
+                        code="replay_store_locked",
+                    ) from None
+                time.sleep(0.01)
+
+    def _release(self) -> None:
+        try:
+            self._lock_path.unlink()
+        except OSError:
+            pass
+
+    def _load(self) -> dict[str, float]:
+        if not self.path.exists():
+            return {}
+        entries: dict[str, float] = {}
+        try:
+            with open(self.path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        entries[str(record["key"])] = float(record["expires_at"])
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        continue
+        except OSError as exc:
+            raise WebhookVerificationError(
+                "The replay store could not be read.", code="replay_store_unavailable"
+            ) from exc
+        return entries
+
+    def _write(self, entries: dict[str, float]) -> None:
+        temp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            with open(temp, "w", encoding="utf-8") as handle:
+                for key, expiry in entries.items():
+                    handle.write(json.dumps({"key": key, "expires_at": expiry}) + "\n")
+            os.replace(temp, self.path)
+        except OSError as exc:
+            try:
+                temp.unlink()
+            except OSError:
+                pass
+            raise WebhookVerificationError(
+                "The replay store could not be written.", code="replay_store_unavailable"
+            ) from exc
+
+    def add_if_absent(self, key: str, *, ttl_seconds: float) -> bool:
+        if not isinstance(key, str) or not key:
+            raise ValueError("A replay key must be a non-empty string")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._acquire()
+        try:
+            now = self._clock()
+            entries = {
+                name: expiry for name, expiry in self._load().items() if expiry > now
+            }
+            if key in entries:
+                return False
+            entries[key] = now + float(ttl_seconds)
+            if len(entries) > self._max:
+                keep = sorted(entries.items(), key=lambda item: item[1])[-self._max:]
+                entries = dict(keep)
+            self._write(entries)
+            return True
+        finally:
+            self._release()
+
+
+class DeliveryReplayGuard:
+    """Bounded, TTL-scoped replay memory backed by a pluggable store.
+
+    The default store is process-local. Pass ``store=FileReplayStore(...)`` for
+    several workers on one host, or a custom :class:`ReplayStore` for shared
+    storage. Distributed replay protection is never claimed by default.
+    """
+
+    def __init__(
+        self,
+        *,
+        window_seconds: float = DEFAULT_REPLAY_WINDOW_SECONDS,
+        max_entries: int = DEFAULT_MAX_REPLAY_ENTRIES,
+        clock: Any = time.monotonic,
+        store: ReplayStore | None = None,
+    ) -> None:
+        if window_seconds <= 0:
+            raise ValueError("window_seconds must be positive")
+        self._window = float(window_seconds)
+        self._store = store or InMemoryReplayStore(max_entries=max_entries, clock=clock)
+
+    def check_and_remember(self, key: str) -> bool:
+        """Return ``False`` when ``key`` was already accepted inside the window."""
+
+        return self._store.add_if_absent(key, ttl_seconds=self._window)
 
 
 @dataclass(frozen=True, slots=True)

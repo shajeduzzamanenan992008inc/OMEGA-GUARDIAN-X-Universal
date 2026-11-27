@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import base64
+import re
 import time
 from typing import Any
 from urllib.parse import quote
 
 from ..base import ProviderAdapter
+from ..errors import ConflictError, MalformedResponseError, NotFoundError, PermissionDeniedError
 from ..capabilities import Capability, ProviderKind
 from ..models import (
     Branch,
     Commit,
+    CommitResult,
     FileContent,
+    FileChange,
     HealthStatus,
     Issue,
     PermissionSet,
@@ -379,7 +383,352 @@ class GitHubAdapter(RestAdapter):
     def health(self) -> HealthStatus:
         return self._timed_health(lambda: self._json(Capability.HEALTH_CHECK, "GET", "/rate_limit"))
 
+    # ------------------------------------------------------- write validators
+    _BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
+    _SHA_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
+
+    @classmethod
+    def _validate_branch_name(cls, branch: str) -> str:
+        if (
+            not isinstance(branch, str)
+            or not cls._BRANCH_PATTERN.fullmatch(branch)
+            or ".." in branch
+            or "//" in branch
+            or "@{" in branch
+            or branch.endswith(("/", ".", ".lock"))
+        ):
+            raise ValueError("Invalid Git branch name.")
+        return branch
+
+    @classmethod
+    def _validate_repository_path(cls, path: str) -> str:
+        if not isinstance(path, str) or not path or len(path) > 4096:
+            raise ValueError("A repository path must be a non-empty string under 4096 characters.")
+        if path.startswith(("/", "\\")) or "\\" in path or "\x00" in path:
+            raise ValueError("Repository paths must be relative POSIX paths without NUL bytes.")
+        if re.match(r"^[A-Za-z]:", path):
+            raise ValueError("Repository paths must not begin with a drive letter.")
+        segments = path.split("/")
+        if any(segment in {"", ".", ".."} for segment in segments):
+            raise ValueError("Repository paths must not contain empty, '.' or '..' segments.")
+        if segments[0].lower() == ".git":
+            raise ValueError("Writes inside .git are refused.")
+        return path
+
+    @classmethod
+    def _validate_sha(cls, value: str, label: str) -> str:
+        if not isinstance(value, str) or not cls._SHA_PATTERN.fullmatch(value.lower()):
+            raise ValueError(f"Invalid {label} SHA.")
+        return value.lower()
+
+    def _branch_sha(self, repository: str, branch: str) -> str:
+        data = self._json(
+            Capability.BRANCH_LIST,
+            "GET",
+            f"{self._repo_path(repository)}/git/ref/heads/{quote(branch, safe='/')}",
+        )
+        sha = str((data.get("object") or {}).get("sha") or "")
+        if not sha:
+            raise MalformedResponseError(
+                "GitHub returned a branch reference without a commit SHA.",
+                provider=self.provider_id,
+            )
+        return sha
+
+    def _tree_blob_shas(self, repository: str, ref: str) -> dict[str, str] | None:
+        """Return path -> blob SHA for a tree, or ``None`` when truncated."""
+
+        data = self._json(
+            Capability.TREE_READ,
+            "GET",
+            f"{self._repo_path(repository)}/git/trees/{quote(ref, safe='/')}",
+            params={"recursive": "1"},
+        )
+        if data.get("truncated"):
+            return None
+        result: dict[str, str] = {}
+        for item in data.get("tree") or ():
+            if isinstance(item, dict) and item.get("type") == "blob":
+                result[str(item.get("path", ""))] = str(item.get("sha", ""))
+        return result
+
+    def _expected_file_state(
+        self, repository: str, branch: str, path: str, expected_sha: str | None
+    ) -> str | None:
+        """Return the current blob SHA after enforcing the plan precondition."""
+
+        try:
+            current: str | None = self.read_file(repository, path, ref=branch).sha
+        except NotFoundError:
+            current = None
+        if expected_sha is None:
+            if current is not None:
+                raise ConflictError(
+                    f"Refusing to overwrite existing file '{path}'; pass its blob SHA to update it.",
+                    provider=self.provider_id,
+                    detail="unexpected_overwrite",
+                )
+        elif current != expected_sha:
+            raise ConflictError(
+                f"Blob SHA for '{path}' does not match the plan (stale or missing file).",
+                provider=self.provider_id,
+                detail="stale_blob",
+            )
+        return current
+
     # -------------------------------------------------------------- write ops
+    def create_branch(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        from_branch: str | None = None,
+        from_sha: str | None = None,
+    ) -> Branch:
+        """Create one branch from a resolved base commit (never force-updates)."""
+
+        self.require(Capability.BRANCH_CREATE)
+        name = self._validate_branch_name(branch)
+        if from_sha is not None:
+            sha = self._validate_sha(from_sha, "base commit")
+        else:
+            base = from_branch or self.get_repository(repository).default_branch
+            self._validate_branch_name(base)
+            sha = self._branch_sha(repository, base)
+        try:
+            existing = self._branch_sha(repository, name)
+        except NotFoundError:
+            existing = ""
+        if existing:
+            raise ConflictError(
+                f"Branch '{name}' already exists.",
+                provider=self.provider_id,
+                detail="branch_exists",
+            )
+        data = self._json(
+            Capability.BRANCH_CREATE,
+            "POST",
+            f"{self._repo_path(repository)}/git/refs",
+            body={"ref": f"refs/heads/{name}", "sha": sha},
+            write=True,
+        )
+        created = str((data.get("object") or {}).get("sha") or sha)
+        return Branch(name=name, commit_sha=created, protected=False)
+
+    def write_file(
+        self,
+        repository: str,
+        *,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        expected_sha: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or update one file through the Contents API."""
+
+        self.require(Capability.FILE_WRITE)
+        clean = self._validate_repository_path(path)
+        name = self._validate_branch_name(branch)
+        if not isinstance(message, str) or not message.strip() or len(message) > 2000:
+            raise ValueError("Commit messages must be 1-2000 characters.")
+        if not isinstance(content, str):
+            raise ValueError("File content must be text.")
+        if len(content.encode("utf-8")) > 1024 * 1024:
+            raise ValueError("A single-file write must not exceed 1 MiB.")
+        current = self._expected_file_state(repository, name, clean, expected_sha)
+        body: dict[str, Any] = {
+            "message": message.strip(),
+            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+            "branch": name,
+        }
+        if current:
+            body["sha"] = current
+        data = self._json(
+            Capability.FILE_WRITE,
+            "PUT",
+            f"{self._repo_path(repository)}/contents/{quote(clean, safe='/')}",
+            body=body,
+            write=True,
+        )
+        commit = data.get("commit") or {}
+        file_info = data.get("content") or {}
+        return {
+            "path": clean,
+            "branch": name,
+            "commit_sha": str(commit.get("sha") or ""),
+            "blob_sha": str(file_info.get("sha") or ""),
+            "previous_blob_sha": current,
+        }
+
+    def create_commit(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        message: str,
+        files: Any,
+        expected_parent: str | None = None,
+    ) -> CommitResult:
+        """Build one commit from bounded file changes without moving the ref."""
+
+        self.require(Capability.COMMIT_CREATE)
+        name = self._validate_branch_name(branch)
+        if not isinstance(message, str) or not message.strip() or len(message) > 2000:
+            raise ValueError("Commit messages must be 1-2000 characters.")
+        changes: list[FileChange] = []
+        total = 0
+        for item in files or ():
+            if isinstance(item, FileChange):
+                change = item
+            elif isinstance(item, dict):
+                change = FileChange(
+                    path=str(item.get("path", "")),
+                    content=str(item.get("content", "")),
+                    expected_sha=item.get("expected_sha"),
+                )
+            else:
+                raise ValueError("Each file change must be a FileChange or a mapping.")
+            self._validate_repository_path(change.path)
+            size = len(change.content.encode("utf-8"))
+            if size > 1024 * 1024:
+                raise ValueError(f"'{change.path}' exceeds the 1 MiB per-file limit.")
+            total += size
+            if total > 4 * 1024 * 1024:
+                raise ValueError("The commit payload exceeds the 4 MiB total limit.")
+            if change.expected_sha is not None:
+                self._validate_sha(change.expected_sha, "blob")
+            changes.append(change)
+        if not changes:
+            raise ValueError("A commit needs at least one file change.")
+        if len(changes) > 20:
+            raise ValueError("A commit plan may contain at most 20 files.")
+        if len({change.path for change in changes}) != len(changes):
+            raise ValueError("A commit plan must not contain duplicate paths.")
+
+        parent = self._branch_sha(repository, name)
+        if expected_parent is not None and parent != self._validate_sha(expected_parent, "parent"):
+            raise ConflictError(
+                "The branch head moved since the plan was validated.",
+                provider=self.provider_id,
+                detail="stale_parent",
+            )
+        commit_data = self._json(
+            Capability.COMMIT_INSPECT,
+            "GET",
+            f"{self._repo_path(repository)}/git/commits/{parent}",
+        )
+        base_tree = str((commit_data.get("tree") or {}).get("sha") or "")
+        if not base_tree:
+            raise MalformedResponseError(
+                "GitHub returned a commit without a tree SHA.", provider=self.provider_id
+            )
+
+        existing = self._tree_blob_shas(repository, parent)
+        for change in changes:
+            if existing is None:
+                self._expected_file_state(repository, name, change.path, change.expected_sha)
+                continue
+            current = existing.get(change.path)
+            if change.expected_sha is None:
+                if current:
+                    raise ConflictError(
+                        f"Refusing to overwrite existing file '{change.path}'.",
+                        provider=self.provider_id,
+                        detail="unexpected_overwrite",
+                    )
+            elif current != change.expected_sha:
+                raise ConflictError(
+                    f"Blob SHA for '{change.path}' does not match the plan.",
+                    provider=self.provider_id,
+                    detail="stale_blob",
+                )
+
+        entries = []
+        for change in changes:
+            blob = self._json(
+                Capability.COMMIT_CREATE,
+                "POST",
+                f"{self._repo_path(repository)}/git/blobs",
+                body={"content": change.content, "encoding": "utf-8"},
+                write=True,
+            )
+            blob_sha = str(blob.get("sha") or "")
+            if not blob_sha:
+                raise MalformedResponseError(
+                    "GitHub returned a blob without a SHA.", provider=self.provider_id
+                )
+            entries.append(
+                {"path": change.path, "mode": "100644", "type": "blob", "sha": blob_sha}
+            )
+        tree = self._json(
+            Capability.COMMIT_CREATE,
+            "POST",
+            f"{self._repo_path(repository)}/git/trees",
+            body={"base_tree": base_tree, "tree": entries},
+            write=True,
+        )
+        tree_sha = str(tree.get("sha") or "")
+        commit = self._json(
+            Capability.COMMIT_CREATE,
+            "POST",
+            f"{self._repo_path(repository)}/git/commits",
+            body={"message": message.strip(), "tree": tree_sha, "parents": [parent]},
+            write=True,
+        )
+        commit_sha = str(commit.get("sha") or "")
+        if not commit_sha:
+            raise MalformedResponseError(
+                "GitHub returned a commit without a SHA.", provider=self.provider_id
+            )
+        return CommitResult(
+            commit_sha=commit_sha,
+            tree_sha=tree_sha,
+            parent_sha=parent,
+            branch=name,
+            files=tuple(change.path for change in changes),
+        )
+
+    def update_reference(
+        self,
+        repository: str,
+        *,
+        branch: str,
+        sha: str,
+        expected_old_sha: str | None = None,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Fast-forward one branch ref with an explicit stale-ref check."""
+
+        self.require(Capability.REF_UPDATE)
+        name = self._validate_branch_name(branch)
+        target = self._validate_sha(sha, "target commit")
+        if force:
+            raise PermissionDeniedError(
+                "Force pushes are never performed by OGX.", provider=self.provider_id
+            )
+        current = self._branch_sha(repository, name)
+        if expected_old_sha is not None:
+            expected = self._validate_sha(expected_old_sha, "expected old")
+            if current != expected:
+                raise ConflictError(
+                    "The branch moved since the plan was validated.",
+                    provider=self.provider_id,
+                    detail="stale_ref",
+                )
+        data = self._json(
+            Capability.REF_UPDATE,
+            "PATCH",
+            f"{self._repo_path(repository)}/git/refs/heads/{quote(name, safe='/')}",
+            body={"sha": target, "force": False},
+            write=True,
+        )
+        return {
+            "ref": str(data.get("ref") or f"refs/heads/{name}"),
+            "sha": str((data.get("object") or {}).get("sha") or target),
+            "previous_sha": current,
+        }
+
     def create_pull_request(
         self, repository: str, *, title: str, body: str, head: str, base: str
     ) -> PullRequest:
