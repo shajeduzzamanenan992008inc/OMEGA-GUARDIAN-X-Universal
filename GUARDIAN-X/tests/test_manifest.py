@@ -57,7 +57,10 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(result.has_manifest)
         self.assertEqual(result.location, ManifestLocation.ROOT_JSON)
         self.assertFalse(result.conflict)
-        self.assertEqual(result.manifest_path, manifest_file)
+        # Discovery resolves the project root, which differs from the raw temp
+        # path on platforms where the temp directory is reached through a symlink
+        # (macOS /var -> /private/var). Compare the same file, not its spelling.
+        self.assertEqual(result.manifest_path.resolve(), manifest_file.resolve())
     
     def test_discover_hidden_manifest(self):
         """Test discovery of .guardian-x/manifest.json."""
@@ -71,7 +74,7 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(result.has_manifest)
         self.assertEqual(result.location, ManifestLocation.HIDDEN_DIR)
         self.assertFalse(result.conflict)
-        self.assertEqual(result.manifest_path, manifest_file)
+        self.assertEqual(result.manifest_path.resolve(), manifest_file.resolve())
     
     def test_discover_conflicting_manifests(self):
         """Test discovery when both manifests exist."""

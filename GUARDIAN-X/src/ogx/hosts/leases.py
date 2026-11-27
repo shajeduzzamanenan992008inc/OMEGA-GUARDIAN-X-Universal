@@ -42,6 +42,8 @@ from typing import Callable, Optional
 LEASE_SCHEMA_VERSION = 1
 DEFAULT_LEASE_TTL_SECONDS = 120.0
 MAX_LEASE_TTL_SECONDS = 3600.0
+# Bounded wait for concurrent processes creating or converting the lease database.
+LEASE_INIT_TIMEOUT_SECONDS = 30.0
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS host_session_leases (
@@ -242,8 +244,33 @@ class HostLeaseStore:
         return connection
 
     def _initialize(self) -> None:
-        with self._connect() as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
+        """Create/patch the schema, waiting out concurrent initialisers.
+
+        Converting a fresh database to WAL needs an exclusive lock and SQLite can
+        report ``database is locked`` without consulting the busy timeout, so
+        several processes opening the same new state directory at once would
+        otherwise fail spuriously. Retry with bounded exponential backoff.
+        """
+
+        deadline = time.monotonic() + LEASE_INIT_TIMEOUT_SECONDS
+        delay = 0.01
+        while True:
+            try:
+                self._initialize_once()
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if ("locked" not in message and "busy" not in message) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 0.5)
+
+    def _initialize_once(self) -> None:
+        connection = self._connect()
+        try:
+            mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+            if str(mode).lower() != "wal":
+                connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(_SCHEMA)
             row = connection.execute("SELECT version FROM lease_schema").fetchone()
             if row is None:
@@ -255,6 +282,8 @@ class HostLeaseStore:
                     f"Unsupported lease schema version {row['version']}",
                     code="lease_schema_mismatch",
                 )
+        finally:
+            connection.close()
 
     @staticmethod
     def _row_to_lease(row: sqlite3.Row) -> HostLease:

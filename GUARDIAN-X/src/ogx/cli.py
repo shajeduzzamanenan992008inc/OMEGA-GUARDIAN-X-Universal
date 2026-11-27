@@ -269,13 +269,25 @@ def cmd_start(args: argparse.Namespace) -> int:
     return cmd_scan(args)
 
 
+def _scan_cache():
+    """Open the external scan cache, or fall back to a full scan on any error."""
+
+    from .cache import CacheError, ScanCache, default_cache_path
+
+    try:
+        return ScanCache(default_cache_path(), ruleset=f"{__version__}:scanner-v1")
+    except (CacheError, OSError):
+        return None
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     try:
         root = _resolve_project(args)
         if not root.is_dir():
             raise ValueError(f"Project directory not found: {root}")
         config = load_config()
-        report = scan_repository(root, config)
+        cache = _scan_cache() if getattr(args, "cache", False) else None
+        report = scan_repository(root, config, cache=cache)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"Scan failed: {exc}", file=sys.stderr)
         return 2
@@ -2850,6 +2862,8 @@ def build_parser() -> argparse.ArgumentParser:
         if command in {"scan", "start"}:
             item.add_argument("--format", choices=("json", "markdown", "both", "sarif"), default="both")
             item.add_argument("--strict", action="store_true", help="Return 1 when high/critical findings exist")
+            item.add_argument("--cache", action="store_true",
+                              help="Reuse per-file analysis for unchanged content (external scan cache)")
         item.set_defaults(func=handler)
 
     engines = sub.add_parser("engines", help="List or inspect capability-declared analysis engines")
