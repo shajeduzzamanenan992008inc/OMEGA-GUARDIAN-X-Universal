@@ -37,6 +37,11 @@ limited (for example mocked transport or one OS).
 
 | Check | Result |
 | --- | --- |
+| **2026-11-27 remaining-backlog pass** — canonical suite `python -m pytest -q` | **1100 passed, 22 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 184.06 s) after adding plugins (55), AI core (23), credentials (15), release supply chain (10), jobs (14) and cache (12) suites |
+| 2026-11-27 — drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (82.00 s) |
+| 2026-11-27 — `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.`, exit 0 |
+| 2026-11-27 — clean wheel `python -m pip wheel . --no-deps` + fresh venv `pip install --no-deps` | `imports ok 0.8.0a1`; `ogx --version`, `ogx --help`, `ogx providers list` all exit 0 |
+| 2026-11-27 — `python _dev/tools/repro_check.py` | 346 entries, identical SHA-256 on two builds (`da9d0f9d…`), exit 0 |
 | Canonical suite `python -m pytest tests -q` | **971 passed, 21 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 168.68 s) — includes HOST-09 Docker (29), HOST-10 Kubernetes (83), HOST-13 leases (20), SEC-12/AI-05 sandbox isolation (38 passed, 1 skipped), REL-02 artifacts (20 passed, 1 skipped) and relocation media edges (9) suites |
 | Focused follow-up suites `python -m pytest tests/test_webhooks.py tests/test_host_provider_runtime.py tests/test_host_lifecycle.py tests/test_github_write_lifecycle.py -q` | **136 passed**, exit 0; four files collect 29 + 47 + 47 tests |
 | Drop-in suite `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (75.24 s, re-run in this pass) |
@@ -144,7 +149,7 @@ any live provider API call with credentials, release signing.
 | PROV-04 | Rate limits, retries, health checks | transport + adapters | transport/provider tests | TESTED |
 | PROV-05 | Live provider integrations | no credentials configured (`platform status`: 0) | — | BLOCKED |
 | PROV-06 | Webhook verification | `platform/webhooks.py`: HMAC-SHA256 / shared-token check for GitHub, GitLab, Bitbucket, Gitea, Forgejo; constant-time compare, bounded body, event allowlist, optional bounded delivery-id replay guard; unsigned providers refused explicitly | `tests/test_webhooks.py`; no live delivery exercised | TESTED |
-| PROV-07 | Token refresh/rotation | env credentials only | — | UNSUPPORTED |
+| PROV-07 | Token refresh/rotation | `src/ogx/platform/credentials.py`: per-provider capability registry for all seven supported providers (GitHub App re-issue, GitLab/Bitbucket OAuth2 refresh, AWS STS re-assume, manual rotation for Gitea/Forgejo/Azure DevOps); bounded OAuth2 `RefreshClient` over `HttpTransport` with endpoint validation and credential redaction; `CredentialHandle` with expiry skew; fingerprint-only `RotationStore` (0600) that never stores token values. Providers without a documented flow raise `RefreshUnsupported` instead of inventing one. | `tests/test_credentials.py` (15 passed): capability honesty, refusal, request shape, malformed responses, error redaction, store bounds. No live OAuth refresh executed. | TESTED (offline; live refresh BLOCKED) |
 | PROV-08 | Credential isolation between providers | per-provider env policy | `test_platform_engine.py` | TESTED |
 | PROV-09 | No meaningless stubs added | 21 families remain descriptors | `platform status` | VERIFIED |
 
@@ -155,13 +160,13 @@ any live provider API call with credentials, release signing.
 | AI-01 | Repository inspection and intelligence | `intelligence/`, scanner, architecture, SBOM | intelligence suites | TESTED |
 | AI-02 | Root-cause/planning/impact | `impact.py`, `guardian.plan_safe_fixes`, triage | impact/pipeline tests | TESTED |
 | AI-03 | Controlled patch application and rollback | `patching.py` (exact-match, hash, backup, audit) | 12 tests + CLI tests | TESTED |
-| AI-04 | Generic automated patch generation from findings | only narrow `.env` ignore fix exists | `guardian.apply_safe_fixes` | PARTIAL |
+| AI-04 | Generic automated patch generation from findings | `src/ogx/ai/patchgen.py`: finding→`PatchProposal` registry, optional LLM proposals validated against a strict schema, every proposal converted into a `patching.plan_patch` plan (exact match, hashes, path containment) with risk score, required tests and rollback text; rejected proposals are reported, never applied. | `tests/test_ai_core.py` (23 passed): plan-only behaviour, ambiguity/traversal rejection, LLM proposal validation, risk banding. | TESTED (offline) |
 | AI-05 | Sandboxed test execution | orchestrator `stage_test` requires a configured argument-array command + pinned image and fails closed with `sandbox_unavailable`/`missing_sandbox_image`/`missing_test_command`; execution goes through the hardened `run_in_sandbox` (timeouts, cancellation cleanup, resource caps, deterministic env, read-only root, no network, disposable snapshot). | `tests/test_sandbox_isolation.py` (38 passed, 1 skipped) + `tests/test_orchestrator.py` (33 passed with universal modules); live Docker run of a real test command remains BLOCKED | TESTED (mocked; live BLOCKED) |
 | AI-06 | Static security gate | `secure` stage + scanner | orchestrator tests | TESTED |
-| AI-07 | Review with diff/risk/approval | workflow `review` stage, approvals, audit | orchestrator tests | PARTIAL |
-| AI-08 | Evolution with versioned changes and rollback | patch plans + audit + workflow summary; no migration engine | tests | PARTIAL |
+| AI-07 | Review with diff/risk/approval | `src/ogx/ai/review.py`: deterministic review artifact (unified diff, per-file before/after/current hashes, risk band, security/compatibility impact, required tests, rollback), approvals bound to the canonical plan digest and pre-image hashes with TTL; stale, tampered, expired and foreign-approver approvals rejected; `apply_reviewed` is single-use. | `tests/test_ai_core.py` approval/stale/tamper/expiry cases. | TESTED |
+| AI-08 | Evolution with versioned changes and rollback | `src/ogx/ai/evolution.py`: immutable migration manifests (`patch_plan`/`write_file`/`check`), downgrade and version-mismatch refusal, checkpoint of every affected file, journaled idempotent steps, `recover` after failure and `rollback` restoring exact pre-image bytes/modes. | `tests/test_ai_core.py`: apply/rollback, failed-step recovery, tampered plan digest, version mismatch. | TESTED |
 | AI-09 | AI output is never auto-verified | policy: every change requires tests/approval | `docs/AI_AGENT_GUIDE.md` | VERIFIED |
-| AI-10 | LLM code generation | none integrated; product does not call a model | — | UNSUPPORTED |
+| AI-10 | LLM code generation | `src/ogx/ai/llm.py`: provider-independent `LLMProvider` boundary (OpenAI-compatible plus scripted test double), https-only/allowlisted configuration, env-only key that never appears in URLs, logs or errors, bounded prompts/output, strict structured-response validation, untrusted-content delimiters; nothing is applied without review. | `tests/test_ai_core.py` LLM cases with a fake transport. | TESTED (offline; no live model called) |
 
 ## Phase 6 — Lifecycle orchestrator
 
@@ -188,10 +193,10 @@ any live provider API call with credentials, release signing.
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
 | PLG-01 | Agent/skill manifests and inspection | `agents/`, `skills/`, `skillpacks/` | CLI tests | TESTED |
-| PLG-02 | Plugin execution lifecycle | none | — | UNSUPPORTED |
-| PLG-03 | Signature verification and publisher trust | none | — | UNSUPPORTED |
-| PLG-04 | Plugin revocation and permissions | none | — | UNSUPPORTED |
-| PLG-05 | Isolation and resource limits for plugins | none | — | UNSUPPORTED |
+| PLG-02 | Plugin execution lifecycle | `src/ogx/plugins/store.py`, `manifest.py`: strict manifest schema, version/dependency validation and enforced lifecycle transitions with audit events. | `tests/test_plugins.py` | TESTED |
+| PLG-03 | Signature verification and publisher trust | `src/ogx/plugins/ed25519.py` (stdlib RFC 8032 verifier, RFC vectors), `trust.py`: publisher keys, signature envelope, unsigned/revoked/expired/digest-mismatch fail-closed. | `tests/test_plugins.py` | TESTED |
+| PLG-04 | Plugin revocation and permissions | `src/ogx/plugins/permissions.py`: grants bound to a plugin version, revocation, intersection policy and dual approval for sensitive capabilities. | `tests/test_plugins.py` | TESTED |
+| PLG-05 | Isolation and resource limits for plugins | `src/ogx/plugins/runner.py`: Docker backend with network/filesystem isolation and the restricted process backend (refuses `network.outbound` and `process.spawn`, off by default), bounded output/timeouts, disposable workspace. | `tests/test_plugins.py` (mocked Docker); live container execution BLOCKED | TESTED (mocked; live BLOCKED) |
 | PLG-06 | Third-party skill execution | disabled by design | capability matrix | ACCEPTED |
 
 ## Phase 8 — Enterprise backend
@@ -204,7 +209,7 @@ any live provider API call with credentials, release signing.
 | ENT-04 | RBAC | local roles (owner/admin/developer/auditor/viewer) | enterprise tests | PARTIAL |
 | ENT-05 | Service identities and tenant isolation | local organization scoping | enterprise tests | PARTIAL |
 | ENT-06 | Encryption, KMS, rotation | none | — | UNSUPPORTED |
-| ENT-07 | Job queue/workers/DLQ | none | — | UNSUPPORTED |
+| ENT-07 | Job queue/workers/DLQ | `src/ogx/jobs.py`: durable SQLite queue with `BEGIN IMMEDIATE` claim, bounded pending+leased capacity, dedupe keys, attempt budget, exponential backoff, lease reaping, dead-letter state with approval-gated requeue, redacted errors and a bounded worker loop. A PostgreSQL-backed deployment is still absent (ENT-02). | `tests/test_jobs.py` (14 passed): capacity rejection, dedupe, backoff, DLQ, lease loss, concurrent claims. | TESTED (SQLite backend; Postgres BLOCKED) |
 | ENT-08 | Durable REST API | none | — | UNSUPPORTED |
 | ENT-09 | Monitoring/metrics/tracing | local audit/logs only | `docs/OBSERVABILITY.md` | PARTIAL |
 | ENT-10 | Backup/restore/DR | registry backup/recover only | registry tests | PARTIAL |
@@ -229,7 +234,7 @@ any live provider API call with credentials, release signing.
 | TST-03 | Python 3.11/3.12/3.13 | CI matrix | all three matrix jobs green on PR #20 and PR #21 | VERIFIED |
 | TST-04 | Linux | `ubuntu-latest` CI | green on PR #20 and #21; Linux also executed the symlink tests skipped on Windows | VERIFIED |
 | TST-05 | Windows | local execution | this pass | VERIFIED |
-| TST-06 | macOS | not configured in CI | — | UNSUPPORTED |
+| TST-06 | macOS | `.github/workflows/ci.yml` adds `macos-tests` (`macos-latest`, Python 3.12): compile, symlink capability probe, full pytest and distribution check. Not executed on GitHub in this pass. | workflow reviewed; macOS runner unavailable locally | IMPLEMENTED (not executed) |
 | TST-07 | Live provider integration tests | no credentials | — | BLOCKED |
 | TST-08 | Contract tests label mocks honestly | adapter contract suite; docs say mocked | `test_provider_contract.py` | VERIFIED |
 | TST-09 | Performance baselines | `_dev/tools/benchmark_baseline.py`, `docs/PERFORMANCE_BASELINE.md` | measured: scan 3.53 s / 1,021 files, workflow 3.74 s, patch 0.221 s, state create 56.9 ms (local synthetic) | VERIFIED |
@@ -243,8 +248,8 @@ any live provider API call with credentials, release signing.
 | --- | --- | --- | --- | --- |
 | PRF-01 | Bounded scans/reads | file/size/depth limits | scanner/transport tests | TESTED |
 | PRF-02 | Timeouts and bounded concurrency | transport/subprocess/sandbox timeouts | tests | TESTED |
-| PRF-03 | Queue backpressure | no server/queue | — | UNSUPPORTED |
-| PRF-04 | Caching/incremental analysis | partial (scan limits; no cache) | — | PARTIAL |
+| PRF-03 | Queue backpressure | `src/ogx/jobs.py`: enqueue past `max_pending` raises `QueueFull`, leased jobs count against capacity, retries are capped by `max_attempts` with bounded exponential backoff, saturation and oldest-pending age exposed in `stats()`. | `tests/test_jobs.py` | TESTED |
+| PRF-04 | Caching/incremental analysis | `src/ogx/cache.py`: content-addressed cache keyed by ruleset + relative path + bytes (mtimes never trusted), ruleset rotation invalidates all entries, LRU eviction by entry and byte limits, corrupt rows evicted; scanner integration behind `ogx scan --cache`, `.gitignore` never cached. | `tests/test_cache.py` (12 passed) incl. edit invalidation and scanner reuse. | TESTED |
 | PRF-05 | Large-repository behaviour | synthetic 1,021-file repository | 3.53 s scan median, linear file limits; not a monorepo benchmark | TESTED |
 | PRF-06 | Memory/database performance | scan peak and single-writer state latency measured | 1.22 MiB peak; create 56.9 ms, status 29.7 ms, list-50 7.0 ms; no concurrent throughput | TESTED |
 | PRF-07 | Workflow DB handles closed | `_ClosingConnection` closes every handle | rename-the-database regression test passes on Windows | VERIFIED |
@@ -268,8 +273,8 @@ any live provider API call with credentials, release signing.
 | REL-01 | Wheel build includes new modules | setuptools stdlib-only package | 140 entries, required modules present, no tests | VERIFIED |
 | REL-02 | Artifact checksums | `src/ogx/artifacts.py` (+ `ogx release manifest|verify`): SHA-256 for every artifact, sorted `sha256sum`-compatible `SHA256SUMS` (LF endings), JSON manifest carrying schema version, release version and exact names/sizes/digests with no timestamp so identical inputs produce identical bytes; verification rejects `..`, separators, drive prefixes, reserved names, symlinks, duplicates and malformed lines, and reports ok/mismatched/missing/unsafe. `make_dist.py` now writes a `.sha256` sidecar automatically and CI runs `sha256sum -c` plus `ogx release verify` on the built drop-in. | `tests/test_artifacts.py` (20 passed, 1 skipped: symlink creation) including tamper, missing, hostile-name, duplicate and CLI round-trip cases; local `make_dist.py` → `sha256sum -c` OK and `ogx release verify` exit 0 (971-test suite green) | TESTED |
 | REL-03 | SBOM generation | `ogx sbom` | existing suite | TESTED |
-| REL-04 | Artifact signing / provenance | none | — | UNSUPPORTED |
-| REL-05 | Reproducible builds | not established | — | UNSUPPORTED |
+| REL-04 | Artifact signing / provenance | `src/ogx/provenance.py`: deterministic unsigned in-toto/SLSA-style statement, subject re-hash verification, external Ed25519 signature attach/verify through the stdlib verifier; `sign_statement` refuses because no signing key exists and signing needs owner authorization. | `tests/test_release_supply_chain.py` (10 passed) | IMPLEMENTED (no signing key used) |
+| REL-05 | Reproducible builds | `_dev/tools/make_dist.py` writes deterministic archives (sorted entries, fixed 1980 timestamps, normalised mode/create-system); `_dev/tools/repro_check.py` double-builds and compares digests. | `tests/test_release_supply_chain.py`; `python _dev/tools/repro_check.py` -> identical digests | TESTED |
 | REL-06 | Dependency review | GitHub Dependency Review workflow succeeded | run #17 at PR #19 | VERIFIED |
 | REL-07 | Publish a release | requires owner authorization | — | BLOCKED |
 
@@ -322,3 +327,46 @@ Counts are generated from the rows above during verification; see
 `docs/MASTER_COMPLETION_REPORT.md` for the summary and the final acceptance
 classification. No row is deleted when superseded; superseded rows record the
 replacement instead.
+
+## Addendum — 2026-11-27 (remaining-backlog implementation pass)
+
+Work was done on branch `feat/remaining-backlog-implementation`, created from the
+local `main` at `7d98612` (tracking `origin/main`, clean tree at start). Nothing
+was pushed, no pull request was opened, nothing was merged, no tag or release was
+created, repository visibility was not changed and no `LICENSE` file was touched.
+
+Implemented and tested in this pass (evidence rows above):
+
+* **PLG-02..05** — plugin manifest/lifecycle store, stdlib Ed25519 publisher trust,
+  version-bound permissions with revocation and dual approval, and fail-closed
+  isolation backends (`src/ogx/plugins/`, 55 tests).
+* **AI-04/07/08/10** — finding-to-plan generation, review artifacts with
+  digest- and pre-image-bound approvals, versioned migrations with
+  checkpoint/recover/rollback, and a bounded provider-independent LLM boundary
+  (`src/ogx/ai/`).
+* **PROV-07** — per-provider refresh/rotation capability registry, bounded OAuth2
+  refresh client and fingerprint-only rotation store (`platform/credentials.py`).
+* **ENT-07 + PRF-03** — durable bounded job queue with backoff, lease reaping,
+  dead-letter queue and approval-gated requeue (`src/ogx/jobs.py`).
+* **PRF-04** — content-addressed incremental scan cache and `ogx scan --cache`
+  integration (`src/ogx/cache.py`).
+* **REL-04/05** — unsigned provenance statements with external signature
+  verification, deterministic drop-in archives and `_dev/tools/repro_check.py`.
+* **TST-06** — macOS CI job added to the authoritative root workflow
+  (implemented, not executed on GitHub in this pass).
+
+Still not implemented, and not claimed: HOST-11 (real cloud workspace adapter),
+ENT-02..06 and ENT-08..10 (PostgreSQL, IdP/MFA, full RBAC, service identities/KMS,
+REST API, observability, backup/DR), UI-04..06, ID-10..15 relocation/identity
+work, ORC-13 end-to-end orchestrator wiring, PROV-05/TST-07 live provider
+harnesses, TST-11 relocation hardware tooling, SEC-14 independent review,
+SEC-15/DOC-05 documentation re-audit, REL-07 publication and PRD-01..06.
+
+External prerequisites that keep live steps `BLOCKED`: a second drive/USB and a
+second machine for relocation, a real macOS runner (GitHub Actions only), provider
+accounts and tokens, PostgreSQL/IdP/KMS instances, Docker/Kubernetes, an
+independent security reviewer and owner-authorized signing keys/release approval.
+
+Because substantial backlog work remains unimplemented, the honest classification
+for this pass is **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**, not
+"complete pending external acceptance".

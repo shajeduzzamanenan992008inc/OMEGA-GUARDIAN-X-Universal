@@ -72,6 +72,7 @@ SRC_REQUIRED_PACKAGES = frozenset(
     {
         "adapters",
         "agents",
+        "ai",
         "connectors",
         "engines",
         "enterprise",
@@ -80,6 +81,7 @@ SRC_REQUIRED_PACKAGES = frozenset(
         "intelligence",
         "pap",
         "platform",
+        "plugins",
         "registry",
         "skillpacks",
         "skills",
