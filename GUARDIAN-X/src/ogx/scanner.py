@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__
 from .config import ScanConfig, load_config
 from .detector import detect_project
+from .cache import CacheCorrupt, ScanCache
 from .models import Finding, ScanReport, relative_path, utc_now
 from .rules import (
     CODE_CHECKS, PLACEHOLDER_WORDS, SECRET_PATTERNS, TEXT_SUFFIXES,
@@ -187,7 +188,76 @@ def _manifest_findings(root: Path, files: list[Path]) -> list[Finding]:
     return findings
 
 
-def scan_repository(root: Path, config: ScanConfig | None = None) -> ScanReport:
+def _scan_text_file(path: Path, root: Path, text: str) -> list[Finding]:
+    """All per-file checks for one already-decoded text file."""
+
+    results: list[Finding] = []
+    results.extend(_scan_secrets(path, root, text))
+    results.extend(_structured_syntax_findings(path, root, text))
+    if path.suffix.lower() == ".py":
+        try:
+            ast.parse(text, filename=relative_path(path, root))
+        except SyntaxError as exc:
+            results.append(Finding("OGX-BUG-001", "Python syntax error", "high", "bugs",
+                f"Python parser rejected this file: {exc.msg}", relative_path(path, root), exc.lineno,
+                recommendation="Fix the syntax error, then run the project's test and lint commands.", confidence="high"))
+    if path.suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".rs", ".php", ".rb", ".cs", ".swift", ".c", ".h", ".cpp", ".hpp", ".dart", ".scala", ".sc", ".ex", ".exs", ".erl", ".hrl", ".lua", ".pl", ".r", ".jl", ".hs", ".lhs", ".sol", ".clj", ".cljs", ".cr", ".tf", ".proto", ".vue", ".svelte"}:
+        results.extend(_scan_code_patterns(path, root, text))
+    basename = path.name.lower()
+    if basename in {"dockerfile", "containerfile"}:
+        if re.search(r"(?im)^\s*FROM\s+[^\s:]+:latest\b", text):
+            results.append(Finding("OGX-INFRA-001", "Unpinned container base image", "medium", "infrastructure",
+                "A container build uses a :latest base image tag, which can make builds non-reproducible.",
+                relative_path(path, root), recommendation="Pin a reviewed immutable image tag or digest and update it through a controlled process.", confidence="high"))
+        if re.search(r"(?im)^\s*USER\s+", text) is None:
+            results.append(Finding("OGX-INFRA-002", "Container may run as root", "medium", "infrastructure",
+                "No USER instruction was detected in the Dockerfile; the final image may run as root.",
+                relative_path(path, root), recommendation="Use a dedicated non-root runtime user where supported and verify file permissions.", confidence="low"))
+    if path.name in {".gitignore"} and not re.search(r"(?m)^\.env(?:\s|$|/)", text):
+        if (root / ".env").exists():
+            results.append(Finding("OGX-SEC-003", "Environment file may not be ignored", "medium", "secrets",
+                "A root .env file exists but .gitignore does not clearly ignore it.", relative_path(path, root),
+                recommendation="Add an appropriate .env ignore rule and verify that no credentials are already tracked.", confidence="medium"))
+    if ".github/workflows/" in relative_path(path, root) and re.search(r"\$\{\{\s*github\.event\.(?:issue|comment|review|pull_request)\.(?:title|body|comment|head\.ref)", text):
+        if re.search(r"(?im)^\s*run:\s*.*\$\{\{", text):
+            results.append(Finding("OGX-CI-001", "Potential untrusted GitHub expression in run step", "high", "ci-cd",
+                "A workflow may interpolate untrusted event data directly into a shell run command.", relative_path(path, root),
+                recommendation="Pass untrusted event values through environment variables and quote/validate them; avoid direct expression interpolation in shell scripts.", confidence="medium"))
+    return results
+
+
+def _cached_file_findings(
+    path: Path,
+    root: Path,
+    text: str,
+    raw: bytes,
+    cache: "ScanCache | None",
+) -> list[Finding]:
+    """Return per-file findings, reusing the cache only for content-addressed files.
+
+    ``.gitignore`` analysis also depends on whether a root ``.env`` exists, so it
+    is never cached.
+    """
+
+    if cache is None or path.name == ".gitignore":
+        return _scan_text_file(path, root, text)
+    key = cache.key_for(relative_path(path, root), raw)
+    try:
+        cached = cache.get(key)
+    except CacheCorrupt:
+        cached = None
+    if cached is not None:
+        return cached
+    results = _scan_text_file(path, root, text)
+    try:
+        cache.put(key, results)
+    except CacheCorrupt:
+        pass
+    return results
+
+
+def scan_repository(root: Path, config: ScanConfig | None = None, *,
+                    cache: "ScanCache | None" = None) -> ScanReport:
     root = root.expanduser().resolve()
     if not root.exists() or not root.is_dir():
         raise ValueError(f"Project directory does not exist: {root}")
@@ -212,37 +282,7 @@ def scan_repository(root: Path, config: ScanConfig | None = None) -> ScanReport:
             skipped += 1
             continue
         examined += 1
-        findings.extend(_scan_secrets(path, root, text))
-        findings.extend(_structured_syntax_findings(path, root, text))
-        if path.suffix.lower() == ".py":
-            try:
-                ast.parse(text, filename=relative_path(path, root))
-            except SyntaxError as exc:
-                findings.append(Finding("OGX-BUG-001", "Python syntax error", "high", "bugs",
-                    f"Python parser rejected this file: {exc.msg}", relative_path(path, root), exc.lineno,
-                    recommendation="Fix the syntax error, then run the project's test and lint commands.", confidence="high"))
-        if path.suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".rs", ".php", ".rb", ".cs", ".swift", ".c", ".h", ".cpp", ".hpp", ".dart", ".scala", ".sc", ".ex", ".exs", ".erl", ".hrl", ".lua", ".pl", ".r", ".jl", ".hs", ".lhs", ".sol", ".clj", ".cljs", ".cr", ".tf", ".proto", ".vue", ".svelte"}:
-            findings.extend(_scan_code_patterns(path, root, text))
-        basename = path.name.lower()
-        if basename in {"dockerfile", "containerfile"}:
-            if re.search(r"(?im)^\s*FROM\s+[^\s:]+:latest\b", text):
-                findings.append(Finding("OGX-INFRA-001", "Unpinned container base image", "medium", "infrastructure",
-                    "A container build uses a :latest base image tag, which can make builds non-reproducible.",
-                    relative_path(path, root), recommendation="Pin a reviewed immutable image tag or digest and update it through a controlled process.", confidence="high"))
-            if re.search(r"(?im)^\s*USER\s+", text) is None:
-                findings.append(Finding("OGX-INFRA-002", "Container may run as root", "medium", "infrastructure",
-                    "No USER instruction was detected in the Dockerfile; the final image may run as root.",
-                    relative_path(path, root), recommendation="Use a dedicated non-root runtime user where supported and verify file permissions.", confidence="low"))
-        if path.name in {".gitignore"} and not re.search(r"(?m)^\.env(?:\s|$|/)", text):
-            if (root / ".env").exists():
-                findings.append(Finding("OGX-SEC-003", "Environment file may not be ignored", "medium", "secrets",
-                    "A root .env file exists but .gitignore does not clearly ignore it.", relative_path(path, root),
-                    recommendation="Add an appropriate .env ignore rule and verify that no credentials are already tracked.", confidence="medium"))
-        if ".github/workflows/" in relative_path(path, root) and re.search(r"\$\{\{\s*github\.event\.(?:issue|comment|review|pull_request)\.(?:title|body|comment|head\.ref)", text):
-            if re.search(r"(?im)^\s*run:\s*.*\$\{\{", text):
-                findings.append(Finding("OGX-CI-001", "Potential untrusted GitHub expression in run step", "high", "ci-cd",
-                    "A workflow may interpolate untrusted event data directly into a shell run command.", relative_path(path, root),
-                    recommendation="Pass untrusted event values through environment variables and quote/validate them; avoid direct expression interpolation in shell scripts.", confidence="medium"))
+        findings.extend(_cached_file_findings(path, root, text, raw, cache))
 
     # Stable de-duplication protects reports from repeated pattern hits at the same location.
     unique: dict[tuple[str, str | None, int | None, str], Finding] = {}

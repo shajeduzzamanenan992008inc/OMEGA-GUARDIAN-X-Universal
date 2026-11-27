@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -26,12 +27,20 @@ EXCLUDE_NAMES = {".env", "results.txt"}
 EXCLUDE_SUFFIXES = {".pyc", ".whl", ".zip", ".db", ".sqlite", ".sqlite3"}
 
 
-def build_archive(root: Path, out: Path) -> int:
-    """Write the drop-in zip for ``root`` to ``out`` and return the entry count."""
+def build_archive(root: Path, out: Path, *, epoch: int = 315532800) -> int:
+    """Write the drop-in zip for ``root`` to ``out`` and return the entry count.
+
+    Reproducible (REL-05): entry order is sorted, timestamps are fixed to
+    ``epoch`` (default 1980-01-01, the ZIP epoch), permissions and the
+    create-system are normalised, and compression is fixed. Two runs over the
+    same content therefore produce byte-identical archives regardless of file
+    mtimes, checkout location or host OS.
+    """
+
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(root.rglob("*")):
+        for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
             rel = path.relative_to(root)
             if path.is_dir() or rel.parts[0] in EXCLUDE_TOP_FILES:
                 continue
@@ -41,7 +50,14 @@ def build_archive(root: Path, out: Path) -> int:
                 continue
             if path.name in EXCLUDE_NAMES or (path.name.startswith(".env.") and path.name != ".env.example"):
                 continue
-            archive.write(path, Path("omega-shield") / rel)
+            info = zipfile.ZipInfo(
+                (Path("omega-shield") / rel).as_posix(),
+                date_time=time.gmtime(epoch)[:6],
+            )
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3  # POSIX, identical on every host
+            info.external_attr = (0o100644 << 16)
+            archive.writestr(info, path.read_bytes())
             count += 1
     return count
 

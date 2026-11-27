@@ -45,6 +45,9 @@ CORE_ALLOWED = {
 SRC_ALLOWED = {
     "adapters": set(),
     "agents": set(),
+    # ai: provider-independent LLM boundary, patch generation, review, evolution.
+    # It may use the platform transport/redaction primitives but no provider engine.
+    "ai": {"platform"},
     "connectors": set(),
     "engines": set(),
     "enterprise": {"connectors"},
@@ -53,6 +56,9 @@ SRC_ALLOWED = {
     "intelligence": {"engines", "pap", "registry"},
     "pap": {"registry"},
     "platform": {"connectors", "registry"},
+    # plugins: manifests, trust, permissions, store and isolation backends.
+    # Execution goes through ogx.sandbox (module), never a provider package.
+    "plugins": set(),
     # registry -> pap is a deliberate function-local (lazy) import in
     # registry/v2.py; it is declared here but does not create an import-time cycle.
     "registry": {"connectors", "pap"},
