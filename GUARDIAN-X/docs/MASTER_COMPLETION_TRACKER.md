@@ -359,6 +359,11 @@ Implemented and tested in this pass (evidence rows above):
   `database is locked` when several processes convert a fresh lease database to
   WAL at once; deterministic regression test added. Pushed CI run on Python 3.12
   (Linux and macOS) exposed this pre-existing race.
+* **macOS CI fixes** — `ProcessIsolationBackend` now applies POSIX rlimits
+  best-effort (macOS refuses `RLIMIT_NPROC`/`RLIMIT_AS`) and creates the session
+  via `start_new_session=True` instead of a pre-exec `setsid`, so the process
+  backend works on macOS; two `test_manifest` comparisons now resolve the file
+  (macOS temp dirs are reached through `/var` -> `/private/var`).
 
 Still not implemented, and not claimed: HOST-11 (real cloud workspace adapter),
 ENT-02..06 and ENT-08..10 (PostgreSQL, IdP/MFA, full RBAC, service identities/KMS,

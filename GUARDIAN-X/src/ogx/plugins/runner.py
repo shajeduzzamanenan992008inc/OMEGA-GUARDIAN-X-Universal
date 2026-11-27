@@ -136,7 +136,13 @@ class ProcessIsolationBackend:
         return bool(self._python) and Path(self._python).exists()
 
     def _limits_hook(self, limits: ResourceLimits):
-        """Return a preexec hook applying POSIX rlimits, or None elsewhere."""
+        """Return a preexec hook applying POSIX rlimits, or None elsewhere.
+
+        Platforms refuse some limits (macOS rejects ``RLIMIT_NPROC`` and can
+        reject ``RLIMIT_AS``). Refusal must not abort the child process, so each
+        limit is applied best-effort and the session boundary is created by
+        ``start_new_session`` instead of a pre-exec ``setsid``.
+        """
 
         if os.name != "posix":  # pragma: no cover - exercised on Windows
             return None
@@ -144,18 +150,20 @@ class ProcessIsolationBackend:
         def apply_limits() -> None:  # pragma: no cover - POSIX only
             import resource
 
-            os.setsid()
-            resource.setrlimit(resource.RLIMIT_CPU, (limits.cpu_seconds, limits.cpu_seconds))
-            resource.setrlimit(resource.RLIMIT_AS, (limits.memory_bytes, limits.memory_bytes))
-            resource.setrlimit(
-                resource.RLIMIT_NPROC, (limits.max_processes, limits.max_processes)
-            )
-            resource.setrlimit(
-                resource.RLIMIT_NOFILE, (limits.max_open_files, limits.max_open_files)
-            )
-            resource.setrlimit(
-                resource.RLIMIT_FSIZE, (limits.max_file_bytes, limits.max_file_bytes)
-            )
+            for name, value in (
+                ("RLIMIT_CPU", limits.cpu_seconds),
+                ("RLIMIT_AS", limits.memory_bytes),
+                ("RLIMIT_NPROC", limits.max_processes),
+                ("RLIMIT_NOFILE", limits.max_open_files),
+                ("RLIMIT_FSIZE", limits.max_file_bytes),
+            ):
+                limit = getattr(resource, name, None)
+                if limit is None:
+                    continue
+                try:
+                    resource.setrlimit(limit, (value, value))
+                except (OSError, ValueError):
+                    continue
 
         return apply_limits
 
@@ -195,6 +203,7 @@ class ProcessIsolationBackend:
                 stdin=subprocess.PIPE if stdin_payload is not None else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                start_new_session=True,
                 preexec_fn=self._limits_hook(limits),
             )
             out_chunks: list[bytes] = []

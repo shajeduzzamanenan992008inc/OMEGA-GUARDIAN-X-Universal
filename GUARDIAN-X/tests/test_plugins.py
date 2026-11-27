@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -672,3 +673,22 @@ def test_docker_backend_fails_closed_without_docker(tmp_path):
     runner = PluginRunner(backend=backend)
     with pytest.raises(RunnerError, match="unavailable"):
         runner.execute(manifest, None, plugin_root=root)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX rlimits are unavailable here")
+def test_limit_hook_tolerates_limits_the_platform_refuses(monkeypatch):
+    """macOS rejects RLIMIT_NPROC/RLIMIT_AS; refusal must not abort the child."""
+
+    import resource
+
+    calls = []
+
+    def refuse(limit, values):
+        calls.append(limit)
+        raise OSError("setrlimit refused by this platform")
+
+    monkeypatch.setattr(resource, "setrlimit", refuse)
+    hook = ProcessIsolationBackend()._limits_hook(ResourceLimits(timeout_seconds=5))
+    assert hook is not None
+    hook()  # must not raise
+    assert calls, "the hook did not attempt to apply any limit"
