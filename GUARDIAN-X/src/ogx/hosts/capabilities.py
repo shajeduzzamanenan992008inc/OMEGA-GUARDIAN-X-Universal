@@ -626,3 +626,33 @@ def get_supported_capabilities(host_type: str) -> List[str]:
 def get_requires_auth_capabilities(host_type: str) -> List[str]:
     """Get capabilities requiring authentication for a host type."""
     return CAPABILITY_MATRIX.get_requires_auth_capabilities(host_type)
+
+# HOST-11: cloud workspace (GitHub Codespaces). Read-only inspection only: every
+# mutation, exec and file operation is declared unsupported rather than hidden.
+CapabilityMatrix.DEFAULT_CAPABILITIES["cloud_workspace"] = {
+    "workspace_read": "supported",
+    "workspace_create": "unsupported",
+    "workspace_delete": "unsupported",
+    "workspace_start": "unsupported",
+    "workspace_stop": "unsupported",
+    "workspace_exec": "unsupported",
+    "workspace_execute": "unsupported",
+    "repository_metadata_read": "unsupported",
+    "repository_structure_read": "unsupported",
+    "file_read": "unsupported",
+    "file_write": "unsupported",
+    "file_system_access": "unsupported",
+    "repository_write": "unsupported",
+    "branch_read": "unsupported",
+    "commit_read": "unsupported",
+    "branch_create": "unsupported",
+    "branch_delete": "unsupported",
+    "commit_create": "unsupported",
+    "push": "unsupported",
+    "fetch": "unsupported",
+    "clone": "unsupported",
+    "pull_request_create": "unsupported",
+    "pull_request_merge": "unsupported",
+    "testing": "unsupported",
+    "deployment": "unsupported",
+}

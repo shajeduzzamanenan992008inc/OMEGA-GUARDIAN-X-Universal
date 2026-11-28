@@ -92,3 +92,57 @@ CREATE TABLE IF NOT EXISTS approval_events (
   details_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_approval_events_request_time ON approval_events(request_id, occurred_at);
+
+-- ENT-05: tenant-scoped service identities and their scoped bearer tokens.
+CREATE TABLE IF NOT EXISTS service_accounts (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  base_role TEXT NOT NULL CHECK(base_role IN ('admin','developer','auditor','viewer')),
+  scopes_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),
+  created_at TEXT NOT NULL,
+  created_by_user_id TEXT,
+  UNIQUE(organization_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_service_accounts_org ON service_accounts(organization_id);
+
+CREATE TABLE IF NOT EXISTS service_tokens (
+  id TEXT PRIMARY KEY,
+  service_account_id TEXT NOT NULL REFERENCES service_accounts(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  fingerprint TEXT NOT NULL,
+  scopes_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revoked_by_user_id TEXT,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_service_tokens_account ON service_tokens(service_account_id);
+
+-- ENT-06: envelope-encrypted tenant secrets (ciphertext only; never plaintext).
+CREATE TABLE IF NOT EXISTS tenant_secrets (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  envelope_json TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(organization_id, name)
+);
+
+-- ENT-08: idempotency records for durable API writes.
+CREATE TABLE IF NOT EXISTS idempotency_records (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL,
+  route TEXT NOT NULL,
+  request_digest TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  status_code INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(organization_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_idempotency_org ON idempotency_records(organization_id);

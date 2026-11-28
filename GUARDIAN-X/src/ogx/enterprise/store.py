@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ..config import state_dir
+from .authz import Action, PolicyEngine, Principal, Resource
 
 ALLOWED_ROLES = {"owner", "admin", "developer", "auditor", "viewer"}
 
@@ -22,8 +23,13 @@ def _now() -> str:
 class EnterpriseStore:
     """Local single-node tenant data model. Not a production SaaS auth/API server."""
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, db_path: Path | None = None, policy: PolicyEngine | None = None):
         self.db_path = db_path or (state_dir() / "enterprise" / "ogx-enterprise.sqlite3")
+        self._policy = policy or PolicyEngine()
+
+    @property
+    def policy(self) -> PolicyEngine:
+        return self._policy
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -386,3 +392,484 @@ class EnterpriseStore:
         return {"record_id": record_id, "status": new_values["status"],
                 "priority": new_values["priority"], "owner_subject": new_values["owner_subject"],
                 "due_date": new_values["due_date"], "details": merged_details}
+
+    # ------------------------------------------------------- authorization map
+    def member_role(self, organization_id: str, subject: str) -> str | None:
+        """Return the stored role for a member, or ``None`` for a non-member."""
+
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT m.role FROM memberships m JOIN users u ON u.id=m.user_id "
+                "WHERE m.organization_id=? AND u.external_subject=?",
+                (organization_id, subject),
+            ).fetchone()
+        return row["role"] if row else None
+
+    def _require_action(self, conn: sqlite3.Connection, organization_id: str, subject: str,
+                        action: Action, *, resource_kind: str = "organization",
+                        resource_id: str | None = None) -> str:
+        """Authorize an actor through the shared policy engine and return its role."""
+
+        row = conn.execute(
+            "SELECT m.role FROM memberships m JOIN users u ON u.id=m.user_id "
+            "WHERE m.organization_id=? AND u.external_subject=?",
+            (organization_id, subject),
+        ).fetchone()
+        if row is None:
+            raise PermissionError("Not a member of this organization.")
+        principal = Principal(subject=subject, roles=(row["role"],), tenant_id=organization_id)
+        self._policy.require(
+            principal,
+            action,
+            Resource(kind=resource_kind, id=resource_id, tenant_id=organization_id),
+        )
+        return row["role"]
+
+    @staticmethod
+    def _user_id(conn: sqlite3.Connection, subject: str | None) -> str | None:
+        if not subject:
+            return None
+        row = conn.execute("SELECT id FROM users WHERE external_subject=?", (subject,)).fetchone()
+        return row["id"] if row else None
+
+    def get_organization(self, organization_id: str) -> dict[str, Any] | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT id,slug,display_name,created_at,status FROM organizations WHERE id=?",
+                (organization_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def record_audit(self, organization_id: str, action: str, resource_type: str,
+                     resource_id: str | None, details: dict[str, Any] | None = None, *,
+                     actor_label: str | None = None, request_id: str | None = None) -> str:
+        """Append an audit event for a non-membership actor (API/service token)."""
+
+        event_id = uuid.uuid4().hex
+        payload = dict(details or {})
+        if actor_label:
+            payload.setdefault("actor", actor_label)
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO audit_events(id,organization_id,actor_user_id,action,resource_type,"
+                "resource_id,occurred_at,request_id,details_json) VALUES(?,?,?,?,?,?,?,?,?)",
+                (event_id, organization_id, self._user_id(conn, actor_label), action,
+                 resource_type, resource_id, _now(), request_id,
+                 json.dumps(payload, sort_keys=True)),
+            )
+        return event_id
+
+    # --------------------------------------------------------- service accounts
+    def create_service_account(self, organization_id: str, name: str, base_role: str,
+                               scopes: list[str], actor_subject: str) -> dict[str, Any]:
+        account_id = uuid.uuid4().hex
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_action(conn, organization_id, actor_subject, Action.SERVICE_ACCOUNT_MANAGE)
+            active = conn.execute(
+                "SELECT 1 FROM organizations WHERE id=? AND status='active'", (organization_id,)
+            ).fetchone()
+            if not active:
+                raise ValueError("Organization not found or inactive.")
+            if conn.execute(
+                "SELECT 1 FROM service_accounts WHERE organization_id=? AND name=?",
+                (organization_id, name),
+            ).fetchone():
+                raise ValueError("A service account with that name already exists.")
+            conn.execute(
+                "INSERT INTO service_accounts(id,organization_id,name,base_role,scopes_json,"
+                "status,created_at,created_by_user_id) VALUES(?,?,?,?,?,?,?,?)",
+                (account_id, organization_id, name, base_role,
+                 json.dumps(list(scopes), sort_keys=True), "active", _now(),
+                 self._user_id(conn, actor_subject)),
+            )
+            self._audit(conn, organization_id, self._user_id(conn, actor_subject),
+                        "service_account.create", "service_account", account_id,
+                        {"name": name, "base_role": base_role, "scopes": list(scopes)})
+        return {
+            "account_id": account_id,
+            "organization_id": organization_id,
+            "name": name,
+            "base_role": base_role,
+            "scopes": list(scopes),
+            "status": "active",
+        }
+
+    def get_service_account(self, account_id: str) -> dict[str, Any] | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT id,name,organization_id,base_role,scopes_json,status,created_at "
+                "FROM service_accounts WHERE id=?",
+                (account_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        account = dict(row)
+        account["account_id"] = account.pop("id")
+        account["scopes"] = json.loads(account.pop("scopes_json"))
+        return account
+
+    def list_service_accounts(self, organization_id: str) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT id,name,base_role,scopes_json,status,created_at FROM service_accounts "
+                "WHERE organization_id=? ORDER BY name",
+                (organization_id,),
+            ).fetchall()
+        return [
+            {
+                "account_id": row["id"],
+                "name": row["name"],
+                "base_role": row["base_role"],
+                "scopes": json.loads(row["scopes_json"]),
+                "status": row["status"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def insert_service_token(self, *, token_id: str, account_id: str, token_hash: str,
+                             fingerprint_value: str, scopes: list[str], expires_at: str,
+                             actor_subject: str) -> None:
+        account = self.get_service_account(account_id)
+        if account is None:
+            raise ValueError("Service account not found.")
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO service_tokens(id,service_account_id,token_hash,fingerprint,"
+                "scopes_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?)",
+                (token_id, account_id, token_hash, fingerprint_value,
+                 json.dumps(list(scopes), sort_keys=True), _now(), expires_at),
+            )
+            self._audit(conn, account["organization_id"], self._user_id(conn, actor_subject),
+                        "service_token.issue", "service_token", token_id,
+                        {"account_id": account_id, "expires_at": expires_at})
+
+    def find_service_token(self, token_id: str) -> dict[str, Any] | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT id,service_account_id,token_hash,fingerprint,scopes_json,created_at,"
+                "expires_at,revoked_at,last_used_at FROM service_tokens WHERE id=?",
+                (token_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        token = dict(row)
+        token["token_id"] = token.pop("id")
+        token["scopes"] = json.loads(token.pop("scopes_json"))
+        return token
+
+    def touch_service_token(self, token_id: str) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                "UPDATE service_tokens SET last_used_at=? WHERE id=?", (_now(), token_id)
+            )
+
+    def revoke_service_token(self, organization_id: str, token_id: str,
+                             actor_subject: str) -> dict[str, Any]:
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_action(conn, organization_id, actor_subject,
+                                 Action.SERVICE_ACCOUNT_MANAGE, resource_kind="service_token",
+                                 resource_id=token_id)
+            row = conn.execute(
+                "SELECT t.id,t.revoked_at,a.organization_id FROM service_tokens t "
+                "JOIN service_accounts a ON a.id=t.service_account_id WHERE t.id=?",
+                (token_id,),
+            ).fetchone()
+            if row is None or row["organization_id"] != organization_id:
+                raise ValueError("Service token not found in this organization.")
+            if row["revoked_at"]:
+                return {"token_id": token_id, "revoked": True, "already_revoked": True}
+            conn.execute(
+                "UPDATE service_tokens SET revoked_at=?,revoked_by_user_id=? WHERE id=?",
+                (_now(), self._user_id(conn, actor_subject), token_id),
+            )
+            self._audit(conn, organization_id, self._user_id(conn, actor_subject),
+                        "service_token.revoke", "service_token", token_id, {})
+        return {"token_id": token_id, "revoked": True, "already_revoked": False}
+
+    def list_service_tokens(self, organization_id: str) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT t.id,t.service_account_id,t.fingerprint,t.created_at,t.expires_at,"
+                "t.revoked_at,t.last_used_at,a.name FROM service_tokens t "
+                "JOIN service_accounts a ON a.id=t.service_account_id "
+                "WHERE a.organization_id=? ORDER BY t.created_at DESC",
+                (organization_id,),
+            ).fetchall()
+        return [
+            {
+                "token_id": row["id"],
+                "account_id": row["service_account_id"],
+                "account_name": row["name"],
+                "fingerprint": row["fingerprint"],
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+                "revoked_at": row["revoked_at"],
+                "last_used_at": row["last_used_at"],
+            }
+            for row in rows
+        ]
+
+    # ------------------------------------------------------------ tenant secrets
+    def upsert_tenant_secret(self, organization_id: str, name: str, envelope_json: str,
+                             key_id: str) -> None:
+        now = _now()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT id FROM tenant_secrets WHERE organization_id=? AND name=?",
+                (organization_id, name),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE tenant_secrets SET envelope_json=?,key_id=?,updated_at=? WHERE id=?",
+                    (envelope_json, key_id, now, existing["id"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO tenant_secrets(id,organization_id,name,envelope_json,key_id,"
+                    "created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                    (uuid.uuid4().hex, organization_id, name, envelope_json, key_id, now, now),
+                )
+
+    def get_tenant_secret(self, organization_id: str, name: str) -> dict[str, Any] | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT name,envelope_json,key_id,created_at,updated_at FROM tenant_secrets "
+                "WHERE organization_id=? AND name=?",
+                (organization_id, name),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_tenant_secret_names(self, organization_id: str) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT name,key_id,created_at,updated_at FROM tenant_secrets "
+                "WHERE organization_id=? ORDER BY name",
+                (organization_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    # -------------------------------------------------------------- idempotency
+    def get_idempotent(self, organization_id: str, key: str) -> dict[str, Any] | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT route,request_digest,response_json,status_code FROM idempotency_records "
+                "WHERE organization_id=? AND idempotency_key=?",
+                (organization_id, key),
+            ).fetchone()
+        if row is None:
+            return None
+        record = dict(row)
+        record["response"] = json.loads(record.pop("response_json"))
+        return record
+
+    def save_idempotent(self, organization_id: str, key: str, route: str,
+                        request_digest: str, response: dict[str, Any],
+                        status_code: int) -> None:
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT OR REPLACE INTO idempotency_records(id,organization_id,idempotency_key,"
+                "route,request_digest,response_json,status_code,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (uuid.uuid4().hex, organization_id, key, route, request_digest,
+                 json.dumps(response, sort_keys=True), status_code, _now()),
+            )
+
+    # ------------------------------------------- pre-authorized query surface
+    # These methods deliberately perform no authorization of their own. They are
+    # only called by interfaces that have already taken a policy decision (the
+    # REST API and the CLI), so that a service identity is not forced to have a
+    # human membership row while tenant scoping is still enforced by the
+    # ``WHERE organization_id=?`` predicate on every query.
+    @staticmethod
+    def _window(limit: int, offset: int) -> tuple[int, int]:
+        if not 1 <= int(limit) <= 200:
+            raise ValueError("limit must be between 1 and 200.")
+        if int(offset) < 0 or int(offset) > 1_000_000:
+            raise ValueError("offset is out of range.")
+        return int(limit), int(offset)
+
+    def list_projects_scoped(self, organization_id: str, *, limit: int = 50,
+                             offset: int = 0) -> dict[str, Any]:
+        limit, offset = self._window(limit, offset)
+        with self._connection() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM projects WHERE organization_id=?", (organization_id,)
+            ).fetchone()[0]
+            rows = conn.execute(
+                "SELECT id,name,provider,repository_ref,created_at,status FROM projects "
+                "WHERE organization_id=? ORDER BY name LIMIT ? OFFSET ?",
+                (organization_id, limit, offset),
+            ).fetchall()
+        return {"items": [dict(row) for row in rows], "total": total, "limit": limit,
+                "offset": offset}
+
+    def list_members_scoped(self, organization_id: str, *, limit: int = 50,
+                            offset: int = 0) -> dict[str, Any]:
+        limit, offset = self._window(limit, offset)
+        with self._connection() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM memberships WHERE organization_id=?", (organization_id,)
+            ).fetchone()[0]
+            rows = conn.execute(
+                "SELECT u.external_subject,u.status,m.role,m.created_at FROM memberships m "
+                "JOIN users u ON u.id=m.user_id WHERE m.organization_id=? "
+                "ORDER BY m.role,u.external_subject LIMIT ? OFFSET ?",
+                (organization_id, limit, offset),
+            ).fetchall()
+        return {"items": [dict(row) for row in rows], "total": total, "limit": limit,
+                "offset": offset}
+
+    def list_audit_events_scoped(self, organization_id: str, *, limit: int = 50,
+                                 offset: int = 0) -> dict[str, Any]:
+        limit, offset = self._window(limit, offset)
+        with self._connection() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE organization_id=?", (organization_id,)
+            ).fetchone()[0]
+            rows = conn.execute(
+                "SELECT id,action,resource_type,resource_id,occurred_at,request_id,details_json "
+                "FROM audit_events WHERE organization_id=? "
+                "ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?",
+                (organization_id, limit, offset),
+            ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["details"] = json.loads(item.pop("details_json"))
+            except json.JSONDecodeError:
+                item["details"] = {"unparseable": True}
+            items.append(item)
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def list_governance_records_scoped(self, organization_id: str, *, record_type: str | None = None,
+                                       limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        from .governance import RECORD_TYPES
+        limit, offset = self._window(limit, offset)
+        if record_type and record_type not in RECORD_TYPES:
+            raise ValueError(f"Unsupported governance record type: {record_type}")
+        query = (
+            "SELECT id,record_type,title,owner_subject,priority,status,due_date,details_json,"
+            "created_at,updated_at FROM governance_records WHERE organization_id=?"
+        )
+        count_query = "SELECT COUNT(*) FROM governance_records WHERE organization_id=?"
+        params: list[Any] = [organization_id]
+        if record_type:
+            query += " AND record_type=?"
+            count_query += " AND record_type=?"
+            params.append(record_type)
+        with self._connection() as conn:
+            total = conn.execute(count_query, params).fetchone()[0]
+            rows = conn.execute(
+                query + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["details"] = json.loads(item.pop("details_json"))
+            except json.JSONDecodeError:
+                item["details"] = {"unparseable": True}
+            items.append(item)
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def register_project_scoped(self, organization_id: str, name: str, provider: str,
+                                repository_ref: str | None,
+                                actor_label: str) -> dict[str, Any]:
+        if not name.strip():
+            raise ValueError("Project name is required.")
+        repository_ref = self._validate_repository_ref(repository_ref)
+        project_id = uuid.uuid4().hex
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            active = conn.execute(
+                "SELECT 1 FROM organizations WHERE id=? AND status='active'", (organization_id,)
+            ).fetchone()
+            if not active:
+                raise ValueError("Organization not found or inactive.")
+            if conn.execute(
+                "SELECT 1 FROM projects WHERE organization_id=? AND name=?",
+                (organization_id, name.strip()),
+            ).fetchone():
+                raise ValueError("A project with that name already exists in the organization.")
+            conn.execute(
+                "INSERT INTO projects(id,organization_id,name,provider,repository_ref,created_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (project_id, organization_id, name.strip(), provider, repository_ref, _now()),
+            )
+            conn.execute(
+                "INSERT INTO audit_events(id,organization_id,actor_user_id,action,resource_type,"
+                "resource_id,occurred_at,details_json) VALUES(?,?,?,?,?,?,?,?)",
+                (uuid.uuid4().hex, organization_id, self._user_id(conn, actor_label),
+                 "project.register", "project", project_id, _now(),
+                 json.dumps({"name": name.strip(), "provider": provider,
+                             "actor": actor_label}, sort_keys=True)),
+            )
+        return {"project_id": project_id, "organization_id": organization_id,
+                "name": name.strip(), "provider": provider,
+                "repository_ref": repository_ref}
+
+    def create_governance_record_scoped(self, organization_id: str, record_type: str, title: str,
+                                       owner_subject: str, priority: str, status: str,
+                                       due_date: str | None, details: dict[str, Any],
+                                       actor_label: str) -> dict[str, Any]:
+        """Create a governance record for an already-authorized interface caller."""
+
+        from .governance import RECORD_PRIORITIES, RECORD_STATUSES, RECORD_TYPES
+        if record_type not in RECORD_TYPES:
+            raise ValueError(f"Unsupported governance record type: {record_type}")
+        if priority not in RECORD_PRIORITIES:
+            raise ValueError("Unsupported governance priority.")
+        if status not in RECORD_STATUSES:
+            raise ValueError("Unsupported governance status.")
+        if not title.strip() or not owner_subject.strip():
+            raise ValueError("Title and accountable owner subject are required.")
+        if due_date is not None and (len(due_date) != 10 or due_date[4] != "-" or due_date[7] != "-"):
+            raise ValueError("due_date must use YYYY-MM-DD format.")
+        if not isinstance(details, dict):
+            raise ValueError("details must be a JSON object.")
+        record_id = uuid.uuid4().hex
+        now = _now()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            # A service identity is still an accountable actor; record it so the
+            # NOT NULL creator column stays meaningful without inventing a
+            # membership or an interactive login.
+            conn.execute(
+                "INSERT OR IGNORE INTO users(id,external_subject,created_at) VALUES(?,?,?)",
+                (uuid.uuid4().hex, actor_label, now),
+            )
+            conn.execute(
+                "INSERT INTO governance_records(id,organization_id,record_type,title,owner_subject,"
+                "priority,status,due_date,details_json,created_by_user_id,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (record_id, organization_id, record_type, title.strip(), owner_subject.strip(),
+                 priority, status, due_date, json.dumps(details, sort_keys=True),
+                 self._user_id(conn, actor_label), now, now),
+            )
+            conn.execute(
+                "INSERT INTO audit_events(id,organization_id,actor_user_id,action,resource_type,"
+                "resource_id,occurred_at,details_json) VALUES(?,?,?,?,?,?,?,?)",
+                (uuid.uuid4().hex, organization_id, self._user_id(conn, actor_label),
+                 f"governance.{record_type}.create", "governance_record", record_id, now,
+                 json.dumps({"title": title.strip(), "priority": priority, "actor": actor_label},
+                            sort_keys=True)),
+            )
+        return {
+            "record_id": record_id,
+            "organization_id": organization_id,
+            "record_type": record_type,
+            "title": title.strip(),
+            "owner_subject": owner_subject.strip(),
+            "priority": priority,
+            "status": status,
+            "due_date": due_date,
+        }
