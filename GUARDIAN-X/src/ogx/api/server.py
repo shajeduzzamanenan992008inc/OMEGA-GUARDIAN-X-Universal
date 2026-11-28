@@ -18,9 +18,10 @@ Design notes that matter for review:
 * **Errors** use one schema with a correlation id; internals are never echoed.
 
 Honest limits, documented in ``docs/ENTERPRISE_API_AND_AUTHZ.md``: this is a
-single-node HTTP service (no HA, no TLS termination, no OIDC human login, no
-OpenAPI document generation yet). It is designed to sit behind a TLS reverse
-proxy, and it binds to loopback by default.
+single-node HTTP service (no HA, no TLS termination, no OIDC human login). An
+OpenAPI 3.1 document is generated from the router constants at
+``/api/v1/openapi.json``. It is designed to sit behind a TLS reverse proxy, and
+it binds to loopback by default.
 """
 
 from __future__ import annotations
@@ -418,12 +419,7 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception:  # pragma: no cover - defensive
             checks.append({"name": "database", "status": "failed"})
         try:
-            with store._connection() as conn:
-                present = {
-                    str(row[0]) for row in conn.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    )
-                }
+            present = store.table_names()
             missing = sorted(_REQUIRED_TABLES - present)
             checks.append({"name": "schema", "status": "ok" if not missing else "failed",
                            "missing": missing})
@@ -685,9 +681,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _jobs(self, principal: Principal) -> Any:
         self._authorize(principal, Action.JOB_READ)
-        from ..jobs import JobQueue, default_queue_path
+        from ..jobs import open_job_queue
 
-        queue = JobQueue(default_queue_path())
+        queue = open_job_queue(database_url=self.context.store.database_url)
         return 200, queue.stats(), {}
 
     def _plugins(self, principal: Principal) -> Any:
