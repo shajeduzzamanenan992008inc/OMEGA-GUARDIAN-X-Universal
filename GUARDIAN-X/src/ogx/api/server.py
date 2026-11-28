@@ -49,6 +49,7 @@ from ..enterprise.service_identity import InvalidToken, ServiceIdentityManager
 from ..enterprise.store import EnterpriseStore
 from . import dashboard
 from .observability import Metrics
+from .metrics_store import MetricsStorage, InMemoryMetricsStorage, create_storage
 
 API_VERSION = "v1"
 MAX_BODY_BYTES = 64 * 1024
@@ -126,6 +127,7 @@ class ApiContext:
     version: str = __version__
     rate_limit: int = DEFAULT_RATE_LIMIT
     rate_window: float = DEFAULT_RATE_WINDOW
+    metrics_storage: Any = None
     limiter: _RateLimiter = field(init=False)
     metrics: Metrics = field(init=False)
 
@@ -136,7 +138,9 @@ class ApiContext:
         if self.identities is None:
             self.identities = ServiceIdentityManager(self.store, self.policy)
         self.limiter = _RateLimiter(self.rate_limit, self.rate_window)
-        self.metrics = Metrics(version=self.version)
+        if self.metrics_storage is None:
+            self.metrics_storage = InMemoryMetricsStorage()
+        self.metrics = Metrics(version=self.version, storage=self.metrics_storage)
 
     @classmethod
     def default(cls) -> "ApiContext":
@@ -421,7 +425,15 @@ class _Handler(BaseHTTPRequestHandler):
                            "missing": missing})
         except Exception:  # pragma: no cover - defensive
             checks.append({"name": "schema", "status": "failed"})
-        ready = all(check["status"] == "ok" for check in checks)
+        # Observability storage health is reported but is not a hard readiness
+        # gate: metrics failures must not break application requests.
+        try:
+            obs_status = "ok" if bool(self.context.metrics.healthy) else "degraded"
+        except Exception:
+            obs_status = "degraded"
+        checks.append({"name": "observability_storage", "status": obs_status,
+                       "critical": False})
+        ready = all(check["status"] == "ok" for check in checks if check.get("critical", True))
         return (200 if ready else 503), {
             "status": "ready" if ready else "not_ready",
             "version": self.context.version,
