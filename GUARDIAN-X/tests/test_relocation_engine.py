@@ -87,10 +87,65 @@ def test_apply_copy_retains_source_and_verifies(tmp_path):
     assert result["delete_reason"] == "source_retained_for_copy_or_clone"
     assert project.exists()
     assert (destination / "src" / "app.py").read_text(encoding="utf-8") == "print('ok')\n"
-
     report = verify_relocation(project, destination)
     assert report["identity_preserved"] is True
     assert report["content_matches"] is True
+
+
+def test_partial_copy_resumes_after_mid_copy_interruption(tmp_path):
+    project = make_project(tmp_path / "p")
+    destination = tmp_path / "dest"
+    journal_dir = tmp_path / "journal"
+    plan = plan_relocation(project, destination, operation="copy")
+
+    with pytest.raises(SimulatedInterruption):
+        apply_relocation(
+            plan, journal_dir=journal_dir,
+            fault_inject=_interrupt_at("copy", "started"),
+        )
+    assert not destination.exists()
+
+    # Model a process that wrote two files and died: one complete, one truncated.
+    (destination / "src").mkdir(parents=True)
+    (destination / "src" / "app.py").write_bytes(b"pri")
+    (destination / "README.md").write_bytes((project / "README.md").read_bytes())
+
+    result = recover_relocation(journal_dir / f"{plan.plan_id}.json")
+    assert result["state"] == "complete"
+    assert result["resumed"] is True
+    assert result["copy_report"]["reused"] == 1
+    report = verify_relocation(project, destination)
+    assert report["identity_preserved"] is True
+    assert report["content_matches"] is True
+
+
+def test_resume_rejects_unexpected_destination_files(tmp_path):
+    project = make_project(tmp_path / "p")
+    destination = tmp_path / "dest"
+    journal_dir = tmp_path / "journal"
+    plan = plan_relocation(project, destination, operation="copy")
+
+    with pytest.raises(SimulatedInterruption):
+        apply_relocation(
+            plan, journal_dir=journal_dir,
+            fault_inject=_interrupt_at("copy", "done"),
+        )
+    (destination / "injected.txt").write_text("unexpected", encoding="utf-8")
+
+    with pytest.raises(RelocationError) as ctx:
+        recover_relocation(journal_dir / f"{plan.plan_id}.json")
+    assert ctx.value.reason == "verify_failed"
+
+
+def test_copy_still_refuses_a_non_empty_destination_by_default(tmp_path):
+    project = make_project(tmp_path / "p")
+    destination = tmp_path / "dest"
+    destination.mkdir()
+    (destination / "keep.txt").write_text("keep", encoding="utf-8")
+
+    with pytest.raises(RelocationRefused) as ctx:
+        copy_project_tree(project, destination)
+    assert ctx.value.reason == "destination_exists"
 
 
 def test_apply_move_without_confirmation_retains_source(tmp_path):
@@ -199,7 +254,7 @@ def test_real_failure_rolls_back_destination(tmp_path, monkeypatch):
     journal_dir = tmp_path / "journal"
     plan = plan_relocation(project, destination, operation="copy")
 
-    def boom(source, target, *, entries=None):
+    def boom(source, target, *, entries=None, **kwargs):
         # Simulate a failure after the destination was partially created.
         target.mkdir(parents=True, exist_ok=True)
         (target / "partial.txt").write_text("partial", encoding="utf-8")

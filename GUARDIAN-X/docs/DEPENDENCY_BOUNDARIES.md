@@ -42,6 +42,12 @@ ogx.registry.v2
         └── (standard library)
 ```
 
+The package-level edge set is declared in `_dev/tests/test_architecture.py` and
+enforced for every `src/ogx` module. `ogx.api` may import `enterprise`, `hosts`,
+`plugins` and `platform`. The `platform` edge is limited to canonical endpoint
+validation (`platform.security.validate_api_base`) and redaction primitives used
+by the tracing and alert exporters; it does not reach a provider adapter.
+
 Rules:
 
 1. `ogx.platform` never imports the CLI, the analyzers, or the project it is
