@@ -2604,9 +2604,9 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
         elif args.enterprise_action == "secret-get":
             value = SecretsVault(store).get(args.org, args.name, args.actor_subject)
             if args.json:
-                _json_print({"organization_id": args.org, "name": args.name, "value": value})
+                _json_print({"organization_id": args.org, "name": args.name, "value": "[REDACTED]"})
             else:
-                print(value)
+                print(f"Secret '{args.name}' retrieved for organization '{args.org}' (value redacted).")
         elif args.enterprise_action == "secrets":
             _json_print(SecretsVault(store).names(args.org, args.actor_subject))
         elif args.enterprise_action == "kms-status":
