@@ -94,9 +94,12 @@ Pruning deletes the oldest artifacts together with their manifests and refuses
 
 ## 6. Honest limits and remaining external work
 
-* The manifest is **not signed**. An attacker who can rewrite artifact *and*
-  manifest consistently is not detected; signing needs an owner-controlled key
-  and is not implemented.
+* Manifest authenticity is **symmetric**: `HmacSigningProvider` (HMAC-SHA256,
+  0600 key file) detects a manifest rewritten by anyone who does not hold the key,
+  but an attacker who can read the key file can forge a manifest and there is no
+  third-party verifiability. Managed/HSM asymmetric signing through the
+  `SigningProvider` boundary is not implemented, and no production signing key
+  exists in this repository.
 * This is a single-node SQLite mechanism. There is no PostgreSQL physical/logical
   backup, no WAL archiving, no point-in-time recovery and no cross-region copy.
 * RPO/RTO are therefore **not** quantified for production: they depend on how
@@ -122,3 +125,84 @@ Pruning deletes the oldest artifacts together with their manifests and refuses
 * backup of a missing database is refused;
 * prune keeps the newest N and refuses `keep=0`;
 * symlink targets are rejected (skipped on platforms without symlink support).
+
+## 8. Manifest authenticity (signing)
+
+Hashes answer "is this the artifact the manifest describes"; they do not answer
+"who wrote the manifest". `enterprise/backup_signing.py` adds that third layer
+behind an explicit provider boundary:
+
+```python
+class SigningProvider(Protocol):
+    algorithm: str
+    def active_key_id(self) -> str: ...
+    def sign(self, payload: bytes) -> dict: ...
+    def verify(self, payload: bytes, signature: dict) -> bool: ...
+    def rotate(self) -> str: ...
+    def revoke(self, key_id: str) -> None: ...
+    def describe(self) -> dict: ...
+```
+
+The concrete provider, `HmacSigningProvider`, keeps 32-byte keys in
+`OGX_HOME/enterprise/backup-signing-keys.json` (0600, atomic replace) and signs
+the canonical manifest bytes (`json.dumps` sorted/compacted, signature field
+excluded). Verification uses `hmac.compare_digest`, so a modified manifest,
+a replaced `key_id`, an unknown algorithm or a revoked key fails closed.
+
+```bash
+ogx enterprise backup --sign                    # sign the new manifest
+ogx enterprise backup-verify --backup-path <f> --check-signature
+ogx enterprise backup-verify --backup-path <f> --check-signature --require-signature
+ogx enterprise restore --backup-path <f> --target <db> --check-signature
+ogx enterprise signing-keys                     # key ids/status, never secrets
+ogx enterprise signing-key-rotate               # new active key, old key retired
+```
+
+Rotation semantics: the previous key becomes `retired` and still verifies old
+manifests, so rotating does not orphan existing backups; `revoke` immediately
+stops a key from verifying (compromise response). Because the provider is
+symmetric it is an **operator-local** authenticity check, not a release-signing
+service: a managed KMS/HSM asymmetric implementation is a separate owner
+decision and is not claimed here.
+
+Three properties are reported separately by `verify_backup`:
+`sha256` (hash integrity), the AEAD result for sealed artifacts, and
+`signature.status` — `verified`, `unsigned` or `unverified` (a signature exists
+but no provider was configured to check it).
+
+## 9. Manifest schema, path safety, crash recovery and retention
+
+**Strict schema (v2).** Every manifest is validated before it is used: exact
+top-level field set (unknown fields are rejected), 32-hex backup id, SHA-256
+digests, integer sizes within the 2 GiB cap, boolean `encrypted`, bounded
+timestamps/labels/key ids, and an artifact name that must be a bare file name
+matching `enterprise-*.sqlite3[.ogxbak]`. Version 1 manifests still verify
+(hash and AEAD only); v1 manifests cannot carry a signature.
+
+**Path safety.** Restore refuses a relative target, any target containing `.`
+or `..` segments, a target or parent directory that is a symlink, a target that
+exists but is not a regular file, an artifact that is a symlink, an artifact
+larger than the cap, and a manifest that describes a different file name.
+
+**Crash-safe restore.** Before touching the target, restore writes
+`<target>.restore-journal` (version, artifact digest, backup id, stage). It then
+builds the new database in a temporary file in the target directory, verifies
+it, moves the old database to `<target>.pre-restore`, removes stale
+`-wal`/`-shm` sidecars and `os.replace`s the new file into place; only then is
+the journal deleted. After an interruption,
+`ogx enterprise restore-recover --target <db>` rolls the previous database back
+when the target is missing and always removes stray temporary files.
+
+**Retention safety.** `prune_backups` deletes artifacts together with their
+manifests, refuses `keep < 1`, and refuses to delete anything when none of the
+backups it would keep passes verification — so a retention run cannot leave the
+operator with zero valid backups.
+
+**Tests.** `tests/test_backup_security.py` covers a signed round trip, a
+manifest whose content is changed after signing, a replaced artifact, a missing
+key, a wrong key, a revoked key, key rotation keeping old manifests valid, a
+forged signature algorithm, schema rejection of `../`, absolute and nested
+artifact names, oversize/negative/boolean sizes, unknown manifest fields,
+relative/`..`/directory restore targets, interrupted-restore rollback, journal
+cleanup on success, prune refusal when the newest backup is corrupt, and that
+`describe()` never prints key material.

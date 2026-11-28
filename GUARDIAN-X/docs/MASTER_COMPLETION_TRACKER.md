@@ -211,8 +211,8 @@ any live provider API call with credentials, release signing.
 | ENT-06 | Encryption, KMS, rotation | `enterprise/crypto.py`: RFC 8439 ChaCha20-Poly1305 in portable Python, `KMSProvider` seam, local 0600 keyring with rotation/revocation, purpose/AAD-bound envelopes; `enterprise/secrets.py` tenant vault with audited read/write/rotate. No managed KMS or HSM; pure-Python AEAD is not constant-time. | `tests/test_crypto_kms.py` (14) incl. RFC vectors, rotation, revocation, tenant binding, role denial | TESTED (local provider; managed KMS BLOCKED) |
 | ENT-07 | Job queue/workers/DLQ | `src/ogx/jobs.py`: durable SQLite queue with `BEGIN IMMEDIATE` claim, bounded pending+leased capacity, dedupe keys, attempt budget, exponential backoff, lease reaping, dead-letter state with approval-gated requeue, redacted errors and a bounded worker loop. A PostgreSQL-backed deployment is still absent (ENT-02). | `tests/test_jobs.py` (14 passed): capacity rejection, dedupe, backoff, DLQ, lease loss, concurrent claims. | TESTED (SQLite backend; Postgres BLOCKED) |
 | ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema, no CORS, and a generated OpenAPI 3.1 document at `/api/v1/openapi.json` (`src/ogx/api/openapi.py`) built from the same constants the router uses. No deprecation policy document, HA deployment or TLS termination. | `tests/test_api.py` (17) over a real loopback socket, `tests/test_observability.py` (OpenAPI + metrics) | TESTED |
-| ENT-09 | Monitoring/metrics/tracing | `src/ogx/api/observability.py`: thread-safe in-process registry (requests per bounded route label, status codes, duration sum/max/mean, in-flight gauge, uptime) exposed at `/api/v1/metrics` as JSON or Prometheus text, next to `/health` and `/ready` probes and a correlation id on every response, error and log line. No distributed tracing, no OTLP/Prometheus server storage, no alert rules or operational dashboards, no retention configuration, metrics are per-process and lost on restart. | `tests/test_observability.py` (6) over a real loopback socket | PARTIAL (metrics/probes TESTED; tracing, alerts and retention NOT_STARTED) |
-| ENT-10 | Backup/restore/DR | `src/ogx/enterprise/backup.py`: online consistent SQLite snapshot (backup API, WAL safe), `PRAGMA integrity_check` proof, SHA-256 manifest, optional 64 KiB-chunked AEAD sealing through the KMS boundary with chunk-index AAD, verified atomic restore with `.pre-restore` safety copy and sidecar cleanup, retention pruning, and `ogx enterprise backup|backups|backup-verify|restore|backup-prune`. PostgreSQL PITR, off-site/immutable storage, signed manifests, RPO/RTO targets and DR drills are not implemented. | `tests/test_backup.py` (6 passed, 1 skipped: Windows symlinks) — real restore, digest tamper and AEAD tamper tests | PARTIAL (SQLite cycle TESTED; PostgreSQL/DR BLOCKED) |
+| ENT-09 | Monitoring/metrics/tracing | `src/ogx/api/observability.py`: thread-safe bounded registry (per-route counts/errors/duration, status codes, public error-code counters, in-flight gauge, uptime) at `/api/v1/metrics` as JSON or Prometheus text; `/ready` now reports `database` and `schema` checks separately with 503 on failure; correlation id on every response, error and log line. Metrics are per-process and in-memory: no persistence, tracing, alerting or retention configuration. | `tests/test_observability.py` (8) over a real loopback socket | PARTIAL (metrics/probes/error taxonomy TESTED; persistence, tracing, alerts NOT_STARTED) |
+| ENT-10 | Backup/restore/DR | `src/ogx/enterprise/backup.py` + `backup_signing.py`: online consistent snapshot, integrity proof, strict versioned manifest schema, SHA-256 artifact digest, optional chunked AEAD sealing, optional HMAC-SHA256 manifest signature through a `SigningProvider` boundary with rotation/revocation, path-safe verified atomic restore with journal-based crash recovery and `.pre-restore` rollback, and retention that refuses to prune when no retained backup verifies. PostgreSQL PITR, off-site/immutable storage, asymmetric/KMS signing, RPO/RTO targets and DR drills are not implemented. | `tests/test_backup.py` (6 passed, 1 skipped) + `tests/test_backup_security.py` (11) | PARTIAL (SQLite cycle + signing TESTED; PostgreSQL/DR/KMS signing BLOCKED) |
 
 ## Phase 9 — Interfaces
 
@@ -471,3 +471,37 @@ dashboards and retention configuration (ENT-09); PostgreSQL backup, WAL
 archiving, point-in-time recovery, signed manifests, off-site/immutable storage,
 quantified RPO/RTO and a rehearsed DR drill (ENT-10). The digest-only manifest
 and the local keyring are documented limitations, not production KMS evidence.
+
+## Addendum — 2026-11-28 (backup signing, restore hardening, observability pass 2)
+
+Branch `feat/backup-signing-hardening`, created from `628ceac` (the previous
+feature commit). No direct `main` edit, no push, no pull request, no tag or
+release, no visibility change, no `LICENSE` file touched.
+
+### Implemented and tested
+
+* **ENT-10 hardening** — versioned manifest schema (v2) with strict validation; explicit
+  `SigningProvider` boundary plus a real HMAC-SHA256 provider with 0600 key file, rotation,
+  retirement and revocation; separated hash / AEAD / signature reporting; path-traversal,
+  symlink, non-regular-file, oversize and artifact-name checks on restore; journal-based
+  crash recovery (`restore-recover`); retention that refuses to delete when no retained
+  backup verifies; CLI `--sign`, `--check-signature`, `--require-signature`,
+  `restore-recover`, `signing-keys`, `signing-key-rotate`.
+* **ENT-09** — `/ready` now reports `database` and `schema` dependency checks separately
+  (503 with missing tables), metrics gain public `error_codes` counters rendered in the
+  Prometheus output, and the correlation id still travels through header, error and log.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q tests/test_backup.py tests/test_backup_security.py tests/test_api.py tests/test_observability.py tests/test_authz.py` | 62 passed, 1 skipped, exit 0 |
+| New focused suites (`test_backup`, `test_backup_security`) | 17 passed, 1 skipped |
+| Full canonical suite at the final commit | recorded in the final report of this pass |
+
+### Explicitly not claimed
+
+Manifest signing is symmetric and operator-local; no production/asymmetric signing key
+exists, and KMS/HSM signing, PostgreSQL backup/PITR, off-site immutable storage,
+quantified RPO/RTO and a DR drill remain BLOCKED on owner decisions and infrastructure.
+Metrics persistence, distributed tracing and alert delivery are NOT_STARTED.

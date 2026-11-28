@@ -72,6 +72,11 @@ _GOVERNANCE_STATUSES = {
     "proposed", "planned", "open", "in_progress", "blocked", "accepted", "mitigated",
     "resolved", "done", "rejected", "cancelled",
 }
+_REQUIRED_TABLES = {
+    "organizations", "users", "memberships", "projects", "audit_events",
+    "governance_records", "service_accounts", "service_tokens", "tenant_secrets",
+    "idempotency_records",
+}
 
 
 class ApiError(Exception):
@@ -236,6 +241,7 @@ class _Handler(BaseHTTPRequestHandler):
                 status, payload, headers = result
                 self._send(status, payload, extra_headers=headers)
         except ApiError as error:
+            self.context.metrics.record_error(error.code)
             payload = {
                 "error": {
                     "code": error.code,
@@ -347,11 +353,8 @@ class _Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/health":
             return 200, {"status": "ok", "version": self.context.version}, {}
         if method == "GET" and path == "/ready":
-            try:
-                self.context.store.member_role("0" * 32, "readiness-probe")
-            except Exception as exc:  # pragma: no cover - defensive
-                raise ApiError(503, "not_ready", "The datastore is not ready.") from exc
-            return 200, {"status": "ready"}, {}
+            status, payload = self._readiness()
+            return status, payload, {}
 
         if method == "GET" and path == f"/api/{API_VERSION}/meta":
             return 200, self._meta(), {}
@@ -393,6 +396,37 @@ class _Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == f"/api/{API_VERSION}/plugins":
             return self._plugins(principal)
         raise ApiError(404, "not_found", "No such endpoint.")
+
+    # ------------------------------------------------------------- readiness
+    def _readiness(self) -> tuple[int, dict[str, Any]]:
+        """Report each dependency separately instead of one opaque verdict."""
+
+        checks: list[dict[str, Any]] = []
+        store = self.context.store
+        try:
+            with store._connection() as conn:
+                conn.execute("SELECT 1").fetchone()
+            checks.append({"name": "database", "status": "ok"})
+        except Exception:  # pragma: no cover - defensive
+            checks.append({"name": "database", "status": "failed"})
+        try:
+            with store._connection() as conn:
+                present = {
+                    str(row[0]) for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            missing = sorted(_REQUIRED_TABLES - present)
+            checks.append({"name": "schema", "status": "ok" if not missing else "failed",
+                           "missing": missing})
+        except Exception:  # pragma: no cover - defensive
+            checks.append({"name": "schema", "status": "failed"})
+        ready = all(check["status"] == "ok" for check in checks)
+        return (200 if ready else 503), {
+            "status": "ready" if ready else "not_ready",
+            "version": self.context.version,
+            "checks": checks,
+        }
 
     # --------------------------------------------------------- authenticated
     def _meta(self) -> dict[str, Any]:

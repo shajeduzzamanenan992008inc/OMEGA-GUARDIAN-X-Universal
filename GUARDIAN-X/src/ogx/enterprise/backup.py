@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import uuid
@@ -38,11 +39,22 @@ from typing import Any
 
 from .. import __version__
 from ..config import state_dir
+from .backup_signing import SigningError, SigningProvider
 from .crypto import KMSProvider, LocalKeyring
 
 BACKUP_FORMAT = "ogx-enterprise-backup"
 CIPHER_FORMAT = "ogx-enterprise-backup-cipher"
 BACKUP_VERSION = 1
+MANIFEST_VERSION = 2
+SUPPORTED_MANIFEST_VERSIONS = (1, 2)
+MANIFEST_KEYS = frozenset({
+    "format", "version", "backup_id", "label", "created_at", "product_version",
+    "artifact", "encrypted", "key_id", "sha256", "bytes", "plaintext_sha256",
+    "plaintext_bytes", "details", "signature",
+})
+_ARTIFACT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.sqlite3(?:\.ogxbak)?$")
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+_KEY_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 PURPOSE = "database-backup"
 CHUNK_BYTES = 64 * 1024
 MAX_BACKUP_BYTES = 2 * 1024 * 1024 * 1024
@@ -92,6 +104,98 @@ def _check_integrity(path: Path) -> dict[str, Any]:
     finally:
         connection.close()
     return {"integrity_check": "ok", "tables": int(tables), "pages": int(page_count)}
+
+
+def validate_manifest(manifest: Any) -> dict[str, Any]:
+    """Validate a manifest strictly; reject anything outside the schema."""
+
+    if not isinstance(manifest, dict):
+        raise BackupError("Backup manifest is not an object.")
+    unknown = set(manifest) - MANIFEST_KEYS
+    if unknown:
+        raise BackupError(f"Backup manifest has unknown fields: {sorted(unknown)[:5]}")
+    required = {
+        "format", "version", "backup_id", "created_at", "product_version", "artifact",
+        "encrypted", "sha256", "bytes", "plaintext_sha256", "plaintext_bytes", "details",
+    }
+    missing = required - set(manifest)
+    if missing:
+        raise BackupError(f"Backup manifest is missing fields: {sorted(missing)[:5]}")
+    if manifest["format"] != BACKUP_FORMAT:
+        raise BackupError("Backup manifest format is not supported.")
+    version = manifest["version"]
+    if not isinstance(version, int) or version not in SUPPORTED_MANIFEST_VERSIONS:
+        raise BackupError("Backup manifest version is not supported.")
+    backup_id = manifest["backup_id"]
+    if not isinstance(backup_id, str) or not re.fullmatch(r"[0-9a-f]{32}", backup_id):
+        raise BackupError("Backup manifest id is malformed.")
+    artifact = manifest["artifact"]
+    if not isinstance(artifact, str) or not _ARTIFACT_RE.match(artifact):
+        raise BackupError("Backup manifest artifact name is unsafe or malformed.")
+    if not isinstance(manifest["encrypted"], bool):
+        raise BackupError("Backup manifest encryption flag is not a boolean.")
+    for field in ("sha256", "plaintext_sha256"):
+        value = manifest[field]
+        if not isinstance(value, str) or not _HEX64_RE.match(value):
+            raise BackupError(f"Backup manifest {field} is not a SHA-256 digest.")
+    for field in ("bytes", "plaintext_bytes"):
+        value = manifest[field]
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise BackupError(f"Backup manifest {field} is not an integer.")
+        if not 0 <= value <= MAX_BACKUP_BYTES:
+            raise BackupError(f"Backup manifest {field} is out of range.")
+    if manifest["plaintext_bytes"] > manifest["bytes"] and not manifest["encrypted"]:
+        raise BackupError("Backup manifest sizes are inconsistent.")
+    if not isinstance(manifest["created_at"], str) or len(manifest["created_at"]) > 40:
+        raise BackupError("Backup manifest timestamp is malformed.")
+    if not isinstance(manifest["product_version"], str) or len(manifest["product_version"]) > 64:
+        raise BackupError("Backup manifest product version is malformed.")
+    if not isinstance(manifest["details"], dict):
+        raise BackupError("Backup manifest details are malformed.")
+    label = manifest.get("label")
+    if label is not None and (not isinstance(label, str) or len(label) > 200):
+        raise BackupError("Backup manifest label is malformed.")
+    key_id = manifest.get("key_id")
+    if key_id is not None and (not isinstance(key_id, str) or not _KEY_ID_RE.match(key_id)):
+        raise BackupError("Backup manifest key id is malformed.")
+    if manifest["encrypted"] and not key_id:
+        raise BackupError("Encrypted backup manifest is missing its key id.")
+    signature = manifest.get("signature")
+    if signature is not None:
+        if version < 2:
+            raise BackupError("Manifest signatures require manifest version 2 or newer.")
+        if not isinstance(signature, dict):
+            raise BackupError("Backup manifest signature is malformed.")
+        if set(signature) != {"algorithm", "key_id", "value"}:
+            raise BackupError("Backup manifest signature has unexpected fields.")
+        if not isinstance(signature["algorithm"], str) or len(signature["algorithm"]) > 32:
+            raise BackupError("Backup manifest signature algorithm is malformed.")
+        if not isinstance(signature["key_id"], str) or not _KEY_ID_RE.match(signature["key_id"]):
+            raise BackupError("Backup manifest signature key id is malformed.")
+        value = signature["value"]
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise BackupError("Backup manifest signature value is malformed.")
+    return manifest
+
+
+def signed_payload(manifest: dict[str, Any]) -> bytes:
+    """Canonical bytes covered by the manifest signature."""
+
+    body = {key: value for key, value in manifest.items() if key != "signature"}
+    return json.dumps(body, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False).encode("utf-8")
+
+
+def _assert_safe_target(target: Path) -> None:
+    if not target.is_absolute():
+        raise BackupError("Restore target must be an absolute path.")
+    if any(part in ("", ".", "..") for part in target.parts[1:]):
+        raise BackupError("Restore target must not contain relative segments.")
+    for parent in target.parents:
+        if parent.is_symlink():
+            raise BackupError("Restore target must not live under a symlink.")
+    if target.exists() and not target.is_file():
+        raise BackupError("Restore target exists and is not a regular file.")
 
 
 def _seal_file(source: Path, destination: Path, provider: KMSProvider,
@@ -157,6 +261,7 @@ def _open_file(source: Path, destination: Path, provider: KMSProvider) -> dict[s
 
 def create_backup(store: Any, destination: Path | str | None = None, *,
                   encrypt: bool = False, provider: KMSProvider | None = None,
+                  signer: SigningProvider | None = None,
                   label: str | None = None) -> dict[str, Any]:
     """Create a consistent, verified backup and return its manifest."""
 
@@ -201,9 +306,9 @@ def create_backup(store: Any, destination: Path | str | None = None, *,
             key_id = None
         os.chmod(artifact, 0o600)
         artifact_digest = _sha256_file(artifact)
-        manifest = {
+        manifest: dict[str, Any] = {
             "format": BACKUP_FORMAT,
-            "version": BACKUP_VERSION,
+            "version": MANIFEST_VERSION,
             "backup_id": backup_id,
             "label": label,
             "created_at": _now(),
@@ -217,10 +322,19 @@ def create_backup(store: Any, destination: Path | str | None = None, *,
             "plaintext_bytes": plaintext_bytes,
             "details": details,
         }
-        manifest_path.write_text(
+        validate_manifest(manifest)
+        if signer is not None:
+            try:
+                manifest["signature"] = signer.sign(signed_payload(manifest))
+            except SigningError as exc:
+                raise BackupError(f"Manifest signing failed: {exc}") from exc
+            validate_manifest(manifest)
+        scratch_manifest = manifest_path.with_name(f".{backup_id}.manifest")
+        scratch_manifest.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        os.chmod(manifest_path, 0o600)
+        os.chmod(scratch_manifest, 0o600)
+        os.replace(scratch_manifest, manifest_path)
         return {**manifest, "path": str(artifact), "manifest_path": str(manifest_path)}
     except BaseException:
         for leftover in (scratch, artifact, manifest_path):
@@ -233,19 +347,48 @@ def create_backup(store: Any, destination: Path | str | None = None, *,
 
 def _load_manifest(backup_path: Path) -> dict[str, Any]:
     manifest_path = backup_path.with_name(backup_path.name + ".json")
-    if not manifest_path.is_file():
-        raise BackupError("Backup manifest is missing.")
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise BackupError("Backup manifest is missing or a symlink.")
+    if manifest_path.stat().st_size > 64 * 1024:
+        raise BackupError("Backup manifest is implausibly large.")
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise BackupError("Backup manifest is unreadable.") from exc
-    if manifest.get("format") != BACKUP_FORMAT or manifest.get("version") != BACKUP_VERSION:
-        raise BackupError("Backup manifest format is not supported.")
+    manifest = validate_manifest(manifest)
+    if manifest["artifact"] != backup_path.name:
+        raise BackupError("Manifest describes a different artifact.")
     return manifest
 
 
-def verify_backup(backup_path: Path | str, *, provider: KMSProvider | None = None) -> dict[str, Any]:
-    """Recompute the artifact digest and prove the snapshot restores cleanly."""
+def verify_signing(signer: SigningProvider | None, manifest: dict[str, Any],
+                    *, require_signature: bool = False) -> dict[str, Any]:
+    """Verify manifest authenticity independently of artifact integrity."""
+
+    signature = manifest.get("signature")
+    if signature is None:
+        if require_signature:
+            raise BackupError("Backup manifest is unsigned but a signature was required.")
+        return {"status": "unsigned", "verified": False, "key_id": None}
+    if signer is None:
+        if require_signature:
+            raise BackupError("No signing provider is configured to verify this manifest.")
+        return {"status": "unverified", "verified": False,
+                "key_id": signature.get("key_id")}
+    try:
+        ok = signer.verify(signed_payload(manifest), signature)
+    except SigningError as exc:
+        raise BackupError(f"Manifest signature verification failed: {exc}") from exc
+    if not ok:
+        raise BackupError("Manifest signature does not verify.")
+    return {"status": "verified", "verified": True, "key_id": signature.get("key_id"),
+            "algorithm": signature.get("algorithm")}
+
+
+def verify_backup(backup_path: Path | str, *, provider: KMSProvider | None = None,
+                  signer: SigningProvider | None = None,
+                  require_signature: bool = False) -> dict[str, Any]:
+    """Prove artifact integrity, AEAD authenticity and manifest authenticity."""
 
     artifact = Path(backup_path)
     if artifact.is_symlink() or not artifact.is_file():
@@ -253,6 +396,9 @@ def verify_backup(backup_path: Path | str, *, provider: KMSProvider | None = Non
     manifest = _load_manifest(artifact)
     if artifact.stat().st_size != int(manifest.get("bytes", -1)):
         raise BackupError("Backup size does not match its manifest.")
+    if artifact.stat().st_size > MAX_BACKUP_BYTES:
+        raise BackupError("Backup artifact exceeds the safety limit.")
+    signature_state = verify_signing(signer, manifest, require_signature=require_signature)
     digest = _sha256_file(artifact)
     if digest != manifest.get("sha256"):
         raise BackupError("Backup digest does not match its manifest.")
@@ -275,29 +421,91 @@ def verify_backup(backup_path: Path | str, *, provider: KMSProvider | None = Non
     return {
         "valid": True,
         "backup_id": manifest.get("backup_id"),
+        "manifest_version": manifest["version"],
+        "artifact": manifest["artifact"],
         "encrypted": bool(manifest.get("encrypted")),
         "sha256": digest,
         "bytes": artifact.stat().st_size,
         "created_at": manifest.get("created_at"),
+        "signature": signature_state,
         "details": details,
     }
 
 
+def _journal_path(destination: Path) -> Path:
+    return destination.with_name(destination.name + ".restore-journal")
+
+
+def _write_journal(destination: Path, payload: dict[str, Any]) -> None:
+    journal = _journal_path(destination)
+    scratch = journal.with_name(f".{uuid.uuid4().hex}.journal")
+    scratch.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(scratch, 0o600)
+    os.replace(scratch, journal)
+
+
+def recover_restore(target: Path | str) -> dict[str, Any]:
+    """Recover from an interrupted restore using the on-disk journal."""
+
+    destination = Path(target)
+    journal = _journal_path(destination)
+    if not journal.is_file():
+        return {"recovered": False, "reason": "no journal"}
+    try:
+        payload = json.loads(journal.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise BackupError("Restore journal is unreadable.") from exc
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        raise BackupError("Restore journal format is not supported.")
+
+    previous = destination.with_name(destination.name + ".pre-restore")
+    rolled_back = False
+    if not destination.exists() and previous.is_file():
+        os.replace(previous, destination)
+        rolled_back = True
+    removed: list[str] = []
+    for candidate in destination.parent.iterdir():
+        name = candidate.name
+        if name.startswith(".") and name.endswith(".restore") and candidate.is_file():
+            try:
+                candidate.unlink()
+                removed.append(str(candidate))
+            except OSError:
+                continue
+    try:
+        journal.unlink()
+    except OSError:
+        pass
+    return {"recovered": True, "rolled_back": rolled_back, "removed": removed,
+            "target": str(destination), "backup_id": payload.get("backup_id")}
+
+
 def restore_backup(backup_path: Path | str, target: Path | str, *,
                    provider: KMSProvider | None = None,
+                   signer: SigningProvider | None = None,
+                   require_signature: bool = False,
                    overwrite: bool = False) -> dict[str, Any]:
     """Restore a verified backup into ``target`` atomically."""
 
     artifact = Path(backup_path)
     destination = Path(target)
-    if destination.is_symlink():
-        raise BackupError("Refusing to restore onto a symlink.")
+    _assert_safe_target(destination)
     if destination.exists() and not overwrite:
         raise BackupError("Target database already exists; pass overwrite to replace it.")
-    verify_backup(artifact, provider=provider)
+    verify_backup(artifact, provider=provider, signer=signer,
+                  require_signature=require_signature)
     manifest = _load_manifest(artifact)
 
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _write_journal(destination, {
+        "version": 1,
+        "target": str(destination),
+        "artifact": manifest["artifact"],
+        "backup_id": manifest["backup_id"],
+        "artifact_sha256": manifest["sha256"],
+        "stage": "verified",
+        "started_at": _now(),
+    })
     scratch = destination.with_name(f".{uuid.uuid4().hex}.restore")
     backup_of_previous: Path | None = None
     try:
@@ -323,6 +531,10 @@ def restore_backup(backup_path: Path | str, target: Path | str, *,
         except OSError:
             pass
         raise
+    try:
+        _journal_path(destination).unlink()
+    except OSError:
+        pass
     return {
         "restored": True,
         "target": str(destination),
@@ -364,6 +576,19 @@ def prune_backups(destination: Path | str | None = None, keep: int = DEFAULT_KEE
     if int(keep) < 1:
         raise BackupError("keep must be at least 1; refusing to delete every backup.")
     items = list_backups(destination)
+    retained = items[:int(keep)]
+    if retained:
+        valid = 0
+        for item in retained:
+            try:
+                verify_backup(item["path"])
+                valid += 1
+            except BackupError:
+                continue
+        if valid == 0:
+            raise BackupError(
+                "Refusing to prune: none of the backups that would be kept verifies."
+            )
     removed: list[str] = []
     for item in items[int(keep):]:
         artifact = Path(item["path"])
@@ -381,10 +606,15 @@ __all__ = [
     "BACKUP_VERSION",
     "BackupError",
     "CHUNK_BYTES",
+    "MANIFEST_VERSION",
     "create_backup",
     "default_backup_dir",
     "list_backups",
     "prune_backups",
+    "recover_restore",
     "restore_backup",
+    "signed_payload",
+    "validate_manifest",
     "verify_backup",
+    "verify_signing",
 ]

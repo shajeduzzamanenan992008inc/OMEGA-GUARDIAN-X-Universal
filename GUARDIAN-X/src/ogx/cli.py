@@ -42,8 +42,10 @@ from .enterprise.store import EnterpriseStore
 from .enterprise.authz import PolicyEngine, Principal, Resource
 from .enterprise.secrets import SecretsVault
 from .enterprise.backup import (
-    create_backup, list_backups, prune_backups, restore_backup, verify_backup,
+    create_backup, list_backups, prune_backups, recover_restore, restore_backup,
+    verify_backup,
 )
+from .enterprise.backup_signing import HmacSigningProvider
 from .enterprise.service_identity import ServiceIdentityManager
 from .enterprise.approvals import ApprovalManager
 from .enterprise.governance import framework_document
@@ -2612,17 +2614,30 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
         elif args.enterprise_action == "kms-rotate":
             _json_print(SecretsVault(store).rotate(args.org, args.actor_subject))
         elif args.enterprise_action == "backup":
+            signer = HmacSigningProvider() if args.sign else None
             _json_print(create_backup(store, args.destination, encrypt=args.encrypt,
-                                      label=args.label))
+                                      signer=signer, label=args.label))
         elif args.enterprise_action == "backups":
             _json_print({"items": list_backups(args.destination)})
         elif args.enterprise_action == "backup-verify":
-            _json_print(verify_backup(args.backup_path))
+            signer = HmacSigningProvider() if args.check_signature else None
+            _json_print(verify_backup(args.backup_path, signer=signer,
+                                      require_signature=args.require_signature))
         elif args.enterprise_action == "restore":
+            signer = HmacSigningProvider() if args.check_signature else None
             _json_print(restore_backup(args.backup_path, args.target,
+                                       signer=signer,
+                                       require_signature=args.require_signature,
                                        overwrite=args.overwrite))
+        elif args.enterprise_action == "restore-recover":
+            _json_print(recover_restore(args.target))
         elif args.enterprise_action == "backup-prune":
             _json_print(prune_backups(args.destination, args.keep))
+        elif args.enterprise_action == "signing-keys":
+            _json_print(HmacSigningProvider().describe())
+        elif args.enterprise_action == "signing-key-rotate":
+            key_id = HmacSigningProvider().rotate()
+            _json_print({"rotated": True, "active_key_id": key_id})
         return 0
     except (OSError, ValueError, RuntimeError, PermissionError) as exc:
         print(f"Enterprise data operation failed: {exc}", file=sys.stderr); return 2
@@ -3844,6 +3859,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--encrypt", action="store_true",
         help="Seal the snapshot with the local KMS keyring")
     enterprise_backup.add_argument("--label", help="Optional operator label")
+    enterprise_backup.add_argument("--sign", action="store_true",
+                                   help="Sign the manifest with the local signing key")
     enterprise_backup.set_defaults(func=cmd_enterprise)
 
     enterprise_backups = enterprise_sub.add_parser(
@@ -3854,6 +3871,12 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_backup_verify = enterprise_sub.add_parser(
         "backup-verify", help="Re-hash a backup and prove it restores cleanly")
     enterprise_backup_verify.add_argument("--backup-path", required=True)
+    enterprise_backup_verify.add_argument(
+        "--check-signature", action="store_true",
+        help="Verify manifest authenticity with the local signing key")
+    enterprise_backup_verify.add_argument(
+        "--require-signature", action="store_true",
+        help="Fail when the manifest is unsigned")
     enterprise_backup_verify.set_defaults(func=cmd_enterprise)
 
     enterprise_restore = enterprise_sub.add_parser(
@@ -3862,7 +3885,24 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_restore.add_argument("--target", required=True)
     enterprise_restore.add_argument("--overwrite", action="store_true",
                                     help="Replace an existing database (kept as .pre-restore)")
+    enterprise_restore.add_argument("--check-signature", action="store_true",
+                                    help="Verify manifest authenticity before restoring")
+    enterprise_restore.add_argument("--require-signature", action="store_true",
+                                    help="Refuse an unsigned backup")
     enterprise_restore.set_defaults(func=cmd_enterprise)
+
+    enterprise_recover = enterprise_sub.add_parser(
+        "restore-recover", help="Roll back or clean up an interrupted restore")
+    enterprise_recover.add_argument("--target", required=True)
+    enterprise_recover.set_defaults(func=cmd_enterprise)
+
+    enterprise_signing = enterprise_sub.add_parser(
+        "signing-keys", help="Describe backup manifest signing keys (no secrets)")
+    enterprise_signing.set_defaults(func=cmd_enterprise)
+
+    enterprise_signing_rotate = enterprise_sub.add_parser(
+        "signing-key-rotate", help="Rotate the active backup signing key")
+    enterprise_signing_rotate.set_defaults(func=cmd_enterprise)
 
     enterprise_backup_prune = enterprise_sub.add_parser(
         "backup-prune", help="Delete old backups, keeping the newest N")

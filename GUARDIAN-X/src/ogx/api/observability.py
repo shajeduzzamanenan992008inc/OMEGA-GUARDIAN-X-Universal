@@ -75,6 +75,7 @@ class Metrics:
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _routes: dict[str, _RouteStats] = field(default_factory=dict, repr=False)
     _status: dict[int, int] = field(default_factory=dict, repr=False)
+    _errors: dict[str, int] = field(default_factory=dict, repr=False)
     _inflight: int = 0
     _total: int = 0
 
@@ -90,6 +91,13 @@ class Metrics:
             self._routes.setdefault(label, _RouteStats()).observe(status, duration)
             self._status[status] = self._status.get(status, 0) + 1
 
+    def record_error(self, code: str) -> None:
+        """Count an error by its public, bounded error code (never a message)."""
+
+        label = str(code or "unknown")[:48]
+        with self._lock:
+            self._errors[label] = self._errors.get(label, 0) + 1
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             routes = {label: stats.as_dict() for label, stats in sorted(self._routes.items())}
@@ -99,6 +107,7 @@ class Metrics:
                 "requests_total": self._total,
                 "inflight": self._inflight,
                 "status_codes": {str(code): count for code, count in sorted(self._status.items())},
+                "error_codes": dict(sorted(self._errors.items())),
                 "routes": routes,
             }
 
@@ -127,6 +136,13 @@ class Metrics:
             lines.append(
                 f'ogx_api_route_duration_seconds_sum{{route="{label}"}} {stats["total_seconds"]}'
             )
+        if snapshot["error_codes"]:
+            lines.extend([
+                "# HELP ogx_api_errors_total Errors by public error code.",
+                "# TYPE ogx_api_errors_total counter",
+            ])
+            for code, count in snapshot["error_codes"].items():
+                lines.append(f'ogx_api_errors_total{{code="{code}"}} {count}')
         return "\n".join(lines) + "\n"
 
 
