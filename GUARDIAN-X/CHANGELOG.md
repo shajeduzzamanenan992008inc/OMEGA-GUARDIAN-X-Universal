@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased — enterprise authorization, REST API, encryption and cloud workspace host
+
+- Added `src/ogx/enterprise/authz.py`: one deny-by-default policy engine shared by the CLI, REST
+  API, dashboard and store helpers. Static 5-role/29-action matrix, explicit-deny precedence,
+  tenant binding, service-scope intersection, break-glass with a mandatory reason and an optional
+  audit sink. `ogx authz matrix|check|explain` exposes it.
+- Added `src/ogx/enterprise/service_identity.py` and store tables/commands for tenant-scoped
+  service accounts and scoped bearer tokens (`ogxst.<id>.<secret>`): SHA-256 at rest, one-time
+  display, bounded expiry, revocation, account disablement, fingerprint-only listing and uniform
+  authentication failures.
+- Added `src/ogx/enterprise/crypto.py`: RFC 8439 ChaCha20-Poly1305 in portable Python checked
+  against RFC vectors, a `KMSProvider` seam, a local 0600 keyring with rotation/revocation,
+  purpose- and AAD-bound envelopes, plus `src/ogx/enterprise/secrets.py` for encrypted tenant
+  secrets (`ogx enterprise secret-set|secret-get|secrets|kms-status|kms-rotate`).
+- Added `src/ogx/api/`: authenticated `v1` REST API over loopback HTTP with bearer service
+  tokens, policy-checked tenant routes, idempotency keys, bounded pagination and bodies,
+  foreign-Origin refusal, per-token rate limiting, request ids and a uniform error schema; plus a
+  dependency-free dashboard (overview, projects, hosts, governance, audit export, policy matrix)
+  served as separate CSP-protected assets with the token held in memory only.
+- Added `ogx serve` (loopback only) and `ogx host workspaces`.
+- Added `src/ogx/hosts/adapters/cloud_runtime.py` (HOST-11): read-only GitHub Codespaces host
+  adapter with pinned-host transport, credential isolation, strict response validation, redacted
+  failures and honest capabilities (`workspace_read` only). Registered in `runtime_factory` and
+  the capability matrix; Gitpod/Cloud9 remain descriptor-only.
+- Added `tests/test_authz.py`, `tests/test_enterprise_identity.py`, `tests/test_crypto_kms.py`,
+  `tests/test_api.py`, `tests/test_cloud_host.py` (81 tests). Canonical suite: **1182 passed,
+  23 skipped, 119 subtests**; drop-in suite: 289 tests OK (9 skipped); wheel: 171 entries with
+  the new modules and no test payload.
+- Docs: new `docs/ENTERPRISE_API_AND_AUTHZ.md`, `docs/KMS_AND_ENCRYPTION.md`,
+  `docs/HOST_CLOUD_WORKSPACE.md`, `docs/DOCUMENTATION_INDEX.md` (DOC-05 audit) and
+  `docs/PRODUCTION_READINESS_ASSESSMENT.md` (PRD-01); `SECURITY_MODEL.md` gains TB-11/TB-12 and
+  T-21..T-28 and the stale "ENT-02..06 not started" claim is corrected; `HOST_ARCHITECTURE.md`
+  host status rows are reconciled with the adapters that actually exist.
+
 ## Unreleased — provider hosts and webhook verification
 
 - Added `src/ogx/hosts/adapters/provider_runtime.py`: host lifecycle adapters for
