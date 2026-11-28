@@ -8,8 +8,11 @@ validated plan plus explicit approval.
 
 Honest limits:
 
-* No branch creation, file update, push, workflow dispatch, deployment or merge
-  is implemented here, and none is advertised.
+* Reads delegate to the provider engine. Writes exist only for the five
+  approval-gated operations implemented in this module (draft pull request,
+  branch create, single-file write, multi-file commit, fast-forward ref update).
+  Each requires a validated plan, explicit ``approved=True`` and writes an audit
+  event. No merge, deployment, workflow dispatch or force-push exists.
 * ``connect()`` probes the remote API; a session is never reported connected
   without a successful probe.
 * The provider engine requires a credential for every repository capability,
