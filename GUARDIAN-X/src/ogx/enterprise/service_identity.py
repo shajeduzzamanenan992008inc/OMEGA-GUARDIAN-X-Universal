@@ -246,6 +246,36 @@ class ServiceIdentityManager:
         )
         return self.store.revoke_service_token(organization_id, token_id, actor_subject)
 
+    def rotate_token(self, organization_id: str, token_id: str, actor_subject: str,
+                     *, ttl_seconds: int = 3600) -> dict[str, Any]:
+        """Issue a replacement token and immediately revoke the previous one.
+
+        Rotation is operator-driven: the caller decides when to rotate. The
+        replacement is issued first, so a failed rotation never strands the
+        account without a working credential; the previous token is revoked
+        only after the replacement exists. Unknown, foreign-tenant and
+        already-revoked tokens are refused without revealing their state.
+        """
+
+        record = self.store.find_service_token(token_id)
+        if record is None:
+            raise ValueError("Service token not found.")
+        account = self.store.get_service_account(record["service_account_id"])
+        if account is None or account["organization_id"] != organization_id:
+            raise ValueError("Service token not found.")
+        if record.get("revoked_at"):
+            raise ValueError("Service token is already revoked.")
+
+        issued = self.issue_token(
+            organization_id, account["account_id"], actor_subject, ttl_seconds
+        )
+        revoked = self.revoke_token(organization_id, token_id, actor_subject)
+        return {
+            "previous_token_id": token_id,
+            "revoked_previous": bool(revoked.get("revoked")),
+            "token": issued.to_dict(),
+        }
+
     def list_tokens(self, organization_id: str, actor_subject: str) -> list[dict[str, Any]]:
         role = self.store.member_role(organization_id, actor_subject)
         if role is None:

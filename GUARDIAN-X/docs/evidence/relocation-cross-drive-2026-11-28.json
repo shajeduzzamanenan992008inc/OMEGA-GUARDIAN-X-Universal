@@ -1,0 +1,56 @@
+{
+  "checked_at": "2026-11-28T08:12:45Z",
+  "checks": {
+    "copy": {
+      "bytes": 1049015,
+      "content_matches": true,
+      "digests_match": true,
+      "files": 7,
+      "identity_preserved": true,
+      "source_deleted": false,
+      "source_retained": true,
+      "state": "complete"
+    },
+    "move": {
+      "delete_reason": "confirmed_move",
+      "digests_match": true,
+      "files": 7,
+      "identity_preserved": true,
+      "source_deleted": true,
+      "source_exists": false,
+      "state": "complete"
+    },
+    "registry_rebind": {
+      "new_location": "D:\\FTP\\ogx relocation 7c60a82be6\\rebound project 7c60a82be6",
+      "old_location": "C:\\Users\\Enan\\AppData\\Local\\Temp\\ogx-reloc-src-xs3ez6jv\\source project 7c60a82be6",
+      "status": "done",
+      "updated": true
+    },
+    "resume": {
+      "content_matches": true,
+      "identity_preserved": true,
+      "interrupted": true,
+      "resumed": true,
+      "reused_files": 1,
+      "state": "complete"
+    }
+  },
+  "cleaned_up": true,
+  "destination_drive": "D:",
+  "destination_root": "D:\\FTP",
+  "elapsed_ms": 1669.99,
+  "host": "win32",
+  "ok": true,
+  "paths_contain_spaces": true,
+  "project": {
+    "bytes": 1049015,
+    "drive": "C:",
+    "file_count": 7,
+    "identity": "4af2d9b5-d63a-4cb0-9f27-e8e4a11dd7da",
+    "project": "C:\\Users\\Enan\\AppData\\Local\\Temp\\ogx-reloc-src-xs3ez6jv\\source project 7c60a82be6",
+    "warnings": []
+  },
+  "python": "3.15.2",
+  "source_drive": "C:",
+  "source_root": "C:\\Users\\Enan\\AppData\\Local\\Temp"
+}
