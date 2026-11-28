@@ -828,3 +828,75 @@ New files this pass: `src/ogx/enterprise/backup_signing.py`,
 `tests/test_backup_security.py`. Modified: `enterprise/backup.py`, `api/server.py`,
 `api/observability.py`, `cli.py`, `docs/BACKUP_AND_RESTORE.md`,
 `docs/OBSERVABILITY.md`, tracker, report, changelog.
+
+## 13. Addendum — 2026-11-28 (production acceptance verification pass)
+
+**Branch:** `feat/production-acceptance-verification`
+**Base:** `origin/main` at `93782187ccb964a0b81839202ba8088c4e1015f7`
+**Branch head at hand-off:** the commit containing this report (see `git log -1`)
+**Push / PR / merge / tag / release:** none
+**Direct `main` edits:** none
+**`LICENSE` changes:** none
+**Repository visibility:** unchanged
+
+### 13.1 Work completed
+
+* `ServiceIdentityManager.rotate_token` and `ogx enterprise token-rotate`:
+  replacement-token issuance with immediate revocation of the previous token,
+  tenant/authorization checks and four regression tests (ENT-05).
+* Declared the `api -> platform` dependency edge used by tracing exporters for
+  canonical endpoint validation; architecture suite and drop-in suite green
+  again.
+* `_dev/tools/verify_backup_drill.py`: real encrypt/sign/verify/tamper/destroy/
+  restore drill with JSON evidence (ENT-10, PRD-04).
+* `_dev/tools/verify_relocation_cross_drive.py`: live C:→D: relocation evidence
+  covering copy, interrupted resume, registry rebind and a confirmed move
+  (ID-10, TST-11).
+* `docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md`: D1–D12 and every
+  external blocker with its minimum owner action and verification procedure.
+* README, changelog, documentation index, tracker and this report reconciled.
+
+### 13.2 Verification executed
+
+| Check | Result |
+| --- | --- |
+| Canonical `pytest` | **1273 passed, 40 skipped, 119 subtests**, exit 0 (244.30 s) |
+| Service-identity suite | 20 passed, exit 0 |
+| Relocation suites | 69 passed, 2 skipped, 56 subtests, exit 0 |
+| Cross-volume relocation tool | exit 0, `ok: true`, 2026-11-28T08:12:45Z |
+| Backup/restore drill | exit 0, `ok: true`, 2026-11-28T08:21:24Z |
+| Drop-in `unittest` | 289 tests, OK (9 skipped), exit 0 |
+| Architecture contract | 17 tests, OK, exit 0 |
+| Reproducible build | 396 entries, identical SHA-256 on two builds |
+| Canonical/drop-in consistency | OK, exit 0 |
+
+The 40 skipped canonical tests are platform/environment gated: symlink creation
+on unprivileged Windows and the PostgreSQL live tests that require
+`OGX_TEST_POSTGRES_URL`. They are not counted as passes.
+
+### 13.3 Honest status
+
+**Verified in this pass:** physical cross-volume relocation, backup/restore
+with tamper and wrong-key refusal, service-token rotation, reproducible build,
+architecture and drop-in suites.
+
+**Recorded on this branch but not re-executed in this pass:** read-only live
+GitHub verification (2026-11-28T07:14:35Z) and dashboard browser E2E
+(2026-11-28T07:32:50Z, Chromium 153, screenshots committed).
+
+**Still blocked:** OIDC/SAML/MFA, managed KMS/HSM, live PostgreSQL, live
+Docker/Kubernetes/SSH/Codespaces operations, GitHub write verification,
+removable-media and second-machine relocation, independent security review,
+release signing/publication, RPO/RTO and production deployment. Each has an
+owner action and verification procedure in
+`docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md`.
+
+### 13.4 Classification
+
+**DEVELOPMENT INCOMPLETE — PRODUCTION ACCEPTANCE BLOCKED.**
+
+Development remains incomplete because human authentication (ENT-03), managed
+key custody (ENT-06), live sandbox/host verification and independent review are
+product requirements that are still unimplemented or unverified. Production
+acceptance is additionally blocked on owner decisions, infrastructure and an
+independent reviewer. No 100%, COMPLETE or PRODUCTION READY claim is made.

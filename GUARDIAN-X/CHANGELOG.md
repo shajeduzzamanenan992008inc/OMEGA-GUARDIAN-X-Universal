@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — production acceptance verification
+
+- Added `ServiceIdentityManager.rotate_token` and `ogx enterprise token-rotate`:
+  issues a replacement scoped token for the same service account and immediately
+  revokes the previous one; unknown, foreign-tenant and already-revoked tokens are
+  refused, and a rejected rotation leaves the original token usable. Four tests
+  cover replacement, revocation, authorization and tenant scope (ENT-05).
+- Added `_dev/tools/verify_backup_drill.py`: a reproducible drill that seeds an
+  enterprise database, takes an encrypted and signed backup, refuses a wrong key
+  and a tampered artifact, destroys the live database, restores it and proves the
+  tenant rows and plaintext digest survived. Evidence:
+  `docs/evidence/backup-restore-drill-2026-11-28.json` (ENT-10/PRD-04).
+- Added `_dev/tools/verify_relocation_cross_drive.py` and live evidence for a real
+  C:→D: copy, interrupted-copy resume, registry rebind and confirmed move:
+  `docs/evidence/relocation-cross-drive-2026-11-28.json` (ID-10/TST-11).
+- Added `docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md` with D1–D12 and every
+  external blocker, its minimum owner action and verification procedure.
+- README verification figures and host/provider claims reconciled with the current
+  branch; tracker and completion report gained a dated evidence addendum.
+
 ## Unreleased — persistent observability, tracing, isolation and adversarial verification
 
 - Added `src/ogx/api/metrics_store.py`: pluggable `MetricsStorage` interface with
