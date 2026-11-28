@@ -109,6 +109,26 @@ def test_metrics_records_traffic_and_renders_prometheus(api):
     assert status == 400 and payload["error"]["code"] == "invalid_parameter"
 
 
+def test_readiness_reports_each_dependency(api):
+    status, payload, _ = _request(api["base"], "/ready")
+    assert status == 200 and payload["status"] == "ready"
+    checks = {item["name"]: item for item in payload["checks"]}
+    assert checks["database"]["status"] == "ok"
+    assert checks["schema"]["status"] == "ok"
+    assert checks["schema"]["missing"] == []
+
+
+def test_error_codes_are_counted_without_messages(api):
+    token = api["token"]
+    assert _request(api["base"], "/api/v1/organizations", token="bad-token")[0] == 401
+    status, metrics, _ = _request(api["base"], "/api/v1/metrics", token=token)
+    assert status == 200
+    assert metrics["error_codes"].get("invalid_token", 0) >= 1
+    text = _request(api["base"], "/api/v1/metrics?format=prometheus", token=token)[1]
+    assert 'ogx_api_errors_total{code="invalid_token"}' in text
+    assert "bad-token" not in json.dumps(metrics)
+
+
 def test_openapi_document_matches_implemented_surface(api):
     status, spec, _ = _request(api["base"], "/api/v1/openapi.json", token=api["token"])
     assert status == 200

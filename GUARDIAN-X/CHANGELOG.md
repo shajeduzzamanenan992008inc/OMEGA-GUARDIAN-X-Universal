@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased — backup manifest signing and restore hardening
+
+- Added `src/ogx/enterprise/backup_signing.py`: an explicit `SigningProvider` boundary and a
+  concrete HMAC-SHA256 provider with a 0600 key file, `active`/`retired`/`revoked` key states,
+  rotation that keeps old manifests verifiable, and `describe()` that never exposes secrets.
+- Hardened `src/ogx/enterprise/backup.py`: strict versioned manifest schema (v2, v1 still
+  verifies), separate reporting of hash integrity / AEAD authenticity / manifest signature,
+  path-traversal, symlink, non-regular-file, oversize and artifact-name checks, a restore
+  journal with `restore-recover` rollback, and retention that refuses to prune when no
+  retained backup verifies. New flags/commands: `backup --sign`, `backup-verify
+  --check-signature/--require-signature`, `restore --check-signature/--require-signature`,
+  `restore-recover`, `signing-keys`, `signing-key-rotate`.
+- Added `tests/test_backup_security.py` (11 tests: signature tamper, replaced artifact,
+  missing/wrong/revoked key, rotation, forged algorithm, schema rejection, path safety,
+  interrupted-restore recovery, prune refusal, no secret exposure).
+- `api/server.py`: `/ready` now reports `database` and `schema` dependency checks separately
+  and returns 503 with the missing tables; `api/observability.py` counts errors by public
+  error code and renders `ogx_api_errors_total` in the Prometheus output.
+- Docs: `BACKUP_AND_RESTORE.md` and `OBSERVABILITY.md` updated with the signing boundary,
+  path safety, recovery and readiness semantics, plus honest limits.
+
 ## Unreleased — backup/restore and operational observability
 
 - Added `src/ogx/enterprise/backup.py` (ENT-10): online consistent SQLite snapshot through the
