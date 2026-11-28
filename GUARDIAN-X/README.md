@@ -183,6 +183,12 @@ The exact distribution layout is documented in the project files. The `_dev/` an
 
 ### System architecture
 
+<p align="center">
+  <img src="assets/flowcharts/system-architecture-animated.gif" alt="Animated OMEGA Shield system architecture flowchart" width="100%">
+</p>
+
+> The animated GIF is the GitHub-compatible motion layer. The Mermaid source below remains available as a scalable, text-based diagram fallback.
+
 ```mermaid
 flowchart LR
     classDef source fill:#101B3D,stroke:#00E5FF,color:#EAFBFF,stroke-width:2px
@@ -389,6 +395,12 @@ ogx host connect <host-id>
 Replace placeholders such as `<host-id>`, `owner/repository`, and `/path/to/project` with real values. The GitHub provider refuses unauthenticated reads.
 
 ### Host lifecycle flow
+
+<p align="center">
+  <img src="assets/flowcharts/host-lifecycle-animated.gif" alt="Animated OMEGA Shield host lifecycle flowchart" width="100%">
+</p>
+
+> The animated GIF preserves visible motion in GitHub README rendering; the Mermaid source below provides a static, accessible fallback.
 
 ```mermaid
 flowchart TD
