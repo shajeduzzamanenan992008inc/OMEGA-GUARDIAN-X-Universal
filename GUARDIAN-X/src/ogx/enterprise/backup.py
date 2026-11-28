@@ -194,6 +194,8 @@ def _assert_safe_target(target: Path) -> None:
     for parent in target.parents:
         if parent.is_symlink():
             raise BackupError("Restore target must not live under a symlink.")
+    if target.is_symlink():
+        raise BackupError("Restore target must not be a symlink.")
     if target.exists() and not target.is_file():
         raise BackupError("Restore target exists and is not a regular file.")
 
