@@ -743,3 +743,44 @@ discovery resolves the project root (`/var` -> `/private/var` on macOS).
 | `python -m pytest -q` | **1101 passed, 23 skipped, 119 subtests**, exit 0 (152 s) |
 
 **Classification for this pass: DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS.**
+
+## Addendum — 2026-11-28 (enterprise authorization, API, encryption, cloud host)
+
+Branch `feat/enterprise-api-and-cloud-host`, from `origin/main`
+`1a56856794b77428b4d7ba4751dd7af7b858fa3e`.
+
+This pass closed the offline-implementable part of ENT-04, ENT-05, ENT-06, ENT-08, UI-04, UI-05,
+UI-06 and HOST-11, and advanced SEC-15, DOC-05 and PRD-01:
+
+| Requirement | Before | After | Evidence |
+| --- | --- | --- | --- |
+| ENT-04 RBAC | PARTIAL | TESTED | `tests/test_authz.py` (16) |
+| ENT-05 service identity/tenant isolation | PARTIAL | TESTED | `tests/test_enterprise_identity.py` (11) |
+| ENT-06 encryption/KMS | UNSUPPORTED | TESTED (local provider; managed KMS BLOCKED) | `tests/test_crypto_kms.py` (14) |
+| ENT-08 REST API | UNSUPPORTED | TESTED | `tests/test_api.py` (17) |
+| UI-04 API | UNSUPPORTED | TESTED | same suite |
+| UI-05 dashboard | UNSUPPORTED | IMPLEMENTED (not browser-verified) | asset/CSP tests |
+| UI-06 unified authorization | PARTIAL | TESTED | parity case |
+| HOST-11 cloud workspace | DESCRIPTOR_ONLY | TESTED (mocked; live BLOCKED) | `tests/test_cloud_host.py` (12) |
+| SEC-15 threat model | IMPLEMENTED | IMPLEMENTED (TB-11/12, T-21..28 added) | `docs/SECURITY_MODEL.md` |
+| DOC-05 docs audit | PARTIAL | PARTIAL (inventory + corrections) | `docs/DOCUMENTATION_INDEX.md` |
+| PRD-01 assessment | PARTIAL | IMPLEMENTED | `docs/PRODUCTION_READINESS_ASSESSMENT.md` |
+| TST-06 macOS | IMPLEMENTED | VERIFIED (PR #27 run) | hosted CI |
+
+Full-suite evidence at this commit: `python -m pytest -q` → **1182 passed, 23 skipped, 119
+subtests**, exit 0; drop-in `289 tests OK (9 skipped)`; `compileall` exit 0; sync check OK; wheel
+171 entries with no tests packaged.
+
+New documentation: `docs/ENTERPRISE_API_AND_AUTHZ.md`, `docs/KMS_AND_ENCRYPTION.md`,
+`docs/HOST_CLOUD_WORKSPACE.md`, `docs/DOCUMENTATION_INDEX.md`,
+`docs/PRODUCTION_READINESS_ASSESSMENT.md`; `SECURITY_MODEL.md`, `HOST_ARCHITECTURE.md`,
+`CHANGELOG.md`, the tracker and this report were reconciled.
+
+Still open, and therefore **not** development complete: ENT-02, ENT-03, managed KMS, ENT-09,
+ENT-10/PRD-04, ORC-13, live provider/host verification, physical relocation, independent security
+review, release authorization, PRD-03/PRD-06, and the historical-document remainder of DOC-05.
+Live evidence requires infrastructure this environment does not have; those steps remain BLOCKED
+and are not implied by any mocked test.
+
+Final classification at this commit: **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
+

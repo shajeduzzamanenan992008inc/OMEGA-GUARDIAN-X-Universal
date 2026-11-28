@@ -152,6 +152,8 @@ security review (SEC-14 remains blocked on an external reviewer).
 | TB-8 | Enterprise data plane | authenticated tenant context | API clients, dashboard sessions, queue payloads, worker input |
 | TB-9 | Release pipeline | owner-approved signing keys | build environment, dependencies, artefact consumers |
 | TB-10 | Cross-process host session | lease holder with current fencing token | other local processes, crashed or partitioned holders |
+| TB-11 | Enterprise API and service identity | holder of a scoped bearer token; HTTP client | remote service accounts, the API socket, request bodies and query parameters | Once authenticated, the token is the actor. There is no human session and no cookie, so no ambient credential exists. |
+| TB-12 | Key store (local KMS provider) | process user, then filesystem permissions | `OGX_HOME/enterprise/kms-keys.json`, envelope ciphertext in SQLite | Same-user attackers and backups are inside this boundary; only the AEAD protects ciphertext. |
 
 ### Attacker capabilities assumed
 
@@ -188,6 +190,14 @@ security review (SEC-14 remains blocked on an external reviewer).
 | T-18 | Malicious repository content drives an unbounded scan | TB-1 | file/byte caps, excluded directories, bounded output, timeouts | `tests/test_scanner.py`, `tests/test_pipeline.py` | Extremely large single files can still cost I/O |
 | T-19 | Supply-chain compromise of a dependency or image | TB-9 | digest-pinned images, no implicit pull, dependency review CI, CodeQL | `.github/workflows/`, `tests/test_sandbox_isolation.py` | No reproducible-build or signing evidence yet (REL-02/04/05) |
 | T-20 | Audit log tampering | TB-1, TB-8 | hash-chained audit records, `ogx platform audit` verification | `tests/test_platform_engine.py` | Not signed, not WORM, truncation of newest records undetected |
+| T-21 | Stolen service token is replayed | TB-11 | SHA-256 token hashing, 60 s–30 day expiry, immediate revocation, tenant binding, uniform `invalid_token` errors | `tests/test_enterprise_identity.py` | Bearer replay is possible until expiry; HTTPS termination is the operator's reverse proxy |
+| T-22 | Token is issued with more power than its role | TB-11 | scope must be a subset of the base role, effective permissions are `role ∩ scopes`, escalation rejected at creation | `tests/test_enterprise_identity.py`, `tests/test_authz.py` | A compromised owner can still mint an owner-scoped token |
+| T-23 | API path addresses another tenant's object | TB-11 | path organization becomes the resource tenant; mismatch is denied before any query | `tests/test_api.py` | None known; every scoped query carries `organization_id` |
+| T-24 | Oversized, non-JSON or cross-origin API request | TB-11 | 64 KiB body cap, `application/json` required for writes, foreign `Origin` refused, no CORS headers, per-token rate limit | `tests/test_api.py` | No TLS or proxy hardening is provided by OGX |
+| T-25 | Idempotency key replay causes a duplicate write | TB-11 | request digest stored with the response; same key + different body is `409` | `tests/test_api.py` | Keys are unique per tenant, not globally |
+| T-26 | Local key file is exfiltrated | TB-12 | 0600 file, atomic replace, key material never exposed by `describe()`/API/CLI | `tests/test_crypto_kms.py` | A same-user attacker or a filesystem backup can read the key |
+| T-27 | Ciphertext is moved to another tenant, name or purpose | TB-12 | AEAD associated data binds `organization:name`; purpose is checked; wrong AAD fails authentication | `tests/test_crypto_kms.py` | None known; key rotation preserves old versions by design |
+| T-28 | Malicious or malformed cloud workspace response | TB-2 | pinned-host HTTPS transport, bounded body, strict shape validation, capability truth, token never echoed | `tests/test_cloud_host.py` | A compromised provider account can lie about its own metadata |
 
 ### Abuse cases explicitly out of scope
 
@@ -208,8 +218,11 @@ These are described in documentation only and must not be claimed as enforced:
 - Full OS-level isolation on Windows without Docker.
 - Seccomp profile management and network allowlisting inside the sandbox.
 - Immutable (WORM) or externally anchored audit storage.
-- Live enterprise SSO/MFA, real tenant isolation and KMS-backed encryption
-  (ENT-02..06 remain not started).
+- Live enterprise SSO/MFA (ENT-03), PostgreSQL persistence (ENT-02) and a
+  managed/HSM-backed KMS. RBAC (ENT-04), tenant-scoped service identities
+  (ENT-05) and envelope encryption with a local test key provider (ENT-06)
+  *are* implemented and tested; see `docs/ENTERPRISE_API_AND_AUTHZ.md` and
+  `docs/KMS_AND_ENCRYPTION.md`.
 
 ### Maintenance rule
 

@@ -18,11 +18,12 @@ real state, not a roadmap claim.
 | Local filesystem | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/exec/branch ops unsupported |
 | Local Git repository | local | OPERATIONAL (read-only) — lifecycle, adapter, CLI and tests implemented; write/branch/remote ops unsupported |
 | GitHub | git host | READ/WRITE SURFACE OPERATIONAL (mocked) — lifecycle adapter over the canonical provider engine; metadata/file/tree/branch/commit/PR reads and approval-gated writes (branch create, file write, commit, push/ref-update). Merge writes unsupported; **no live credential verified** |
-| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, AWS CodeCommit | git host | PROVIDER VERIFIED (mocked/static); host contract suite exists at `tests/test_host_contract.py` (12 passed) and covers the registry/metadata contract |
-| GitHub Codespaces, Gitpod, Kubernetes | cloud workspace | DESCRIPTOR_ONLY |
+| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit | git host | PROVIDER VERIFIED (mocked) — lifecycle host adapters are registered in `runtime_factory`; shared read surface plus one approval-gated PR/MR write; `tests/test_host_contract.py` and `tests/test_host_provider_runtime.py` (47 passed). No live credential verified |
+| Kubernetes | cloud workspace | TESTED (mocked) — read-only, namespace-scoped inspection (HOST-10, 83 tests); no live cluster |
+| GitHub Codespaces | cloud workspace | TESTED (mocked) — read-only codespace inventory (HOST-11, `ogx host workspaces`); no live credential |
+| Gitpod, AWS Cloud9 | cloud workspace | DESCRIPTOR_ONLY |
 | Docker host (CLI) | local/container host | TESTED (mocked) — read-only inspection via Docker CLI; daemon validation, container/image inspection, container file read; mutations/exec/pull/build not implemented; no live daemon verified |
 | remote SSH | remote host | TESTED (mocked) — see HOST-08 |
-| GitLab, Bitbucket, Gitea, Forgejo, Azure DevOps, CodeCommit host sessions | git host | UNSUPPORTED — provider adapters exist, but no lifecycle host adapter is registered, so `host connect` fails closed |
 | SourceHut | git host | DESCRIPTOR_ONLY |
 
 `ogx host list` prints `No hosts registered.` on a fresh state directory.
@@ -37,7 +38,9 @@ ogx.hosts                                     (compatibility facade)
   ├── models.py       HostRecord, capabilities, status values
   ├── capabilities.py capability vocabulary and negotiation helpers
   ├── registry.py     host registration and lookup (Registry V2 backed)
-  └── adapters/       local_filesystem, local_git, github (shim)
+  └── adapters/       local_filesystem, local_git, github (shim), remote_ssh,
+                      docker, kubernetes, cloud_workspace (GitHub Codespaces),
+                      provider runtime (GitLab/Bitbucket/Gitea/Forgejo/Azure/CodeCommit)
             │
 ogx.platform                                  (canonical provider engine)
   └── adapters/       github, gitlab, bitbucket, gitea/forgejo,

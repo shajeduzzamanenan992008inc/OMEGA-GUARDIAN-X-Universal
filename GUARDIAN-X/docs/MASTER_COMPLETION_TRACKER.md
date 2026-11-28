@@ -97,7 +97,7 @@ any live provider API call with credentials, release signing.
 | SEC-12 | Container sandbox for project execution | `sandbox.py`: digest-pinned image (tags rejected), daemon preflight, no implicit pull, `--network none`, `--ipc none`, read-only root, `--cap-drop ALL`, `no-new-privileges`, pids 96, memory + swap equal, CPU cap, non-root uid/gid 10001, `noexec/nosuid` tmpfs, explicit env allowlist (no host env forwarded), no socket/volume mount, disposable snapshot, named container force-removed on success/timeout/cancel/daemon failure, 20k output bound, argument-array-only execution. Snapshot excludes VCS/dependency dirs, `.ssh/.aws/.gnupg/.kube/.docker`, `.env*`, key/credential files and never follows symlinks. | `tests/test_sandbox_isolation.py` (38 passed, 1 skipped: symlink creation) with a mocked Docker client; `ogx sandbox plan` exit 0. **Live Docker daemon/image verification and SEC-12's runtime enforcement proof remain BLOCKED** (no docker binary on this machine). Docs: `docs/SECURITY_MODEL.md` T-10..T-12. | TESTED (mocked; live BLOCKED) |
 | SEC-13 | OS-level isolation claim | none claimed; container is documented as a restricted boundary | `docs/SECURITY_MODEL.md` | VERIFIED |
 | SEC-14 | Independent security review | not performed | requires an external reviewer | BLOCKED |
-| SEC-15 | Threat model | `docs/SECURITY_MODEL.md` §"Threat model (SEC-15)": 10 trust boundaries (TB-1..TB-10), assumed attacker capabilities, 20 threats (T-01..T-20) each with enforced control, test mapping and residual risk, abuse cases out of scope, and an explicit list of documented-but-not-enforced controls (SEC-14, REL-04/05, ENT-02..06, WORM audit, seccomp/network allowlisting). | documentation review: every cited test file exists except where the row says no suite exists (T-13 plugins); controls cross-checked against `sandbox.py`, lease store, host adapters, transport and audit code | IMPLEMENTED (not an independent review) |
+| SEC-15 | Threat model | `docs/SECURITY_MODEL.md`: TB-1..TB-12 and T-01..T-28 with controls, test mapping and residual risk. This pass added TB-11 (API/service identity), TB-12 (key store) and T-21..T-28 (token replay/escalation, cross-tenant paths, request bounds, idempotency replay, key-file theft, ciphertext relocation, malicious cloud responses), and separated enforced from documented-only controls. | documentation review; every cited suite exists | IMPLEMENTED (not an independent review) |
 
 ## Phase 2 — Universal project identity
 
@@ -133,7 +133,7 @@ any live provider API call with credentials, release signing.
 | HOST-08 | Remote SSH host | `hosts/adapters/ssh_runtime.py` (`SshHostAdapter`): OpenSSH client, StrictHostKeyChecking=yes, BatchMode=yes, key auth, known_hosts, bounded commands, traversal guards, redaction; registered in `runtime_factory.py` as `remote_ssh`; capability matrix entry added. Live SSH verification remains BLOCKED (no authorized target). | `tests/test_host_ssh_runtime.py` (18 passed, mocked transport) | TESTED |
 | HOST-09 | Docker host | `hosts/adapters/docker_runtime.py` (`DockerHostAdapter`): Docker CLI, fail-closed daemon validation (docker info), argument arrays (no shell), bounded output, redacted errors, container/image inspection, container file read via docker cp with tar parsing and traversal guards; registered in `runtime_factory.py` as `docker`; capability matrix entry added. Live Docker verification remains BLOCKED (no Docker daemon available). Mutations/exec/pull/build intentionally not implemented. | `tests/test_host_docker_runtime.py` (29 passed, mocked transport) | TESTED |
 | HOST-10 | Kubernetes host | `hosts/adapters/kubernetes_runtime.py` (`KubernetesHostAdapter`, ~1780 lines): read-only, namespace-scoped inspection of namespaces, pods, deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs, services, ingresses, network policies, configmaps (metadata only), secrets (metadata only), PVC/PV/storage classes. Pinned and verified context; TLS verification always on (`insecure-skip-tls-verify` rejected); `--kubeconfig` trusted-path only; argument arrays (no shell); bounded output, `--tail`/`--limit-bytes` pod logs; LBAC-style label-selector grammar with `in`/`notin`; namespace allowlist; cluster-scope operations refused; Secret values never returned; JWT/token/password redaction in logs and errors; typed `kubectl_failed` mapping; mutation/exec/port-forward/Helm not implemented or advertised. Registered in `runtime_factory.py` as `kubernetes`, `HostType.KUBERNETES`, `HostCapability` members, capability-matrix row and the CLI `host register --type` choices. Live cluster verification remains BLOCKED (no kubectl binary and no authorized cluster on this machine). | `tests/test_host_kubernetes_runtime.py` (83 passed, mocked transport); CLI register/list/status/capabilities verified; `host connect` fails closed without kubectl | TESTED |
-| HOST-11 | Cloud workspace hosts | descriptor only | `platform/families.py` | DESCRIPTOR_ONLY |
+| HOST-11 | Cloud workspace hosts | `src/ogx/hosts/adapters/cloud_runtime.py` (`CloudWorkspaceHostAdapter`, GitHub Codespaces): pinned-host HTTPS through the canonical transport, env-only bearer credential, repository/user scope, strict response validation, redacted failures and read-only capabilities (`workspace_read` only). Registered in `runtime_factory`, the capability matrix and `ogx host workspaces`; Gitpod/Cloud9 remain descriptor-only. | `tests/test_cloud_host.py` (12 passed, mocked transport); CLI `host register --type cloud_workspace` + `host capabilities` verified. No live Codespaces credential. | TESTED (mocked; live BLOCKED) |
 | HOST-12 | Health, recovery, session lifecycle | `hosts/lifecycle.py` 12 states, bounded health/recovery | lifecycle suite | TESTED |
 | HOST-13 | Cross-process failover/reconnect | `hosts/leases.py` (`HostLeaseStore`): SQLite lease table under `OGX_HOME/hosts/leases.db` (WAL, `BEGIN IMMEDIATE`) with `hostname:pid` owners, monotonic fencing tokens, `acquire`/`renew`/`release`/`validate`/`sweep_expired`. `HostSessionManager` acquires at `create_session`, validates before the idempotent `connect` return, renews on `connect`/`health`, re-acquires on `recover`, releases on `disconnect`/`shutdown`/`dispose`, and fails closed with `LeaseLostError` when fenced out. Dead local PIDs are recoverable immediately (Windows liveness via `GetExitCodeProcess`, never `os.kill(pid, 0)`); remote owners recover by TTL. `get_session_manager()` uses the durable store plus an `atexit` release. Limitations recorded in `docs/HOST_CROSS_PROCESS_LEASES.md` (wall clock, shared-filesystem locking, PID reuse, no consensus). | `tests/test_host_leases.py` (20 passed, 1 skipped) including 6 concurrent OS processes → exactly one winner, killed-child recovery with token 2, dead-PID instant recovery, stale-owner fencing; 3 sequential `ogx host connect` processes → final token 3, no lease left behind | TESTED |
 | HOST-14 | Live GitHub host verification | mocked transport only. An unauthenticated live probe was attempted on 2026-11-27 and the adapter failed closed with `credential_required`; no credential was supplied, so the authenticated probe was not run | probe output; `test_connect_without_a_credential_fails_closed` | BLOCKED |
@@ -206,11 +206,11 @@ any live provider API call with credentials, release signing.
 | ENT-01 | Local tenant/organization model | `enterprise/store.py` SQLite | `test_enterprise_governance.py` | TESTED |
 | ENT-02 | PostgreSQL and migrations | SQLite only | — | UNSUPPORTED |
 | ENT-03 | OIDC/SAML/MFA | subject strings only, not authenticated | `docs/ENTERPRISE_READINESS.md` | UNSUPPORTED |
-| ENT-04 | RBAC | local roles (owner/admin/developer/auditor/viewer) | enterprise tests | PARTIAL |
-| ENT-05 | Service identities and tenant isolation | local organization scoping | enterprise tests | PARTIAL |
-| ENT-06 | Encryption, KMS, rotation | none | — | UNSUPPORTED |
+| ENT-04 | RBAC | `src/ogx/enterprise/authz.py`: 5-role/29-action matrix, deny-by-default, explicit-deny precedence, tenant binding and `require()` enforcement shared by CLI, API, dashboard and store helpers; custom-role authoring is not implemented. | `tests/test_authz.py` (16), `tests/test_api.py`, `_dev/tests/test_architecture.py` | TESTED (no custom roles) |
+| ENT-05 | Service identities and tenant isolation | `enterprise/service_identity.py` + store tables: tenant-scoped accounts, role∩scope bearer tokens (SHA-256 at rest, bounded expiry, revocation, account disablement), `organization_id` predicate on every scoped query and object-level policy checks. Automated token rotation is not implemented. | `tests/test_enterprise_identity.py` (11), `tests/test_api.py` tenant cases | TESTED (manual rotation) |
+| ENT-06 | Encryption, KMS, rotation | `enterprise/crypto.py`: RFC 8439 ChaCha20-Poly1305 in portable Python, `KMSProvider` seam, local 0600 keyring with rotation/revocation, purpose/AAD-bound envelopes; `enterprise/secrets.py` tenant vault with audited read/write/rotate. No managed KMS or HSM; pure-Python AEAD is not constant-time. | `tests/test_crypto_kms.py` (14) incl. RFC vectors, rotation, revocation, tenant binding, role denial | TESTED (local provider; managed KMS BLOCKED) |
 | ENT-07 | Job queue/workers/DLQ | `src/ogx/jobs.py`: durable SQLite queue with `BEGIN IMMEDIATE` claim, bounded pending+leased capacity, dedupe keys, attempt budget, exponential backoff, lease reaping, dead-letter state with approval-gated requeue, redacted errors and a bounded worker loop. A PostgreSQL-backed deployment is still absent (ENT-02). | `tests/test_jobs.py` (14 passed): capacity rejection, dedupe, backoff, DLQ, lease loss, concurrent claims. | TESTED (SQLite backend; Postgres BLOCKED) |
-| ENT-08 | Durable REST API | none | — | UNSUPPORTED |
+| ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema and no CORS. No OpenAPI document, deprecation policy or TLS termination. | `tests/test_api.py` (17) over a real loopback socket | TESTED |
 | ENT-09 | Monitoring/metrics/tracing | local audit/logs only | `docs/OBSERVABILITY.md` | PARTIAL |
 | ENT-10 | Backup/restore/DR | registry backup/recover only | registry tests | PARTIAL |
 
@@ -221,9 +221,9 @@ any live provider API call with credentials, release signing.
 | UI-01 | CLI project/host/identity/security surface | `src/ogx/cli.py` | `test_cli.py`, `test_cli_universal.py` | TESTED |
 | UI-02 | CLI patch and workflow surface | `ogx patch`, `ogx workflow` | `test_cli_patch_workflow.py` | TESTED |
 | UI-03 | CLI audit/recovery/diagnostics | audit, registry backup/recover, observe | tests | TESTED |
-| UI-04 | Authenticated REST API | none | — | UNSUPPORTED |
-| UI-05 | Dashboard | none | — | UNSUPPORTED |
-| UI-06 | One authorization model across interfaces | platform approval model shared by CLI/host; no API/UI | code inspection | PARTIAL |
+| UI-04 | Authenticated REST API | same implementation as ENT-08 (`src/ogx/api/server.py`, `ogx serve`) | `tests/test_api.py` | TESTED |
+| UI-05 | Dashboard | `src/ogx/api/dashboard.py`: dependency-free six-view control plane (overview, projects, hosts, governance, audit + NDJSON export, policy matrix) served as separate CSP-protected assets; token held in memory only; all data through the authenticated API. No browser E2E or accessibility audit. | `tests/test_api.py` asset/CSP/token-storage assertions | IMPLEMENTED (not browser-verified) |
+| UI-06 | One authorization model across interfaces | CLI (`ogx authz`), REST API, dashboard and store helpers all call `enterprise.authz.PolicyEngine`; parity asserted by tests; break-glass requires a reason and is audited. | `tests/test_authz.py`, `tests/test_api.py` parity case | TESTED |
 
 ## Phase 10 — Testing and compatibility
 
@@ -234,7 +234,7 @@ any live provider API call with credentials, release signing.
 | TST-03 | Python 3.11/3.12/3.13 | CI matrix | all three matrix jobs green on PR #20 and PR #21 | VERIFIED |
 | TST-04 | Linux | `ubuntu-latest` CI | green on PR #20 and #21; Linux also executed the symlink tests skipped on Windows | VERIFIED |
 | TST-05 | Windows | local execution | this pass | VERIFIED |
-| TST-06 | macOS | `.github/workflows/ci.yml` adds `macos-tests` (`macos-latest`, Python 3.12): compile, symlink capability probe, full pytest and distribution check. Not executed on GitHub in this pass. | workflow reviewed; macOS runner unavailable locally | IMPLEMENTED (not executed) |
+| TST-06 | macOS | `.github/workflows/ci.yml` `macos-tests` (macos-latest, Python 3.12) ran green on PR #27 (19/19 checks) after the rlimit and `/var` path-resolution fixes. | hosted run on PR #27 | VERIFIED |
 | TST-07 | Live provider integration tests | no credentials | — | BLOCKED |
 | TST-08 | Contract tests label mocks honestly | adapter contract suite; docs say mocked | `test_provider_contract.py` | VERIFIED |
 | TST-09 | Performance baselines | `_dev/tools/benchmark_baseline.py`, `docs/PERFORMANCE_BASELINE.md` | measured: scan 3.53 s / 1,021 files, workflow 3.74 s, patch 0.221 s, state create 56.9 ms (local synthetic) | VERIFIED |
@@ -262,7 +262,7 @@ any live provider API call with credentials, release signing.
 | DOC-02 | README verification figures current | updated 2026-11-27 | `README.md` | VERIFIED |
 | DOC-03 | Host documentation matches adapters | `HOST_ARCHITECTURE.md` updated | file | VERIFIED |
 | DOC-04 | Changelog entry for new capabilities | `CHANGELOG.md` | file | VERIFIED |
-| DOC-05 | Every historical document re-audited | not done (many milestone reports) | — | PARTIAL |
+| DOC-05 | Every historical document re-audited | `docs/DOCUMENTATION_INDEX.md`: full inventory, classification (current/historical/superseded/archive), method, verified commands and paths, and a correction table (HOST_ARCHITECTURE host rows, SECURITY_MODEL ENT claim). The ~70 milestone/release reports are classified but not re-verified line by line. | `docs/DOCUMENTATION_INDEX.md` | PARTIAL (inventory + current docs done) |
 | DOC-06 | Unsupported operations documented | host/provider/security docs | files | VERIFIED |
 | DOC-07 | Measured performance documented | `docs/PERFORMANCE_BASELINE.md` | numbers from the committed benchmark script | VERIFIED |
 
@@ -282,7 +282,7 @@ any live provider API call with credentials, release signing.
 
 | ID | Requirement | Implementation | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| PRD-01 | Architecture assessment | documented limits | docs | PARTIAL |
+| PRD-01 | Architecture assessment | `docs/PRODUCTION_READINESS_ASSESSMENT.md`: components, trust zones, data flows, single points of failure, deployment topologies and a severity/owner/exit-criteria gap matrix derived from current source. | file | IMPLEMENTED |
 | PRD-02 | Independent high-risk review | none | — | BLOCKED |
 | PRD-03 | Observability in production | local logs/audit only | — | PARTIAL |
 | PRD-04 | Backup/restore/DR at scale | registry backup only | — | PARTIAL |
@@ -380,3 +380,60 @@ independent security reviewer and owner-authorized signing keys/release approval
 Because substantial backlog work remains unimplemented, the honest classification
 for this pass is **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**, not
 "complete pending external acceptance".
+
+## Addendum — 2026-11-28 (enterprise, API, encryption and cloud-host pass)
+
+Work was done on branch `feat/enterprise-api-and-cloud-host`, created from the verified
+`origin/main` at `1a56856794b77428b4d7ba4751dd7af7b858fa3e` (PR #27 merge). No direct `main` edit,
+no push, no pull request, no tag or release, no visibility change and no `LICENSE` file was
+touched in this pass.
+
+### Implemented and tested in this pass
+
+* **ENT-04 / UI-06** — one deny-by-default policy engine (`enterprise/authz.py`) with a
+  5-role/29-action matrix, explicit-deny precedence, tenant binding, service-scope intersection,
+  audited break-glass and `ogx authz matrix|check|explain`.
+* **ENT-05** — tenant-scoped service accounts and scoped bearer tokens
+  (`enterprise/service_identity.py`, new store tables), SHA-256 at rest, one-time display,
+  bounded expiry, revocation, account disablement, fingerprint-only listing.
+* **ENT-06** — RFC 8439 ChaCha20-Poly1305, `KMSProvider` seam, local 0600 keyring with
+  rotation/revocation, AAD-bound envelopes and an audited tenant-secrets vault
+  (`enterprise/crypto.py`, `enterprise/secrets.py`, `ogx enterprise secret-*|kms-*`).
+* **ENT-08 / UI-04** — authenticated `v1` REST API on loopback (`api/server.py`, `ogx serve`) with
+  idempotency, bounded pagination/bodies, foreign-Origin refusal, rate limiting, request ids and
+  a uniform error schema.
+* **UI-05** — dashboard served as CSP-protected assets (`api/dashboard.py`), token in memory only.
+* **HOST-11** — GitHub Codespaces read-only host adapter (`hosts/adapters/cloud_runtime.py`),
+  registered in the factory/capability matrix with `ogx host workspaces`; all mutations and file
+  operations remain `unsupported`.
+* **SEC-15** — TB-11/TB-12 and T-21..T-28 added; stale "ENT-02..06 not started" claim corrected.
+* **DOC-05 (partial)** — `docs/DOCUMENTATION_INDEX.md` inventory/classification/corrections.
+* **PRD-01** — `docs/PRODUCTION_READINESS_ASSESSMENT.md` gap matrix.
+* **TST-06** — macOS CI evidence recorded from the green PR #27 run.
+
+### Evidence executed at this commit
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` | **1182 passed, 23 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 218 s) |
+| New focused suites (`test_authz`, `test_enterprise_identity`, `test_crypto_kms`, `test_api`, `test_cloud_host`) | **81 passed**, exit 0 |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 |
+| `python -m compileall -q src core tests _dev/tests` | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.` |
+| Wheel build `python -m pip wheel . --no-deps` | exit 0; **171 entries**; new `api/`, `enterprise/*`, `cloud_runtime.py` present; no `tests/` |
+| CLI smoke (temp `OGX_HOME`): `authz matrix`, `authz check` allow/deny exit 0/1, `serve --help`, `host register --type cloud_workspace`, `host capabilities` | exit codes 0/1/0/0/0/0 as expected |
+| Architecture contract suite | 17 tests OK (declared `api` package edge, stdlib-only, no cycles) |
+
+### Still not implemented (no claim made)
+
+ENT-02 (PostgreSQL), ENT-03 (OIDC/SAML/MFA), managed KMS/HSM, ENT-09 metrics/traces/alerts,
+ENT-10 and PRD-04 backup/DR, ORC-13 real Docker end-to-end, PROV-05/TST-07 live providers,
+HOST-08/09/10/11/14 live targets, ID-10..15, SEC-14/PRD-02 independent review, REL-07 publication,
+PRD-03/PRD-06 production acceptance and the remainder of DOC-05.
+
+External prerequisites are unchanged: provider tokens, Docker/Kubernetes/SSH/cloud accounts,
+PostgreSQL, IdP, KMS, second drive/USB/machine, an independent reviewer and owner authorization
+for signing/release. Live steps stay `BLOCKED`; they are not described as verified anywhere.
+
+Classification for this commit remains **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
+
