@@ -322,20 +322,24 @@ class _Handler(BaseHTTPRequestHandler):
         self._write(response.status, response.body, response.content_type,
                     {"Cache-Control": "no-store", **response.headers})
 
+    @staticmethod
+    def _sanitize_header_value(value: object) -> str:
+        return str(value).replace("\r", "").replace("\n", "")
+
     def _write(self, status: int, body: bytes, content_type: str,
                headers: dict[str, str]) -> None:
         if not getattr(self, "request_id", None):
             self.request_id = _token_hex(12)
         self._response_status = status
         self.send_response(status)
-        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Type", self._sanitize_header_value(content_type))
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Request-Id", self.request_id)
+        self.send_header("X-Request-Id", self._sanitize_header_value(self.request_id))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Connection", "close")
         for key, value in headers.items():
-            self.send_header(key, value)
+            self.send_header(key, self._sanitize_header_value(value))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
