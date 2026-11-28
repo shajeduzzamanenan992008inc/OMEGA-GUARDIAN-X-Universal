@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
+import time
 import uuid
 from datetime import datetime, timezone
 from importlib.resources import files
@@ -12,6 +14,12 @@ from urllib.parse import urlsplit
 
 from ..config import state_dir
 from .authz import Action, PolicyEngine, Principal, Resource
+from .database import (
+    DatabaseError,
+    PostgresDatabase,
+    database_url_from_env,
+    is_postgres_url,
+)
 
 ALLOWED_ROLES = {"owner", "admin", "developer", "auditor", "viewer"}
 
@@ -21,17 +29,43 @@ def _now() -> str:
 
 
 class EnterpriseStore:
-    """Local single-node tenant data model. Not a production SaaS auth/API server."""
+    """Tenant data model with SQLite (default) and PostgreSQL (opt-in) backends."""
 
-    def __init__(self, db_path: Path | None = None, policy: PolicyEngine | None = None):
+    def __init__(self, db_path: Path | None = None, policy: PolicyEngine | None = None,
+                 *, database_url: str | None = None):
+        self._database_url = database_url or database_url_from_env()
+        self._postgres: PostgresDatabase | None = None
+        if self._database_url:
+            if not is_postgres_url(self._database_url):
+                raise DatabaseError("OGX_DATABASE_URL must be a postgresql:// URL.")
+            self._postgres = PostgresDatabase(self._database_url)
         self.db_path = db_path or (state_dir() / "enterprise" / "ogx-enterprise.sqlite3")
         self._policy = policy or PolicyEngine()
+        self._migrated = False
 
     @property
     def policy(self) -> PolicyEngine:
         return self._policy
 
-    def _connect(self) -> sqlite3.Connection:
+    @property
+    def backend(self) -> str:
+        return "postgresql" if self._postgres is not None else "sqlite"
+
+    @property
+    def database_url(self) -> str | None:
+        """The configured URL (never log it; use ``database_display``)."""
+
+        return self._database_url
+
+    @property
+    def database_display(self) -> str:
+        if self._postgres is not None:
+            return self._postgres.display
+        return str(self.db_path)
+
+    def _connect(self):
+        if self._postgres is not None:
+            return self._postgres.connect()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         if self.db_path.is_symlink():
             raise ValueError("Enterprise database path must not be a symlink.")
@@ -50,11 +84,78 @@ class EnterpriseStore:
         finally:
             conn.close()
 
-    def initialize(self) -> Path:
+    def initialize(self) -> Path | str:
         schema = files("ogx.enterprise").joinpath("schema.sql").read_text(encoding="utf-8")
+        if self._postgres is not None:
+            self._postgres.migrate(schema)
+            self._migrated = True
+            return self.database_display
         with self._connection() as conn:
             conn.executescript(schema)
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL,"
+                " description TEXT NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO schema_migrations(version, applied_at, description)"
+                " VALUES(1, ?, 'initial enterprise schema')"
+                " ON CONFLICT(version) DO NOTHING",
+                (_now(),),
+            )
+        self._migrated = True
         return self.db_path
+
+    def table_names(self) -> set[str]:
+        """Return the application tables for readiness and diagnostics."""
+
+        if self._postgres is not None:
+            return self._postgres.table_names()
+        with self._connection() as conn:
+            rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        return {str(row[0]) for row in rows}
+
+    def schema_version(self) -> int:
+        if self._postgres is not None:
+            return self._postgres.schema_version()
+        try:
+            with self._connection() as conn:
+                row = conn.execute(
+                    "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
+                ).fetchone()
+            return int(row[0]) if row else 0
+        except sqlite3.Error:
+            return 0
+
+    def health(self) -> dict[str, Any]:
+        """Backend health with no credentials in the payload."""
+
+        started = time.monotonic()
+        try:
+            with self._connection() as conn:
+                conn.execute("SELECT 1").fetchone()
+            tables = self.table_names()
+            return {
+                "backend": self.backend,
+                "display": self.database_display,
+                "ok": True,
+                "schema_version": self.schema_version(),
+                "tables": len(tables),
+                "latency_ms": round((time.monotonic() - started) * 1000, 2),
+            }
+        except Exception as exc:  # noqa: BLE001 - health must never raise
+            return {
+                "backend": self.backend,
+                "display": self.database_display,
+                "ok": False,
+                "error": type(exc).__name__,
+                "latency_ms": round((time.monotonic() - started) * 1000, 2),
+            }
+
+    def close(self) -> None:
+        if self._postgres is not None:
+            self._postgres.close()
+
 
     def create_organization(self, slug: str, display_name: str, owner_subject: str) -> dict[str, Any]:
         if not slug or len(slug) > 64 or not all(c.islower() or c.isdigit() or c in "-_" for c in slug):
@@ -64,7 +165,8 @@ class EnterpriseStore:
         org_id, user_id = uuid.uuid4().hex, uuid.uuid4().hex
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            conn.execute("INSERT OR IGNORE INTO users(id, external_subject, created_at) VALUES(?,?,?)",
+            conn.execute("INSERT INTO users(id, external_subject, created_at) VALUES(?,?,?)"
+                         " ON CONFLICT DO NOTHING",
                          (user_id, owner_subject, _now()))
             row = conn.execute("SELECT id FROM users WHERE external_subject=?", (owner_subject,)).fetchone()
             user_id = row["id"]
@@ -95,7 +197,8 @@ class EnterpriseStore:
             if conn.execute("SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.organization_id=? AND u.external_subject=?",
                             (organization_id, external_subject)).fetchone():
                 raise ValueError("This identity is already a member of the organization.")
-            conn.execute("INSERT OR IGNORE INTO users(id,external_subject,created_at) VALUES(?,?,?)", (uuid.uuid4().hex, external_subject, _now()))
+            conn.execute("INSERT INTO users(id,external_subject,created_at) VALUES(?,?,?)"
+                         " ON CONFLICT DO NOTHING", (uuid.uuid4().hex, external_subject, _now()))
             user = conn.execute("SELECT id FROM users WHERE external_subject=?", (external_subject,)).fetchone()
             conn.execute("INSERT INTO memberships(organization_id,user_id,role,created_at) VALUES(?,?,?,?)",
                          (organization_id, user["id"], role, _now()))
@@ -674,9 +777,13 @@ class EnterpriseStore:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
-                "INSERT OR REPLACE INTO idempotency_records(id,organization_id,idempotency_key,"
+                "INSERT INTO idempotency_records(id,organization_id,idempotency_key,"
                 "route,request_digest,response_json,status_code,created_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
+                "VALUES(?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(organization_id, idempotency_key) DO UPDATE SET "
+                "route=excluded.route, request_digest=excluded.request_digest, "
+                "response_json=excluded.response_json, status_code=excluded.status_code, "
+                "created_at=excluded.created_at",
                 (uuid.uuid4().hex, organization_id, key, route, request_digest,
                  json.dumps(response, sort_keys=True), status_code, _now()),
             )
@@ -844,7 +951,8 @@ class EnterpriseStore:
             # NOT NULL creator column stays meaningful without inventing a
             # membership or an interactive login.
             conn.execute(
-                "INSERT OR IGNORE INTO users(id,external_subject,created_at) VALUES(?,?,?)",
+                "INSERT INTO users(id,external_subject,created_at) VALUES(?,?,?)"
+                " ON CONFLICT DO NOTHING",
                 (uuid.uuid4().hex, actor_label, now),
             )
             conn.execute(

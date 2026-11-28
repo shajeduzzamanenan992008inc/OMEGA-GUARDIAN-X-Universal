@@ -26,6 +26,11 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+# Opt-in production database driver. The base install remains stdlib-only.
+# psycopg 3 is the recommended driver; the code also accepts psycopg2.
+postgres = ["psycopg[binary]>=3.2,<4"]
+
 [project.scripts]
 ogx = "ogx.cli:main"
 

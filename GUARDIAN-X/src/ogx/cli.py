@@ -2544,6 +2544,8 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
             _json_print(store.list_audit_events(args.org, args.actor_subject, args.limit))
         elif args.enterprise_action == "framework":
             _json_print(framework_document())
+        elif args.enterprise_action == "backend":
+            _json_print(store.health())
         elif args.enterprise_action == "overview":
             _json_print(store.governance_overview(args.org, args.actor_subject))
         elif args.enterprise_action == "record-add":
@@ -3724,6 +3726,9 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_audit.set_defaults(func=cmd_enterprise)
     enterprise_framework = enterprise_sub.add_parser("framework", help="Show the six-pillar enterprise operating model")
     enterprise_framework.set_defaults(func=cmd_enterprise)
+    enterprise_backend = enterprise_sub.add_parser(
+        "backend", help="Show the configured database backend, schema version and health")
+    enterprise_backend.set_defaults(func=cmd_enterprise)
     enterprise_overview = enterprise_sub.add_parser("overview", help="Show role-protected enterprise governance metrics")
     enterprise_overview.add_argument("--org", required=True)
     enterprise_overview.add_argument("--actor-subject", required=True)
