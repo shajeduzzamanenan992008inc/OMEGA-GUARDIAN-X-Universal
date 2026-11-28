@@ -48,6 +48,8 @@ from ..enterprise.authz import (
 from ..enterprise.service_identity import InvalidToken, ServiceIdentityManager
 from ..enterprise.store import EnterpriseStore
 from . import dashboard
+from .observability import Metrics
+from .metrics_store import MetricsStorage, InMemoryMetricsStorage, create_storage
 
 API_VERSION = "v1"
 MAX_BODY_BYTES = 64 * 1024
@@ -70,6 +72,11 @@ _GOVERNANCE_PRIORITIES = {"critical", "high", "medium", "low"}
 _GOVERNANCE_STATUSES = {
     "proposed", "planned", "open", "in_progress", "blocked", "accepted", "mitigated",
     "resolved", "done", "rejected", "cancelled",
+}
+_REQUIRED_TABLES = {
+    "organizations", "users", "memberships", "projects", "audit_events",
+    "governance_records", "service_accounts", "service_tokens", "tenant_secrets",
+    "idempotency_records",
 }
 
 
@@ -120,7 +127,9 @@ class ApiContext:
     version: str = __version__
     rate_limit: int = DEFAULT_RATE_LIMIT
     rate_window: float = DEFAULT_RATE_WINDOW
+    metrics_storage: Any = None
     limiter: _RateLimiter = field(init=False)
+    metrics: Metrics = field(init=False)
 
     def __post_init__(self) -> None:
         self.store.initialize()
@@ -129,6 +138,9 @@ class ApiContext:
         if self.identities is None:
             self.identities = ServiceIdentityManager(self.store, self.policy)
         self.limiter = _RateLimiter(self.rate_limit, self.rate_window)
+        if self.metrics_storage is None:
+            self.metrics_storage = InMemoryMetricsStorage()
+        self.metrics = Metrics(version=self.version, storage=self.metrics_storage)
 
     @classmethod
     def default(cls) -> "ApiContext":
@@ -215,6 +227,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.request_id = self.headers.get("X-Request-Id", "").strip() or _token_hex(12)
         if not re.fullmatch(r"[A-Za-z0-9_.:-]{8,64}", self.request_id):
             self.request_id = _token_hex(12)
+        started = time.monotonic()
+        path = "/"
+        self.context.metrics.begin()
         try:
             parsed = urlsplit(self.path)
             path = parsed.path or "/"
@@ -230,6 +245,7 @@ class _Handler(BaseHTTPRequestHandler):
                 status, payload, headers = result
                 self._send(status, payload, extra_headers=headers)
         except ApiError as error:
+            self.context.metrics.record_error(error.code)
             payload = {
                 "error": {
                     "code": error.code,
@@ -260,6 +276,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": {"code": "internal_error",
                                        "message": "The request could not be completed.",
                                        "request_id": self.request_id}})
+        finally:
+            self.context.metrics.finish(
+                path, getattr(self, "_response_status", 500), time.monotonic() - started
+            )
 
     def _origin_allowed(self, method: str) -> bool:
         origin = self.headers.get("Origin")
@@ -306,6 +326,7 @@ class _Handler(BaseHTTPRequestHandler):
                headers: dict[str, str]) -> None:
         if not getattr(self, "request_id", None):
             self.request_id = _token_hex(12)
+        self._response_status = status
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -336,14 +357,26 @@ class _Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/health":
             return 200, {"status": "ok", "version": self.context.version}, {}
         if method == "GET" and path == "/ready":
-            try:
-                self.context.store.member_role("0" * 32, "readiness-probe")
-            except Exception as exc:  # pragma: no cover - defensive
-                raise ApiError(503, "not_ready", "The datastore is not ready.") from exc
-            return 200, {"status": "ready"}, {}
+            status, payload = self._readiness()
+            return status, payload, {}
 
         if method == "GET" and path == f"/api/{API_VERSION}/meta":
             return 200, self._meta(), {}
+        if method == "GET" and path == f"/api/{API_VERSION}/openapi.json":
+            self._authenticate()
+            from .openapi import build_spec
+
+            return 200, build_spec(version=self.context.version), {}
+        if method == "GET" and path == f"/api/{API_VERSION}/metrics":
+            self._authenticate()
+            wanted = (query.get("format", ["json"])[0] or "json").strip().lower()
+            if wanted == "prometheus":
+                return RawResponse(200, self.context.metrics.prometheus().encode("utf-8"),
+                                   "text/plain; version=0.0.4; charset=utf-8")
+            if wanted != "json":
+                raise ApiError(400, "invalid_parameter",
+                               "format must be json or prometheus.")
+            return 200, self.context.metrics.snapshot(), {}
 
         principal = self._authenticate()
 
@@ -368,6 +401,45 @@ class _Handler(BaseHTTPRequestHandler):
             return self._plugins(principal)
         raise ApiError(404, "not_found", "No such endpoint.")
 
+    # ------------------------------------------------------------- readiness
+    def _readiness(self) -> tuple[int, dict[str, Any]]:
+        """Report each dependency separately instead of one opaque verdict."""
+
+        checks: list[dict[str, Any]] = []
+        store = self.context.store
+        try:
+            with store._connection() as conn:
+                conn.execute("SELECT 1").fetchone()
+            checks.append({"name": "database", "status": "ok"})
+        except Exception:  # pragma: no cover - defensive
+            checks.append({"name": "database", "status": "failed"})
+        try:
+            with store._connection() as conn:
+                present = {
+                    str(row[0]) for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            missing = sorted(_REQUIRED_TABLES - present)
+            checks.append({"name": "schema", "status": "ok" if not missing else "failed",
+                           "missing": missing})
+        except Exception:  # pragma: no cover - defensive
+            checks.append({"name": "schema", "status": "failed"})
+        # Observability storage health is reported but is not a hard readiness
+        # gate: metrics failures must not break application requests.
+        try:
+            obs_status = "ok" if bool(self.context.metrics.healthy) else "degraded"
+        except Exception:
+            obs_status = "degraded"
+        checks.append({"name": "observability_storage", "status": obs_status,
+                       "critical": False})
+        ready = all(check["status"] == "ok" for check in checks if check.get("critical", True))
+        return (200 if ready else 503), {
+            "status": "ready" if ready else "not_ready",
+            "version": self.context.version,
+            "checks": checks,
+        }
+
     # --------------------------------------------------------- authenticated
     def _meta(self) -> dict[str, Any]:
         return {
@@ -383,6 +455,12 @@ class _Handler(BaseHTTPRequestHandler):
                 "max_body_bytes": MAX_BODY_BYTES,
                 "page_limit": MAX_PAGE_LIMIT,
                 "rate_limit_per_minute": self.context.rate_limit,
+            },
+            "operations": {
+                "openapi": f"/api/{API_VERSION}/openapi.json",
+                "metrics": f"/api/{API_VERSION}/metrics",
+                "health": "/health",
+                "readiness": "/ready",
             },
         }
 

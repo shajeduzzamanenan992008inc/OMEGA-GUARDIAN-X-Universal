@@ -34,6 +34,7 @@ reports were classified but not re-verified line by line against current code.
 | `docs/ARCHITECTURE.md`, `docs/CORE_CONTRACTS.md`, `docs/DEPENDENCY_BOUNDARIES.md` | component map and import contracts | import boundaries re-checked by `_dev/tests/test_architecture.py` |
 | `docs/ENTERPRISE_API_AND_AUTHZ.md` | ENT-04/05/08, UI-04/05/06 | new; matches code |
 | `docs/KMS_AND_ENCRYPTION.md` | ENT-06 | new; matches code and RFC vectors |
+| `docs/BACKUP_AND_RESTORE.md` | ENT-10 | new; matches code and restore tests |
 | `docs/HOST_CLOUD_WORKSPACE.md` | HOST-11 | new; matches code, live step marked BLOCKED |
 | `docs/HOST_ARCHITECTURE.md` | host adapters and status | stale rows corrected (see §3) |
 | `docs/SECURITY_MODEL.md` | threat model, controls | TB-11/TB-12 and T-21..T-28 added; ENT claim corrected |
