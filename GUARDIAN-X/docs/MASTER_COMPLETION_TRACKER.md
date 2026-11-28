@@ -557,3 +557,78 @@ physical relocation, production distributed tracing/alert delivery, independent
 security review, production signing key/escrow, RPO/RTO validation, release
 authorization remain BLOCKED. Browser E2E not run (no browser automation in this
 environment) — BLOCKED.
+
+## Addendum — 2026-11-28 (production acceptance verification pass)
+
+Branch `feat/production-acceptance-verification`, based on the verified
+`origin/main` at `93782187ccb964a0b81839202ba8088c4e1015f7`. No direct `main`
+edit, no push, pull request, merge, tag or release was performed in this pass;
+no `LICENSE` file was touched and repository visibility was not changed.
+
+### Implemented and tested
+
+* **ENT-05 token rotation** — `ServiceIdentityManager.rotate_token` issues a
+  replacement token for the same service account and immediately revokes the
+  previous one. Unknown, foreign-tenant and already-revoked tokens are refused;
+  a rejected rotation leaves the original token usable. CLI
+  `ogx enterprise token-rotate` added. Four tests cover replacement, revocation,
+  authorization and tenant scope. Rotation remains operator-triggered; no
+  scheduler is claimed.
+* **Architecture contract repair** — the tracing exporters legitimately reuse
+  `platform.security.validate_api_base`, so the declared `api -> platform` edge
+  was added to `_dev/tests/test_architecture.py` and documented in
+  `docs/DEPENDENCY_BOUNDARIES.md` instead of duplicating security validation.
+* **ENT-10 / PRD-04 drill** — `_dev/tools/verify_backup_drill.py` seeds a real
+  enterprise database, takes an encrypted and HMAC-signed backup, refuses a
+  wrong keyring and a byte-flipped artifact, destroys the live database,
+  restores into a new location and proves row counts and plaintext digest.
+* **ID-10 physical evidence** — `_dev/tools/verify_relocation_cross_drive.py`
+  refreshed live C:→D: evidence: copy, interrupted-copy resume, registry rebind
+  and a confirmed move.
+* **Documentation** — `docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md`
+  created; README figures and host/provider claims reconciled with this branch;
+  changelog and documentation index updated.
+
+### Evidence executed at this commit
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` | **1273 passed, 40 skipped, 119 subtests passed**, exit 0 (Windows, CPython 3.15.2, 244.30 s) |
+| `python -m pytest tests/test_enterprise_identity.py -q` | **20 passed**, exit 0 (9.02 s) |
+| `python -m pytest tests/test_relocation_engine.py tests/test_relocation_media_edges.py tests/test_relocation_fixtures.py -q` | **69 passed, 2 skipped, 56 subtests passed**, exit 0 (26.75 s) |
+| `python _dev/tools/verify_relocation_cross_drive.py --destination-root D:/FTP` | exit 0, `ok: true`, 2026-11-28T08:12:45Z: 7 files / 1,049,015 bytes, copy digests+identity match, interrupted resume reused 1 file, registry rebind updated, confirmed move deleted the source. Evidence: `docs/evidence/relocation-cross-drive-2026-11-28.json` |
+| `python _dev/tools/verify_backup_drill.py` | exit 0, `ok: true`, 2026-11-28T08:21:24Z: encrypted+signed backup (290,594 B artifact / 217,088 B plaintext, 16 tables), wrong key refused, tamper refused, live DB destroyed, restore integrity `ok`, counts match, plaintext SHA-256 match. Evidence: `docs/evidence/backup-restore-drill-2026-11-28.json` |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | **289 tests, OK (9 skipped)**, exit 0 (74.744 s) |
+| `PYTHONPATH=core python -m unittest _dev.tests.test_architecture` | **17 tests, OK**, exit 0 (21.962 s) |
+| `python _dev/tools/repro_check.py` | 396 entries, identical SHA-256 `bf832e19…` on two builds, exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | `OK: source and drop-in structure, versions and packaging declarations agree.`, exit 0 |
+| `python -m compileall -q` (touched modules) | exit 0 |
+
+### Status changes
+
+| ID | Previous | Now | Basis |
+| --- | --- | --- | --- |
+| ID-10 | PARTIAL (simulated; physical BLOCKED) | **VERIFIED for physical cross-volume relocation** | Real C:→D: copy, resume, rebind and confirmed move with matching digests |
+| ID-11 | PARTIAL | PARTIAL | No removable/USB media is attached; the engine and tooling are ready |
+| ID-12 | PARTIAL | PARTIAL | Single machine; second-machine run still BLOCKED |
+| TST-11 | BLOCKED | PARTIAL | Cross-volume executed; removable-media cases remain |
+| HOST-14 | BLOCKED | **VERIFIED (read-only)** | Live read-only GitHub session recorded in `docs/evidence/github-live-2026-11-28.json`; write lifecycle remains BLOCKED |
+| ENT-02 | UNSUPPORTED | IMPLEMENTED | Opt-in PostgreSQL store/queue and migrations; 4 live tests skip without `OGX_TEST_POSTGRES_URL` |
+| ENT-09 | PARTIAL | PARTIAL | Metrics persistence, W3C tracing/OTLP exporter and signed alert webhooks implemented and tested; no live collector or receiver |
+| UI-05 | IMPLEMENTED | **VERIFIED for browser E2E** | Chromium 153 E2E with CSP/401/sign-out checks and screenshots; accessibility audit not run |
+| ENT-05 | TESTED (manual rotation) | TESTED (rotation implemented) | Operator-driven rotation API/CLI and tests; scheduling not implemented |
+| SEC-14, PRD-02 | BLOCKED | BLOCKED | No independent reviewer |
+| REL-07, PRD-06 | BLOCKED | BLOCKED | No signing-key custody, release authorization or production deployment |
+
+### Still blocked (exact missing input)
+
+PostgreSQL server (`OGX_TEST_POSTGRES_URL`), OIDC/SAML identity provider and MFA
+policy, managed KMS/HSM, Docker daemon and pinned image, Kubernetes cluster,
+authorized SSH target, Codespaces credential, GitHub write credential and
+write authorization, removable USB media, a second machine, an independent
+reviewer, release signing keys/publication approval, owner-approved RPO/RTO and
+production infrastructure. See
+`docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md`.
+
+Classification for this commit: **DEVELOPMENT INCOMPLETE — PRODUCTION
+ACCEPTANCE BLOCKED**.

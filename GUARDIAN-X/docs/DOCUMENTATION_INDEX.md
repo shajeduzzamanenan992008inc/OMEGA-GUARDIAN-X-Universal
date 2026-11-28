@@ -41,6 +41,9 @@ reports were classified but not re-verified line by line against current code.
 | `docs/MASTER_COMPLETION_TRACKER.md` | requirement status | 2026-11-28 addendum added |
 | `docs/MASTER_COMPLETION_REPORT.md` | completion report | 2026-11-28 addendum added |
 | `docs/PRODUCTION_READINESS_ASSESSMENT.md` | PRD-01 gap matrix | new; source-derived |
+| `docs/POSTGRESQL_BACKEND.md` | ENT-02 opt-in PostgreSQL store, migrations and queue semantics | matches `enterprise/database.py`; live server step marked BLOCKED |
+| `docs/OWNER_DECISIONS_AND_EXTERNAL_PREREQUISITES.md` | D1–D12 and every external blocker with minimum owner action | new; source- and environment-derived |
+| `docs/evidence/*.json` | Executed evidence: GitHub read-only probe, dashboard browser E2E, cross-volume relocation, backup/restore drill | produced by committed tools on 2026-11-28; paths and digests only, no secrets |
 | `docs/OBSERVABILITY.md`, `docs/TROUBLESHOOTING.md`, `docs/INSTALLATION.md`, `docs/MIGRATION.md` | operations | reviewed for broken commands; no change required |
 | `docs/RELEASE_GUIDE.md`, `docs/PERFORMANCE_BASELINE.md` | release and performance | reviewed; figures retain their original dates |
 

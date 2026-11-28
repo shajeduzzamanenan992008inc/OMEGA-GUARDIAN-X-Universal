@@ -456,9 +456,9 @@ The supplied verification notes identify seven Git-hosting adapters:
 | Azure DevOps | Read-only repository surface + approval-gated PR |
 | AWS CodeCommit | Read-only repository surface + approval-gated PR |
 
-The documented read-only surface includes metadata, bounded file reads, tree, branches, commits, and pull-request information. Branch creation, file writes, push, merge, and deployment are reported as unsupported.
+The documented read-only surface includes metadata, bounded file reads, tree, branches, commits, and pull-request information. GitHub additionally supports validated, approval-gated branch creation, file writes, commits and push; merges and deployments remain unsupported on every adapter.
 
-All seven adapters are covered by mocked transport tests in the supplied evidence. No live provider credential was verified. Remote SSH, Docker, and Kubernetes hosts are not implemented.
+All seven adapters are covered by mocked transport tests. On 2026-11-28 the GitHub read surface was live-verified read-only against the public repository (`docs/evidence/github-live-2026-11-28.json`); the other six providers were not exercised with a credential. Remote SSH, Docker, Kubernetes and GitHub Codespaces host adapters are implemented and covered by mocked-transport tests; no live SSH target, Docker daemon, cluster or Codespaces credential was available, so their live operations remain unverified.
 
 ### Universal provider engine
 
@@ -546,19 +546,19 @@ Governance RBAC identities are not authenticated in the local prototype. Do not 
 
 ## Verification
 
-The following figures are transcribed from the supplied project notes. They are not a fresh test execution performed while preparing this README.
+The following figures were executed locally on **2026-11-28** on branch `feat/production-acceptance-verification`, using Windows and CPython `3.15.2`. Environment-gated skips are counted separately and are not passes.
 
-### Reported local verification — host/provider implementation pass
+### Local verification — production acceptance pass
 
-The supplied notes report a local run on **2026-11-27**, on an implementation branch based on `71fcbbc`, using Windows and CPython `3.15.2`:
+Executed on **2026-11-28** on branch `feat/production-acceptance-verification` (base `9378218`), using Windows and CPython `3.15.2`:
 
 | Check | Reported result |
 |---|---:|
-| Canonical pytest suite | **631 passed, 18 skipped, 119 subtests** |
+| Canonical pytest suite | **1273 passed, 40 skipped, 119 subtests passed** |
 | Drop-in and architecture unittest suite | **289 tests, OK (9 skipped)** |
 | `compileall` | Passed |
 | Canonical/drop-in consistency check | Passed |
-| Wheel build | Passed; 140 entries |
+| Reproducible artifact build (`repro_check.py`) | 396 entries; identical SHA-256 on two builds |
 
 Host, patch, and workflow tests are included in the reported totals.
 
@@ -576,11 +576,11 @@ The earlier `340/11` completion-pass figure is historical and is not presented a
 
 ### Environment and CI qualifications
 
-- Python 3.11, 3.12, and 3.13 were not available locally in the supplied verification environment.
-- Linux was not available locally in that pass.
-- The CI matrix is configured, but the supplied notes say it has not been executed there.
-- All seven remote provider adapters are covered by mocked transport tests only; no live credentials were verified.
-- No live provider call was verified from the recorded machine; zero provider credentials were configured.
+- Locally only CPython 3.15.2 was available; the hosted CI matrix ran Python 3.11, 3.12 and 3.13 green on PR #20 and PR #21.
+- Linux and macOS were not available locally; hosted CI ran both, including the macOS job on PR #27.
+- The hosted CI matrix executed: 16/16 checks on PR #20, 18/18 on PR #21 and 19/19 on PR #27.
+- Six provider adapters are covered by mocked transport tests only; the GitHub read surface has recorded read-only live evidence and no write credential was used.
+- No live provider write call was verified; only the read-only GitHub probe is recorded.
 
 > [!NOTE]
 > CPython 3.15.2 is outside the declared minimum statement of Python 3.11+. The recorded test run is evidence for that particular environment; it does not replace a supported-version matrix run.
