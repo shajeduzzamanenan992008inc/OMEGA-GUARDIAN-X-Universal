@@ -23,6 +23,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .metrics_store import InMemoryMetricsStorage
+
 
 def route_label(path: str) -> str:
     """Collapse concrete identifiers so metric cardinality stays bounded."""
@@ -72,12 +74,48 @@ class _RouteStats:
 class Metrics:
     version: str = ""
     started_at: float = field(default_factory=time.time)
+    storage: Any = field(default=None, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _routes: dict[str, _RouteStats] = field(default_factory=dict, repr=False)
     _status: dict[int, int] = field(default_factory=dict, repr=False)
     _errors: dict[str, int] = field(default_factory=dict, repr=False)
     _inflight: int = 0
     _total: int = 0
+
+    def __post_init__(self) -> None:
+        if self.storage is None:
+            self.storage = InMemoryMetricsStorage()
+        self._hydrate()
+
+    def _hydrate(self) -> None:
+        try:
+            snap = self.storage.load_snapshot()
+        except Exception:
+            return
+        if not isinstance(snap, dict):
+            return
+        for label, stats in (snap.get("routes") or {}).items():
+            entry = _RouteStats()
+            entry.count = int(stats.get("count", 0) or 0)
+            entry.errors = int(stats.get("errors_5xx", stats.get("errors", 0)) or 0)
+            entry.total_seconds = float(stats.get("total_seconds", 0.0) or 0.0)
+            entry.max_seconds = float(stats.get("max_seconds", 0.0) or 0.0)
+            self._routes[str(label)] = entry
+        for code, count in (snap.get("status_codes") or {}).items():
+            try:
+                self._status[int(code)] = int(count)
+            except (TypeError, ValueError):
+                continue
+        for code, count in (snap.get("error_codes") or {}).items():
+            self._errors[str(code)] = int(count)
+        self._total = int(snap.get("requests_total", self._total) or 0)
+
+    @property
+    def healthy(self) -> bool:
+        try:
+            return bool(self.storage.healthy)
+        except Exception:
+            return True
 
     def begin(self) -> None:
         with self._lock:
@@ -90,6 +128,10 @@ class Metrics:
             self._total += 1
             self._routes.setdefault(label, _RouteStats()).observe(status, duration)
             self._status[status] = self._status.get(status, 0) + 1
+        try:
+            self.storage.record_request(label, status, duration)
+        except Exception:
+            pass
 
     def record_error(self, code: str) -> None:
         """Count an error by its public, bounded error code (never a message)."""
@@ -97,6 +139,10 @@ class Metrics:
         label = str(code or "unknown")[:48]
         with self._lock:
             self._errors[label] = self._errors.get(label, 0) + 1
+        try:
+            self.storage.record_error(label)
+        except Exception:
+            pass
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

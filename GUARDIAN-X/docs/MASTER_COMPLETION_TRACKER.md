@@ -505,3 +505,55 @@ Manifest signing is symmetric and operator-local; no production/asymmetric signi
 exists, and KMS/HSM signing, PostgreSQL backup/PITR, off-site immutable storage,
 quantified RPO/RTO and a DR drill remain BLOCKED on owner decisions and infrastructure.
 Metrics persistence, distributed tracing and alert delivery are NOT_STARTED.
+
+## Addendum — 2026-11-28 (persistent observability, tracing, isolation, adversarial verification pass 3)
+
+Branch `feat/persistent-observability-enterprise-hardening`, created from `0ba8431`.
+No push, PR, merge, tag or release.
+
+### Implemented and tested
+
+* **ENT-09 persistent observability** — pluggable `MetricsStorage` interface with
+  `InMemoryMetricsStorage` (default) and bounded durable `SqliteMetricsStorage`
+  (retention, max-rows, max-routes cardinality, concurrency-safe WAL writes,
+  failure isolation, health reporting). `Metrics` hydrates from storage on
+  construction and persists writes; `/ready` reports `observability_storage` as a
+  non-critical check (health/readiness separation). New module
+  `src/ogx/api/metrics_store.py`.
+* **Priority C tracing/alerting foundations** — `src/ogx/api/tracing.py`: W3C
+  trace context, propagation inject/extract, contextvars, configurable Sampler,
+  `OTLPExporter` interface with `NoOpExporter`, bounded in-memory `Tracer` with
+  redaction, `AlertRule`/`AlertEvaluator`. Live OTLP and alert delivery remain
+  BLOCKED (no backend).
+* **Priority D authorization/isolation** — adversarial tests in
+  `tests/test_enterprise_isolation.py` (cross-tenant read/write denial, fail-closed,
+  service token tenant isolation, revocation, privilege escalation, IDOR).
+* **Priority E API/dashboard consistency** — contract tests in
+  `tests/test_openapi_contract.py` (documented routes not 405, security scheme,
+  no human SSO, error schema).
+* **Priority F backup adversarial** — `tests/test_backup_adversarial.py` (journal
+  tampering/version, symlink artifact, oversized manifest, algorithm substitution,
+  concurrent create, restore preserves previous on verify failure, unknown fields).
+* **Priority G performance** — synthetic smoke tests in
+  `tests/test_performance_smoke.py` (metrics 1000 ops 0.0139s, authz 5000 ops 0.0851s,
+  backup verify 0.0541s). Labeled synthetic.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` (full canonical) | 1252 passed, 25 skipped, 119 subtests, exit 0 (244.80s) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | 289 passed, 9 skipped, exit 0 (56.214s) |
+| `python -m compileall` (touched modules) | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK |
+| `python _dev/tools/repro_check.py` | reproducible: yes |
+| `python -m pip wheel . --no-deps` | 601342 bytes, includes new modules |
+| CLI smoke `enterprise backup --sign` | exit 0 |
+
+### Explicitly not claimed
+
+PostgreSQL backend, OIDC/SAML/MFA, managed KMS/HSM, Docker/K8s/SSH/cloud,
+physical relocation, production distributed tracing/alert delivery, independent
+security review, production signing key/escrow, RPO/RTO validation, release
+authorization remain BLOCKED. Browser E2E not run (no browser automation in this
+environment) — BLOCKED.

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — persistent observability, tracing, isolation and adversarial verification
+
+- Added `src/ogx/api/metrics_store.py`: pluggable `MetricsStorage` interface with
+  `InMemoryMetricsStorage` and bounded durable `SqliteMetricsStorage` (retention,
+  max-rows, max-routes cardinality, concurrency-safe WAL writes, failure isolation,
+  health reporting). `Metrics` hydrates from storage and persists writes.
+- Added `src/ogx/api/tracing.py`: W3C trace context, propagation, contextvars,
+  configurable Sampler, `OTLPExporter` interface with `NoOpExporter`, bounded
+  in-memory `Tracer` with redaction, `AlertRule`/`AlertEvaluator`.
+- `api/server.py`: `/ready` reports `observability_storage` as a non-critical check.
+- Added tests: `test_metrics_store.py`, `test_tracing.py`,
+  `test_enterprise_isolation.py`, `test_openapi_contract.py`,
+  `test_backup_adversarial.py`, `test_performance_smoke.py`.
+- Updated `docs/MASTER_COMPLETION_TRACKER.md` with dated evidence record.
+
 ## Unreleased — backup manifest signing and restore hardening
 
 - Added `src/ogx/enterprise/backup_signing.py`: an explicit `SigningProvider` boundary and a
