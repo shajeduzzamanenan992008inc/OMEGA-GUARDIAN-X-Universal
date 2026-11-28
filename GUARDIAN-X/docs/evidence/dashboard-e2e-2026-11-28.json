@@ -1,0 +1,101 @@
+{
+  "api_calls": [
+    "200 GET http://127.0.0.1:52865/api/v1/meta",
+    "200 GET http://127.0.0.1:52865/api/v1/meta",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/projects?limit=1",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/members?limit=1",
+    "200 GET http://127.0.0.1:52865/api/v1/jobs/stats",
+    "200 GET http://127.0.0.1:52865/api/v1/hosts",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/projects?limit=100",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/governance/records?limit=100",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/audit?limit=100",
+    "200 GET http://127.0.0.1:52865/api/v1/hosts",
+    "200 GET http://127.0.0.1:52865/api/v1/policy/matrix",
+    "200 GET http://127.0.0.1:52865/api/v1/meta",
+    "401 GET http://127.0.0.1:52865/api/v1/organizations",
+    "200 GET http://127.0.0.1:52865/api/v1/meta",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations",
+    "200 GET http://127.0.0.1:52865/api/v1/hosts",
+    "200 GET http://127.0.0.1:52865/api/v1/jobs/stats",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/projects?limit=1",
+    "200 GET http://127.0.0.1:52865/api/v1/organizations/20137ba2ad3544cebd49b9dc9e951c49/members?limit=1"
+  ],
+  "base_url": "http://127.0.0.1:52865",
+  "browser": "chromium",
+  "browser_version": "153.0.8010.12",
+  "checked_at": "2026-11-28T07:32:50Z",
+  "checks": {
+    "audit": {
+      "found": true,
+      "rows": 5
+    },
+    "disconnect": {
+      "overview_cleared": true,
+      "status": "Signed out."
+    },
+    "governance": {
+      "found": true
+    },
+    "hosts": {
+      "found": true
+    },
+    "invalid_token": {
+      "status": "This token was rejected. Sign in again."
+    },
+    "overview": {
+      "cards": [
+        "1",
+        "1",
+        "1",
+        "0"
+      ],
+      "product_line": "e2e-org \u00b7 0.8.0a1",
+      "status": ""
+    },
+    "page": {
+      "csp": true,
+      "frame_options": true,
+      "headers": {
+        "cache-control": "no-store",
+        "connection": "close",
+        "content-length": "3289",
+        "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Sat, 28 Nov 2026 07:32:56 GMT",
+        "referrer-policy": "no-referrer",
+        "server": "OGX-API/1.0",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-request-id": "3d8940d7091c"
+      },
+      "no_referrer": true,
+      "status": 200,
+      "title": "OGX Control Plane"
+    },
+    "policy": {
+      "found": true
+    },
+    "projects": {
+      "found": true
+    },
+    "reconnect": {
+      "cards": [
+        "1",
+        "1",
+        "1",
+        "0"
+      ]
+    }
+  },
+  "console_errors": [],
+  "elapsed_ms": 11064.56,
+  "failed_requests": [],
+  "ok": true,
+  "page_errors": [],
+  "python": "3.15.2",
+  "screenshots": [
+    "docs\\evidence\\dashboard-overview-2026-11-28.png",
+    "docs\\evidence\\dashboard-projects-2026-11-28.png"
+  ]
+}

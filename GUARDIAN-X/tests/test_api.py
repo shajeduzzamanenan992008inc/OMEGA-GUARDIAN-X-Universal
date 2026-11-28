@@ -285,6 +285,20 @@ def test_dashboard_assets_and_security_headers(api):
     assert b"OMEGA GUARDIAN X" in raw
     assert "default-src 'none'" in headers["content-security-policy"]
     assert headers["x-frame-options"] == "DENY"
+    assert headers["referrer-policy"] == "no-referrer"
+    assert headers["x-content-type-options"] == "nosniff"
+    # Default and dashboard headers must not be emitted twice.
+    parsed = urlsplit(api["base"])
+    connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=10)
+    try:
+        connection.request("GET", "/")
+        response = connection.getresponse()
+        response.read()
+        names = [name.lower() for name, _ in response.getheaders()]
+    finally:
+        connection.close()
+    assert names.count("referrer-policy") == 1
+    assert names.count("x-content-type-options") == 1
     status, _, headers, raw = _request(api["base"], "GET", "/dashboard.js")
     assert status == 200 and b"token" in raw
     status, _, headers, raw = _request(api["base"], "GET", "/dashboard.css")
