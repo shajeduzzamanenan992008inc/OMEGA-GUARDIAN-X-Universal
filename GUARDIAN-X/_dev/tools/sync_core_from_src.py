@@ -73,6 +73,7 @@ SRC_REQUIRED_PACKAGES = frozenset(
         "adapters",
         "agents",
         "ai",
+        "api",
         "connectors",
         "engines",
         "enterprise",

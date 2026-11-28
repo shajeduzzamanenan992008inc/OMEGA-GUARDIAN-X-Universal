@@ -44,6 +44,9 @@ CORE_ALLOWED = {
 # the declared contract, not a snapshot of whatever currently imports what.
 SRC_ALLOWED = {
     "adapters": set(),
+    # api: authenticated REST + dashboard assets. It is a leaf: it calls into
+    # enterprise policy/store, host registry and plugin metadata, never back.
+    "api": {"enterprise", "hosts", "plugins"},
     "agents": set(),
     # ai: provider-independent LLM boundary, patch generation, review, evolution.
     # It may use the platform transport/redaction primitives but no provider engine.

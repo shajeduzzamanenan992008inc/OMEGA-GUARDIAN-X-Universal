@@ -39,6 +39,9 @@ from .compatibility import compatibility_report
 from .sandbox import sandbox_plan, run_in_sandbox
 from .artifacts import ArtifactError, verify_sums, write_manifests
 from .enterprise.store import EnterpriseStore
+from .enterprise.authz import PolicyEngine, Principal, Resource
+from .enterprise.secrets import SecretsVault
+from .enterprise.service_identity import ServiceIdentityManager
 from .enterprise.approvals import ApprovalManager
 from .enterprise.governance import framework_document
 from .osv import audit_components
@@ -2563,9 +2566,165 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
             _json_print(store.set_member_role(args.org, args.external_subject, args.role, args.actor_subject))
         elif args.enterprise_action == "member-remove":
             _json_print(store.remove_member(args.org, args.external_subject, args.actor_subject))
+        elif args.enterprise_action == "service-account-create":
+            scopes = [item.strip() for item in (args.scopes or "").split(",") if item.strip()]
+            _json_print(ServiceIdentityManager(store).create_account(
+                args.org, args.name, args.role, scopes, args.actor_subject))
+        elif args.enterprise_action == "service-accounts":
+            _json_print(ServiceIdentityManager(store).list_accounts(args.org, args.actor_subject))
+        elif args.enterprise_action == "token-issue":
+            issued = ServiceIdentityManager(store).issue_token(
+                args.org, args.account, args.actor_subject, args.ttl)
+            if args.json:
+                _json_print(issued.to_dict())
+            else:
+                print(issued.token)
+                print(
+                    f"# token_id={issued.token_id} expires_at={issued.expires_at} "
+                    f"scopes={','.join(issued.scopes)}",
+                    file=sys.stderr,
+                )
+        elif args.enterprise_action == "tokens":
+            _json_print(ServiceIdentityManager(store).list_tokens(args.org, args.actor_subject))
+        elif args.enterprise_action == "token-revoke":
+            _json_print(ServiceIdentityManager(store).revoke_token(
+                args.org, args.token_id, args.actor_subject))
+        elif args.enterprise_action == "secret-set":
+            if not args.stdin:
+                raise ValueError("Use --stdin so the secret never appears in shell history.")
+            value = sys.stdin.read()
+            if value.endswith("\n"):
+                value = value[:-1]
+            _json_print(SecretsVault(store).set(args.org, args.name, value, args.actor_subject))
+        elif args.enterprise_action == "secret-get":
+            value = SecretsVault(store).get(args.org, args.name, args.actor_subject)
+            if args.json:
+                _json_print({"organization_id": args.org, "name": args.name, "value": value})
+            else:
+                print(value)
+        elif args.enterprise_action == "secrets":
+            _json_print(SecretsVault(store).names(args.org, args.actor_subject))
+        elif args.enterprise_action == "kms-status":
+            _json_print(SecretsVault(store).status(args.org, args.actor_subject))
+        elif args.enterprise_action == "kms-rotate":
+            _json_print(SecretsVault(store).rotate(args.org, args.actor_subject))
         return 0
     except (OSError, ValueError, RuntimeError, PermissionError) as exc:
         print(f"Enterprise data operation failed: {exc}", file=sys.stderr); return 2
+
+def cmd_authz(args: argparse.Namespace) -> int:
+    """Show or evaluate the shared authorization policy (ENT-04 / UI-06)."""
+    engine = PolicyEngine()
+    if args.authz_action == "matrix":
+        matrix = engine.matrix()
+        if args.json:
+            _json_print({"matrix": matrix, "actions": engine.actions()})
+        else:
+            print(f"{'action':<34}" + "".join(f"{role:<10}" for role in matrix))
+            for action in engine.actions():
+                cells = "".join(
+                    ("allow" if action in matrix[role] else "-").ljust(10) for role in matrix
+                )
+                print(f"{action:<34}{cells}")
+        return 0
+
+    roles = tuple(item.strip() for item in (args.roles or "").split(",") if item.strip())
+    if not roles:
+        print("--roles is required for check/explain.", file=sys.stderr)
+        return 2
+    scopes = None
+    if args.scopes is not None:
+        scopes = tuple(item.strip() for item in args.scopes.split(",") if item.strip())
+    try:
+        principal = Principal(
+            subject=args.subject or "cli-operator",
+            kind="service" if scopes is not None else "user",
+            roles=roles,
+            tenant_id=args.tenant,
+            scopes=scopes,
+        )
+    except ValueError as exc:
+        print(f"Invalid principal: {exc}", file=sys.stderr)
+        return 2
+    resource = None
+    if args.resource_kind or args.resource_id:
+        resource = Resource(
+            kind=args.resource_kind or "organization",
+            id=args.resource_id,
+            tenant_id=args.tenant,
+        )
+    decision = engine.decide(
+        principal, args.action, resource, context={"reason": args.reason or ""}
+    )
+    payload = {
+        "decision": decision.to_dict(),
+        "effective_permissions": sorted(principal.permissions),
+        "roles": list(principal.roles),
+        "scopes": list(scopes) if scopes is not None else None,
+    }
+    if args.json or args.authz_action == "explain":
+        _json_print(payload)
+    else:
+        verdict = "ALLOW" if decision.allowed else "DENY"
+        print(f"{verdict} {decision.action} for {decision.subject} ({decision.reason})")
+        print(f"  rule: {decision.rule}")
+        print(f"  effective permissions: {len(payload['effective_permissions'])}")
+    return 0 if decision.allowed else 1
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Run the authenticated API and dashboard on a loopback address."""
+    from .api.server import ApiContext, serve as run_api
+
+    store = EnterpriseStore()
+    context = ApiContext(store=store, rate_limit=args.rate_limit)
+    print(f"OGX API {context.version} listening on http://{args.host}:{args.port}/")
+    print("Authentication: service-identity bearer token (no interactive SSO in this build).")
+    print(
+        "Issue a token with: ogx enterprise token-issue --org <org> "
+        "--account <account> --actor-subject <owner>"
+    )
+    try:
+        run_api(context, host=args.host, port=args.port)
+    except KeyboardInterrupt:
+        print("Stopped.")
+    return 0
+
+
+def cmd_host_workspaces(args: argparse.Namespace) -> int:
+    """List cloud workspace instances through the connected host adapter."""
+    manager = None
+    session = None
+    try:
+        manager, session = _new_host_session(args.host_id, args.root)
+        adapter = getattr(session, "adapter", None)
+        lister = getattr(adapter, "list_workspaces", None)
+        if lister is None:
+            print("This host adapter does not expose cloud workspaces.", file=sys.stderr)
+            return 2
+        result = lister(args.limit)
+        if args.json:
+            _json_print(result)
+        else:
+            print(
+                f"Workspaces ({result.get('provider')}, scope {result.get('scope')}): "
+                f"{result.get('total', 0)}"
+            )
+            for item in result.get("items", []):
+                print(
+                    f"  {item['name']}  {item['state']}  "
+                    f"{item.get('repository') or '-'}  {item.get('machine') or '-'}"
+                )
+        return 0
+    except (HostLifecycleError, KeyError, ValueError, OSError) as exc:
+        return _host_error(exc, "workspaces")
+    finally:
+        if manager is not None and session is not None:
+            try:
+                manager.disconnect(session.session_id)
+            except Exception:
+                pass
+
 
 def cmd_governance(args: argparse.Namespace) -> int:
     manager = ApprovalManager()
@@ -3374,6 +3533,14 @@ def build_parser() -> argparse.ArgumentParser:
     host_discover.add_argument("--json", action="store_true")
     host_discover.set_defaults(func=cmd_remote_discover)
 
+    host_workspaces = host_sub.add_parser(
+        "workspaces", help="List cloud workspace instances (read-only)")
+    host_workspaces.add_argument("host_id")
+    host_workspaces.add_argument("--root")
+    host_workspaces.add_argument("--limit", type=int, default=50)
+    host_workspaces.add_argument("--json", action="store_true")
+    host_workspaces.set_defaults(func=cmd_host_workspaces)
+
     relocate = sub.add_parser("relocate", help="Plan, apply, verify or recover a project relocation")
     relocate_sub = relocate.add_subparsers(dest="relocate_action", required=True)
 
@@ -3580,6 +3747,102 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_member_remove.add_argument("--actor-subject", required=True)
     enterprise_member_remove.set_defaults(func=cmd_enterprise)
 
+    enterprise_sa = enterprise_sub.add_parser(
+        "service-account-create", help="Create a tenant-scoped service identity")
+    enterprise_sa.add_argument("--org", required=True)
+    enterprise_sa.add_argument("--name", required=True)
+    enterprise_sa.add_argument("--role", choices=("admin", "developer", "auditor", "viewer"),
+                               required=True)
+    enterprise_sa.add_argument("--scopes", required=True,
+                               help="Comma-separated actions this identity may use")
+    enterprise_sa.add_argument("--actor-subject", required=True)
+    enterprise_sa.set_defaults(func=cmd_enterprise)
+
+    enterprise_sas = enterprise_sub.add_parser(
+        "service-accounts", help="List service identities in an organization")
+    enterprise_sas.add_argument("--org", required=True)
+    enterprise_sas.add_argument("--actor-subject", required=True)
+    enterprise_sas.set_defaults(func=cmd_enterprise)
+
+    enterprise_token = enterprise_sub.add_parser(
+        "token-issue", help="Issue a scoped bearer token (shown once)")
+    enterprise_token.add_argument("--org", required=True)
+    enterprise_token.add_argument("--account", required=True)
+    enterprise_token.add_argument("--actor-subject", required=True)
+    enterprise_token.add_argument("--ttl", type=int, default=3600)
+    enterprise_token.add_argument("--json", action="store_true")
+    enterprise_token.set_defaults(func=cmd_enterprise)
+
+    enterprise_tokens = enterprise_sub.add_parser(
+        "tokens", help="List token fingerprints (never the secrets)")
+    enterprise_tokens.add_argument("--org", required=True)
+    enterprise_tokens.add_argument("--actor-subject", required=True)
+    enterprise_tokens.set_defaults(func=cmd_enterprise)
+
+    enterprise_token_revoke = enterprise_sub.add_parser(
+        "token-revoke", help="Revoke a service token immediately")
+    enterprise_token_revoke.add_argument("--org", required=True)
+    enterprise_token_revoke.add_argument("--token-id", required=True)
+    enterprise_token_revoke.add_argument("--actor-subject", required=True)
+    enterprise_token_revoke.set_defaults(func=cmd_enterprise)
+
+    enterprise_secret_set = enterprise_sub.add_parser(
+        "secret-set", help="Encrypt a tenant secret at rest (value read from stdin)")
+    enterprise_secret_set.add_argument("--org", required=True)
+    enterprise_secret_set.add_argument("--name", required=True)
+    enterprise_secret_set.add_argument("--actor-subject", required=True)
+    enterprise_secret_set.add_argument("--stdin", action="store_true", required=True,
+                                       help="Read the secret value from standard input")
+    enterprise_secret_set.set_defaults(func=cmd_enterprise)
+
+    enterprise_secret_get = enterprise_sub.add_parser(
+        "secret-get", help="Decrypt a tenant secret for an authorized actor")
+    enterprise_secret_get.add_argument("--org", required=True)
+    enterprise_secret_get.add_argument("--name", required=True)
+    enterprise_secret_get.add_argument("--actor-subject", required=True)
+    enterprise_secret_get.add_argument("--json", action="store_true")
+    enterprise_secret_get.set_defaults(func=cmd_enterprise)
+
+    enterprise_secrets = enterprise_sub.add_parser(
+        "secrets", help="List tenant secret names and key ids (no values)")
+    enterprise_secrets.add_argument("--org", required=True)
+    enterprise_secrets.add_argument("--actor-subject", required=True)
+    enterprise_secrets.set_defaults(func=cmd_enterprise)
+
+    enterprise_kms_status = enterprise_sub.add_parser(
+        "kms-status", help="Describe the key provider without exposing key material")
+    enterprise_kms_status.add_argument("--org", required=True)
+    enterprise_kms_status.add_argument("--actor-subject", required=True)
+    enterprise_kms_status.set_defaults(func=cmd_enterprise)
+
+    enterprise_kms_rotate = enterprise_sub.add_parser(
+        "kms-rotate", help="Rotate the encryption key and re-encrypt tenant secrets")
+    enterprise_kms_rotate.add_argument("--org", required=True)
+    enterprise_kms_rotate.add_argument("--actor-subject", required=True)
+    enterprise_kms_rotate.set_defaults(func=cmd_enterprise)
+
+    authz = sub.add_parser("authz", help="Show and evaluate the shared authorization policy")
+    authz_sub = authz.add_subparsers(dest="authz_action", required=True)
+    authz_matrix = authz_sub.add_parser("matrix", help="Print the role/action permission matrix")
+    authz_matrix.add_argument("--json", action="store_true")
+    authz_matrix.set_defaults(func=cmd_authz)
+    for authz_name, authz_help in (
+        ("check", "Decide one action for a role or scoped service principal"),
+        ("explain", "Explain a decision with the effective permission set"),
+    ):
+        authz_item = authz_sub.add_parser(authz_name, help=authz_help)
+        authz_item.add_argument("--action", required=True)
+        authz_item.add_argument("--roles", required=True, help="Comma-separated roles")
+        authz_item.add_argument("--scopes",
+                                help="Comma-separated scopes; makes the principal a service identity")
+        authz_item.add_argument("--tenant", help="Tenant (organization id) binding")
+        authz_item.add_argument("--resource-kind")
+        authz_item.add_argument("--resource-id")
+        authz_item.add_argument("--subject", help="Principal subject for the decision record")
+        authz_item.add_argument("--reason", help="Required for break_glass")
+        authz_item.add_argument("--json", action="store_true")
+        authz_item.set_defaults(func=cmd_authz)
+
     governance = sub.add_parser("governance", help="Email-gated approvals and controlled execution")
     governance_sub = governance.add_subparsers(dest="governance_action", required=True)
     governance_list = governance_sub.add_parser("list", help="List recent write approval requests")
@@ -3690,6 +3953,13 @@ def build_parser() -> argparse.ArgumentParser:
     wf_retry.add_argument("--stage")
     wf_retry.add_argument("--json", action="store_true")
     wf_retry.set_defaults(func=cmd_workflow)
+
+    serve_parser = sub.add_parser(
+        "serve", help="Run the authenticated REST API and dashboard (loopback only)")
+    serve_parser.add_argument("--host", choices=("127.0.0.1", "localhost"), default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8765)
+    serve_parser.add_argument("--rate-limit", type=int, default=120)
+    serve_parser.set_defaults(func=cmd_serve)
 
     return parser
 
