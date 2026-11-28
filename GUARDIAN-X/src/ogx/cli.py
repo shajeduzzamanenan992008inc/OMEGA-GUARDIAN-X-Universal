@@ -2544,6 +2544,8 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
             _json_print(store.list_audit_events(args.org, args.actor_subject, args.limit))
         elif args.enterprise_action == "framework":
             _json_print(framework_document())
+        elif args.enterprise_action == "backend":
+            _json_print(store.health())
         elif args.enterprise_action == "overview":
             _json_print(store.governance_overview(args.org, args.actor_subject))
         elif args.enterprise_action == "record-add":
@@ -2594,6 +2596,20 @@ def cmd_enterprise(args: argparse.Namespace) -> int:
         elif args.enterprise_action == "token-revoke":
             _json_print(ServiceIdentityManager(store).revoke_token(
                 args.org, args.token_id, args.actor_subject))
+        elif args.enterprise_action == "token-rotate":
+            rotated = ServiceIdentityManager(store).rotate_token(
+                args.org, args.token_id, args.actor_subject, ttl_seconds=args.ttl)
+            if args.json:
+                _json_print(rotated)
+            else:
+                print(rotated["token"]["token"])
+                print(
+                    f"# token_id={rotated['token']['token_id']} "
+                    f"previous_token_id={rotated['previous_token_id']} "
+                    f"revoked_previous={rotated['revoked_previous']} "
+                    f"expires_at={rotated['token']['expires_at']}",
+                    file=sys.stderr,
+                )
         elif args.enterprise_action == "secret-set":
             if not args.stdin:
                 raise ValueError("Use --stdin so the secret never appears in shell history.")
@@ -3724,6 +3740,9 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_audit.set_defaults(func=cmd_enterprise)
     enterprise_framework = enterprise_sub.add_parser("framework", help="Show the six-pillar enterprise operating model")
     enterprise_framework.set_defaults(func=cmd_enterprise)
+    enterprise_backend = enterprise_sub.add_parser(
+        "backend", help="Show the configured database backend, schema version and health")
+    enterprise_backend.set_defaults(func=cmd_enterprise)
     enterprise_overview = enterprise_sub.add_parser("overview", help="Show role-protected enterprise governance metrics")
     enterprise_overview.add_argument("--org", required=True)
     enterprise_overview.add_argument("--actor-subject", required=True)
@@ -3815,6 +3834,15 @@ def build_parser() -> argparse.ArgumentParser:
     enterprise_token_revoke.add_argument("--token-id", required=True)
     enterprise_token_revoke.add_argument("--actor-subject", required=True)
     enterprise_token_revoke.set_defaults(func=cmd_enterprise)
+
+    enterprise_token_rotate = enterprise_sub.add_parser(
+        "token-rotate", help="Issue a replacement token and revoke the previous one")
+    enterprise_token_rotate.add_argument("--org", required=True)
+    enterprise_token_rotate.add_argument("--token-id", required=True)
+    enterprise_token_rotate.add_argument("--actor-subject", required=True)
+    enterprise_token_rotate.add_argument("--ttl", type=int, default=3600)
+    enterprise_token_rotate.add_argument("--json", action="store_true")
+    enterprise_token_rotate.set_defaults(func=cmd_enterprise)
 
     enterprise_secret_set = enterprise_sub.add_parser(
         "secret-set", help="Encrypt a tenant secret at rest (value read from stdin)")

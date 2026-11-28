@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-11-28T08:21:24Z",
+  "checks": {
+    "backup": {
+      "bytes": 290594,
+      "encrypted": true,
+      "integrity_check": "ok",
+      "plaintext_bytes": 217088,
+      "signature_verified": true,
+      "signed": true,
+      "tables": 16
+    },
+    "destroyed": true,
+    "restore": {
+      "counts": {
+        "members": 3,
+        "organizations": 1
+      },
+      "counts_match": true,
+      "integrity_check": "ok",
+      "plaintext_sha256_match": true,
+      "restored": true,
+      "sha256": "29bf6059b384c5a02a5e54df415069cc139d9cb19651fe708a0d0bfb5f236341"
+    },
+    "seeded": {
+      "members": 3,
+      "organizations": 1
+    },
+    "tamper_refused": true,
+    "wrong_key_refused": true
+  },
+  "cleaned_up": true,
+  "elapsed_ms": 6733.79,
+  "host": "win32",
+  "ok": true,
+  "python": "3.15.2"
+}

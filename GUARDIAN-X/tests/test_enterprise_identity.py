@@ -209,3 +209,65 @@ def test_tenant_isolation_between_organizations(tmp_path):
         # The account belongs to the first tenant; the other tenant cannot use it.
         manager.issue_token(other["organization_id"], account["account_id"],
                             "owner@other.example")
+
+
+def test_token_rotation_replaces_and_revokes_the_previous_token(tmp_path):
+    _, org, manager = _setup(tmp_path)
+    account = _account(manager, org)
+    original = manager.issue_token(org["organization_id"], account["account_id"],
+                                   "owner@example.com", 600)
+
+    rotated = manager.rotate_token(org["organization_id"], original.token_id,
+                                   "owner@example.com", ttl_seconds=900)
+
+    assert rotated["previous_token_id"] == original.token_id
+    assert rotated["revoked_previous"] is True
+    assert rotated["token"]["token_id"] != original.token_id
+    assert rotated["token"]["account_id"] == account["account_id"]
+    assert rotated["token"]["scopes"] == list(account["scopes"])
+
+    with pytest.raises(InvalidToken):
+        manager.authenticate(original.token)
+    principal = manager.authenticate(rotated["token"]["token"])
+    assert principal.tenant_id == org["organization_id"]
+
+    listed = {row["token_id"]: row for row in
+              manager.list_tokens(org["organization_id"], "owner@example.com")}
+    assert listed[original.token_id]["revoked_at"]
+    assert not listed[rotated["token"]["token_id"]]["revoked_at"]
+
+
+def test_token_rotation_requires_authorization_and_tenant_scope(tmp_path):
+    store, org, manager = _setup(tmp_path)
+    account = _account(manager, org)
+    issued = manager.issue_token(org["organization_id"], account["account_id"],
+                                 "owner@example.com")
+
+    with pytest.raises(PermissionError):
+        manager.rotate_token(org["organization_id"], issued.token_id, "dev@example.com")
+
+    other = store.create_organization("other", "Other", "owner@other.example")
+    with pytest.raises(ValueError):
+        manager.rotate_token(other["organization_id"], issued.token_id,
+                             "owner@other.example")
+
+    # A rejected rotation must leave the original token usable.
+    assert manager.authenticate(issued.token).tenant_id == org["organization_id"]
+
+
+def test_rotating_a_revoked_token_is_refused(tmp_path):
+    _, org, manager = _setup(tmp_path)
+    account = _account(manager, org)
+    issued = manager.issue_token(org["organization_id"], account["account_id"],
+                                 "owner@example.com")
+    manager.revoke_token(org["organization_id"], issued.token_id, "owner@example.com")
+
+    with pytest.raises(ValueError):
+        manager.rotate_token(org["organization_id"], issued.token_id,
+                             "owner@example.com")
+
+
+def test_rotating_an_unknown_token_is_refused(tmp_path):
+    _, org, manager = _setup(tmp_path)
+    with pytest.raises(ValueError):
+        manager.rotate_token(org["organization_id"], "f" * 32, "owner@example.com")

@@ -173,16 +173,19 @@ def copy_project_tree(
     destination: Path,
     *,
     entries: list[dict[str, Any]] | None = None,
+    allow_existing: bool = False,
 ) -> dict[str, Any]:
     """Copy a project tree safely and verify every file.
 
     Idempotent: files already present at the destination with the same size and
-    digest are skipped, which makes resuming after an interruption safe.
+    digest are skipped, which makes resuming after an interruption safe. A new
+    copy refuses a non-empty destination; recovery passes ``allow_existing=True``
+    because the interrupted run may have written some files already.
     """
 
     source = Path(source)
     destination = Path(destination)
-    if destination.exists() and any(destination.iterdir()):
+    if destination.exists() and any(destination.iterdir()) and not allow_existing:
         raise RelocationRefused(
             f"Destination is not empty: {destination}", reason="destination_exists"
         )
@@ -441,15 +444,29 @@ def _execute(
         entries, warnings = scan_tree(source)
 
         if _step_status(journal, "copy") != "done":
+            copy_was_started = _step_status(journal, "copy") == "started"
             _mark(journal, journal_path, "copy", "started", fault_inject)
             journal["destination_created"] = True
             _write_journal(journal_path, journal)
-            report = copy_project_tree(source, destination, entries=entries)
+            report = copy_project_tree(
+                source, destination, entries=entries, allow_existing=copy_was_started
+            )
             journal["copy_report"] = report
             _mark(journal, journal_path, "copy", "done", fault_inject)
 
         if _step_status(journal, "verify") != "done":
             _mark(journal, journal_path, "verify", "started", fault_inject)
+            expected = {entry["path"] for entry in entries}
+            destination_entries, destination_warnings = scan_tree(destination)
+            extras = sorted(
+                entry["path"] for entry in destination_entries
+                if entry["path"] not in expected
+            )
+            if extras:
+                raise RelocationError(
+                    f"Unexpected files at destination: {extras[:5]}",
+                    reason="verify_failed",
+                )
             for entry in entries:
                 target = destination / Path(entry["path"])
                 if not target.is_file() or target.is_symlink():

@@ -46,7 +46,9 @@ SRC_ALLOWED = {
     "adapters": set(),
     # api: authenticated REST + dashboard assets. It is a leaf: it calls into
     # enterprise policy/store, host registry and plugin metadata, never back.
-    "api": {"enterprise", "hosts", "plugins"},
+    # platform is used only for canonical endpoint validation and redaction in
+    # tracing/alert exporters, not for a provider engine.
+    "api": {"enterprise", "hosts", "plugins", "platform"},
     "agents": set(),
     # ai: provider-independent LLM boundary, patch generation, review, evolution.
     # It may use the platform transport/redaction primitives but no provider engine.

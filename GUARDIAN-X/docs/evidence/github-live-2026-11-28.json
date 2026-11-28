@@ -1,0 +1,97 @@
+{
+  "branches": {
+    "count": 2,
+    "names": [
+      "alert-autofix-16",
+      "main"
+    ]
+  },
+  "capabilities": {
+    "branch_create": "supported",
+    "branch_delete": "unsupported",
+    "branch_read": "supported",
+    "clone": "unsupported",
+    "commit_create": "supported",
+    "commit_read": "supported",
+    "deployment": "unsupported",
+    "fetch": "unsupported",
+    "file_read": "supported",
+    "file_system_access": "unsupported",
+    "file_write": "supported",
+    "pull_request_create": "supported",
+    "pull_request_merge": "unsupported",
+    "push": "supported",
+    "repository_metadata_read": "supported",
+    "repository_structure_read": "supported",
+    "testing": "unsupported",
+    "workspace_create": "unsupported",
+    "workspace_delete": "unsupported",
+    "workspace_exec": "unsupported",
+    "workspace_read": "unsupported",
+    "workspace_start": "unsupported",
+    "workspace_stop": "unsupported"
+  },
+  "checked_at": "2026-11-28T07:14:35Z",
+  "commits": {
+    "count": 5,
+    "shas": [
+      "93782187ccb9",
+      "75168ee3503a",
+      "a438a3bd1a0f",
+      "dd07895f900e",
+      "ef3ea14ea263"
+    ]
+  },
+  "connected": true,
+  "connected_after_disconnect": false,
+  "elapsed_ms": 7682.5,
+  "file": {
+    "path": "README.md",
+    "returned_bytes": 4096,
+    "sha": "432f2c3915ca",
+    "size": 56753,
+    "truncated": true
+  },
+  "health": {
+    "checked_at": "2026-11-28T07:14:36.740709+00:00",
+    "details": {
+      "latency_ms": 1386,
+      "probe": "healthy",
+      "repository": "shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal"
+    },
+    "issues": [],
+    "state": "healthy"
+  },
+  "metadata": {
+    "default_branch": "main",
+    "full_name": "shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal",
+    "provider": "github",
+    "visibility": "public"
+  },
+  "ok": true,
+  "pull_requests": {
+    "open": 0
+  },
+  "python": "3.15.2",
+  "read_only": true,
+  "repository": "shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal",
+  "tree": {
+    "entries": 12,
+    "sample": [
+      ".github",
+      ".gitignore",
+      "ADOPTION-INSTRUCTIONS.md",
+      "ASSET-MANIFEST.json",
+      "GUARDIAN-X"
+    ],
+    "truncated": false
+  },
+  "unsupported_claims": [],
+  "write_claims": {
+    "branch_create": "supported",
+    "commit_create": "supported",
+    "file_write": "supported",
+    "pull_request_create": "supported",
+    "push": "supported"
+  }
+}
