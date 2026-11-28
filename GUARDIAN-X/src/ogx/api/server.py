@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -49,8 +50,9 @@ from ..enterprise.authz import (
 from ..enterprise.service_identity import InvalidToken, ServiceIdentityManager
 from ..enterprise.store import EnterpriseStore
 from . import dashboard
-from .observability import Metrics
+from .observability import Metrics, route_label
 from .metrics_store import MetricsStorage, InMemoryMetricsStorage, create_storage
+from .tracing import HttpOTLPExporter, Tracer
 
 API_VERSION = "v1"
 MAX_BODY_BYTES = 64 * 1024
@@ -120,6 +122,30 @@ class _RateLimiter:
             return True, 0.0
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _default_tracer() -> Tracer:
+    """Build a tracer, enabling OTLP/HTTP export only when configured."""
+
+    endpoint = os.environ.get("OGX_OTLP_ENDPOINT", "").strip()
+    if not endpoint:
+        return Tracer(service_name="ogx-api")
+    try:
+        timeout = float(os.environ.get("OGX_OTLP_TIMEOUT", "2"))
+        exporter = HttpOTLPExporter(
+            endpoint,
+            service_name="ogx-api",
+            timeout=timeout,
+            allow_loopback_http=_env_flag("OGX_OTLP_ALLOW_LOOPBACK_HTTP"),
+        )
+    except Exception:
+        # Tracing must never prevent the API from starting.
+        return Tracer(service_name="ogx-api")
+    return Tracer(service_name="ogx-api", exporter=exporter)
+
+
 @dataclass
 class ApiContext:
     store: EnterpriseStore
@@ -129,6 +155,7 @@ class ApiContext:
     rate_limit: int = DEFAULT_RATE_LIMIT
     rate_window: float = DEFAULT_RATE_WINDOW
     metrics_storage: Any = None
+    tracer: Any = None
     limiter: _RateLimiter = field(init=False)
     metrics: Metrics = field(init=False)
 
@@ -142,6 +169,8 @@ class ApiContext:
         if self.metrics_storage is None:
             self.metrics_storage = InMemoryMetricsStorage()
         self.metrics = Metrics(version=self.version, storage=self.metrics_storage)
+        if self.tracer is None:
+            self.tracer = _default_tracer()
 
     @classmethod
     def default(cls) -> "ApiContext":
@@ -230,11 +259,20 @@ class _Handler(BaseHTTPRequestHandler):
             self.request_id = _token_hex(12)
         started = time.monotonic()
         path = "/"
+        span = None
         self.context.metrics.begin()
         try:
             parsed = urlsplit(self.path)
             path = parsed.path or "/"
             query = parse_qs(parsed.query, keep_blank_values=True)
+            span = self.context.tracer.start_span(
+                "http.request",
+                attributes={
+                    "http.method": method,
+                    "http.route": route_label(path),
+                    "http.request_id": self.request_id,
+                },
+            )
             if not self._origin_allowed(method):
                 raise ApiError(403, "origin_not_allowed",
                                "Cross-origin requests are not allowed.")
@@ -278,9 +316,20 @@ class _Handler(BaseHTTPRequestHandler):
                                        "message": "The request could not be completed.",
                                        "request_id": self.request_id}})
         finally:
+            status_code = getattr(self, "_response_status", 500)
             self.context.metrics.finish(
-                path, getattr(self, "_response_status", 500), time.monotonic() - started
+                path, status_code, time.monotonic() - started
             )
+            if span is not None:
+                try:
+                    self.context.tracer.end_span(
+                        span,
+                        status="ok" if status_code < 500 else "error",
+                        error=None if status_code < 500 else f"HTTP {status_code}",
+                        attributes={"http.status_code": status_code},
+                    )
+                except Exception:
+                    pass
 
     def _origin_allowed(self, method: str) -> bool:
         origin = self.headers.get("Origin")
@@ -339,7 +388,16 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Connection", "close")
+        sent = {
+            "content-type", "content-length", "x-request-id",
+            "x-content-type-options", "referrer-policy", "connection",
+        }
         for key, value in headers.items():
+            if key.lower() in sent:
+                # Never emit a duplicate header (for example the dashboard's
+                # SECURITY_HEADERS overlapping the defaults above).
+                continue
+            sent.add(key.lower())
             self.send_header(key, self._sanitize_header_value(value))
         self.end_headers()
         if self.command != "HEAD":
