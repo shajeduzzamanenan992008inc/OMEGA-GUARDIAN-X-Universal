@@ -784,3 +784,47 @@ and are not implied by any mocked test.
 
 Final classification at this commit: **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
 
+
+## Addendum — 2026-11-28 (backup/restore, observability, OpenAPI)
+
+This pass added the offline-implementable part of ENT-09 and ENT-10 and closed
+the OpenAPI gap in ENT-08:
+
+| Requirement | Before | After | Evidence |
+| --- | --- | --- | --- |
+| ENT-08 REST API | TESTED (no OpenAPI document) | TESTED (generated OpenAPI 3.1 at `/api/v1/openapi.json`) | `tests/test_observability.py` |
+| ENT-09 monitoring | PARTIAL (audit/logs only) | PARTIAL (metrics + probes TESTED; tracing/alerts NOT_STARTED) | `tests/test_observability.py` (6) |
+| ENT-10 backup/restore/DR | PARTIAL (registry only) | PARTIAL (SQLite backup/verify/restore/prune TESTED; PostgreSQL/DR BLOCKED) | `tests/test_backup.py` (6 passed, 1 skipped) |
+
+New files: `src/ogx/enterprise/backup.py`, `src/ogx/api/observability.py`,
+`src/ogx/api/openapi.py`, `tests/test_backup.py`, `tests/test_observability.py`,
+`docs/BACKUP_AND_RESTORE.md`. Restore was exercised end to end (backup →
+verify → restore → query); a mutated ciphertext with a re-hashed manifest is
+rejected by AEAD authentication, so a manifest-writing attacker still cannot
+forge content.
+
+Still BLOCKED and not claimed: PostgreSQL PITR/WAL archiving, off-site or
+immutable backup storage, signed manifests, quantified RPO/RTO, DR drills,
+distributed tracing, alerting and dashboards. Final classification for this
+branch remains **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
+
+## Addendum — 2026-11-28 (backup signing, restore hardening, observability pass 2)
+
+| Requirement | Before | After | Evidence |
+| --- | --- | --- | --- |
+| ENT-10 backup/restore | PARTIAL (hash-verified, unsigned, no path hardening) | PARTIAL (schema v2, HMAC manifest signature + rotation/revocation, journal recovery, path safety, prune guard — TESTED; PostgreSQL/DR/KMS signing BLOCKED) | `tests/test_backup.py` (6+1 skipped), `tests/test_backup_security.py` (11) |
+| ENT-09 monitoring | PARTIAL (counters only) | PARTIAL (per-dependency `/ready`, error-code counters in JSON/Prometheus — TESTED; persistence/tracing/alerts NOT_STARTED) | `tests/test_observability.py` (8) |
+
+Test-discovery reconciliation: the earlier 278-test drop-in figure did **not**
+reproduce. Two independent runs from a clean tree discovered 289 tests and
+reported `Ran 289 ... OK (skipped=9)`; `unittest` discovery over `_dev/tests`
+counts 289 tests across 22 modules, and `git diff 1a56856 HEAD -- GUARDIAN-X/_dev`
+shows only the declared `api` package line. The 278 figure is therefore recorded
+as a transient discovery anomaly during that background run (the tree was being
+rewritten by the repository's external automation at the time), not a test
+deletion. Canonical `pytest` remains the authoritative suite.
+
+New files this pass: `src/ogx/enterprise/backup_signing.py`,
+`tests/test_backup_security.py`. Modified: `enterprise/backup.py`, `api/server.py`,
+`api/observability.py`, `cli.py`, `docs/BACKUP_AND_RESTORE.md`,
+`docs/OBSERVABILITY.md`, tracker, report, changelog.

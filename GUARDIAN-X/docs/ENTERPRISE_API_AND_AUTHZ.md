@@ -165,7 +165,29 @@ assets/CSP.
   dashboard and API serve machine identities only.
 * ENT-02 (PostgreSQL) is unimplemented; the API is single-node SQLite with the
   documented WAL/single-writer limits.
-* No OpenAPI document, versioning/deprecation policy document, HA deployment or
-  TLS termination is included.
+* OpenAPI 3.1 is generated at `/api/v1/openapi.json`; there is still no written
+  deprecation policy, no HA deployment and no TLS termination.
+* Metrics are per-process and in memory (`/api/v1/metrics`, JSON or Prometheus
+  text); there is no tracing backend and no alerting.
 * The dashboard has automated asset/API tests but has not been driven in a
   browser (no screenshot/E2E evidence).
+
+## 8. Operational endpoints
+
+| Endpoint | Authentication | Purpose |
+| --- | --- | --- |
+| `GET /health` | public (loopback) | liveness |
+| `GET /ready` | public (loopback) | datastore readiness |
+| `GET /api/v1/meta` | public (loopback) | versions, limits, endpoint map |
+| `GET /api/v1/openapi.json` | bearer | generated OpenAPI 3.1 document |
+| `GET /api/v1/metrics` | bearer | metrics snapshot; `?format=prometheus` returns text |
+
+The metrics endpoint returns only aggregates (route label, status code,
+duration, in-flight, uptime) and never a tenant id, subject, token or body.
+Route labels collapse identifiers (`/api/v1/hosts/{id}`), so cardinality cannot
+grow with traffic. Both endpoints are bearer-authenticated even on loopback,
+because a local unprivileged process could otherwise read operational data.
+
+`tests/test_observability.py` asserts the 401 without a token, that real traffic
+is counted, that the Prometheus rendering carries no raw identifiers, and that
+the OpenAPI document lists the implemented paths with the bearer scheme.

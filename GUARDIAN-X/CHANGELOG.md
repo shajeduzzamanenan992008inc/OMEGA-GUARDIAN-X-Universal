@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased — persistent observability, tracing, isolation and adversarial verification
+
+- Added `src/ogx/api/metrics_store.py`: pluggable `MetricsStorage` interface with
+  `InMemoryMetricsStorage` and bounded durable `SqliteMetricsStorage` (retention,
+  max-rows, max-routes cardinality, concurrency-safe WAL writes, failure isolation,
+  health reporting). `Metrics` hydrates from storage and persists writes.
+- Added `src/ogx/api/tracing.py`: W3C trace context, propagation, contextvars,
+  configurable Sampler, `OTLPExporter` interface with `NoOpExporter`, bounded
+  in-memory `Tracer` with redaction, `AlertRule`/`AlertEvaluator`.
+- `api/server.py`: `/ready` reports `observability_storage` as a non-critical check.
+- Added tests: `test_metrics_store.py`, `test_tracing.py`,
+  `test_enterprise_isolation.py`, `test_openapi_contract.py`,
+  `test_backup_adversarial.py`, `test_performance_smoke.py`.
+- Updated `docs/MASTER_COMPLETION_TRACKER.md` with dated evidence record.
+
+## Unreleased — backup manifest signing and restore hardening
+
+- Added `src/ogx/enterprise/backup_signing.py`: an explicit `SigningProvider` boundary and a
+  concrete HMAC-SHA256 provider with a 0600 key file, `active`/`retired`/`revoked` key states,
+  rotation that keeps old manifests verifiable, and `describe()` that never exposes secrets.
+- Hardened `src/ogx/enterprise/backup.py`: strict versioned manifest schema (v2, v1 still
+  verifies), separate reporting of hash integrity / AEAD authenticity / manifest signature,
+  path-traversal, symlink, non-regular-file, oversize and artifact-name checks, a restore
+  journal with `restore-recover` rollback, and retention that refuses to prune when no
+  retained backup verifies. New flags/commands: `backup --sign`, `backup-verify
+  --check-signature/--require-signature`, `restore --check-signature/--require-signature`,
+  `restore-recover`, `signing-keys`, `signing-key-rotate`.
+- Added `tests/test_backup_security.py` (11 tests: signature tamper, replaced artifact,
+  missing/wrong/revoked key, rotation, forged algorithm, schema rejection, path safety,
+  interrupted-restore recovery, prune refusal, no secret exposure).
+- `api/server.py`: `/ready` now reports `database` and `schema` dependency checks separately
+  and returns 503 with the missing tables; `api/observability.py` counts errors by public
+  error code and renders `ogx_api_errors_total` in the Prometheus output.
+- Docs: `BACKUP_AND_RESTORE.md` and `OBSERVABILITY.md` updated with the signing boundary,
+  path safety, recovery and readiness semantics, plus honest limits.
+
+## Unreleased — backup/restore and operational observability
+
+- Added `src/ogx/enterprise/backup.py` (ENT-10): online consistent SQLite snapshot through the
+  backup API, `PRAGMA integrity_check` proof, SHA-256/size manifest, optional 64 KiB-chunked
+  ChaCha20-Poly1305 sealing through the `KMSProvider` boundary with chunk-index associated data,
+  verified atomic restore (`os.replace`, `.pre-restore` safety copy, stale WAL sidecar cleanup)
+  and retention pruning. New commands `ogx enterprise backup|backups|backup-verify|restore|
+  backup-prune`.
+- Added `src/ogx/api/observability.py` and `src/ogx/api/openapi.py` (ENT-08/ENT-09):
+  thread-safe bounded metrics registry exposed at `/api/v1/metrics` (JSON or Prometheus text),
+  request timing in the HTTP handler, and a generated OpenAPI 3.1 document at
+  `/api/v1/openapi.json`.
+- Added `tests/test_backup.py` (real restore, digest and AEAD tamper cases) and
+  `tests/test_observability.py` (metrics, route labels, OpenAPI).
+- Added `docs/BACKUP_AND_RESTORE.md`; updated the API document, tracker and report.
+
 ## Unreleased — enterprise authorization, REST API, encryption and cloud workspace host
 
 - Added `src/ogx/enterprise/authz.py`: one deny-by-default policy engine shared by the CLI, REST

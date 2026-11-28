@@ -210,9 +210,9 @@ any live provider API call with credentials, release signing.
 | ENT-05 | Service identities and tenant isolation | `enterprise/service_identity.py` + store tables: tenant-scoped accounts, role∩scope bearer tokens (SHA-256 at rest, bounded expiry, revocation, account disablement), `organization_id` predicate on every scoped query and object-level policy checks. Automated token rotation is not implemented. | `tests/test_enterprise_identity.py` (11), `tests/test_api.py` tenant cases | TESTED (manual rotation) |
 | ENT-06 | Encryption, KMS, rotation | `enterprise/crypto.py`: RFC 8439 ChaCha20-Poly1305 in portable Python, `KMSProvider` seam, local 0600 keyring with rotation/revocation, purpose/AAD-bound envelopes; `enterprise/secrets.py` tenant vault with audited read/write/rotate. No managed KMS or HSM; pure-Python AEAD is not constant-time. | `tests/test_crypto_kms.py` (14) incl. RFC vectors, rotation, revocation, tenant binding, role denial | TESTED (local provider; managed KMS BLOCKED) |
 | ENT-07 | Job queue/workers/DLQ | `src/ogx/jobs.py`: durable SQLite queue with `BEGIN IMMEDIATE` claim, bounded pending+leased capacity, dedupe keys, attempt budget, exponential backoff, lease reaping, dead-letter state with approval-gated requeue, redacted errors and a bounded worker loop. A PostgreSQL-backed deployment is still absent (ENT-02). | `tests/test_jobs.py` (14 passed): capacity rejection, dedupe, backoff, DLQ, lease loss, concurrent claims. | TESTED (SQLite backend; Postgres BLOCKED) |
-| ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema and no CORS. No OpenAPI document, deprecation policy or TLS termination. | `tests/test_api.py` (17) over a real loopback socket | TESTED |
-| ENT-09 | Monitoring/metrics/tracing | local audit/logs only | `docs/OBSERVABILITY.md` | PARTIAL |
-| ENT-10 | Backup/restore/DR | registry backup/recover only | registry tests | PARTIAL |
+| ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema, no CORS, and a generated OpenAPI 3.1 document at `/api/v1/openapi.json` (`src/ogx/api/openapi.py`) built from the same constants the router uses. No deprecation policy document, HA deployment or TLS termination. | `tests/test_api.py` (17) over a real loopback socket, `tests/test_observability.py` (OpenAPI + metrics) | TESTED |
+| ENT-09 | Monitoring/metrics/tracing | `src/ogx/api/observability.py`: thread-safe bounded registry (per-route counts/errors/duration, status codes, public error-code counters, in-flight gauge, uptime) at `/api/v1/metrics` as JSON or Prometheus text; `/ready` now reports `database` and `schema` checks separately with 503 on failure; correlation id on every response, error and log line. Metrics are per-process and in-memory: no persistence, tracing, alerting or retention configuration. | `tests/test_observability.py` (8) over a real loopback socket | PARTIAL (metrics/probes/error taxonomy TESTED; persistence, tracing, alerts NOT_STARTED) |
+| ENT-10 | Backup/restore/DR | `src/ogx/enterprise/backup.py` + `backup_signing.py`: online consistent snapshot, integrity proof, strict versioned manifest schema, SHA-256 artifact digest, optional chunked AEAD sealing, optional HMAC-SHA256 manifest signature through a `SigningProvider` boundary with rotation/revocation, path-safe verified atomic restore with journal-based crash recovery and `.pre-restore` rollback, and retention that refuses to prune when no retained backup verifies. PostgreSQL PITR, off-site/immutable storage, asymmetric/KMS signing, RPO/RTO targets and DR drills are not implemented. | `tests/test_backup.py` (6 passed, 1 skipped) + `tests/test_backup_security.py` (11) | PARTIAL (SQLite cycle + signing TESTED; PostgreSQL/DR/KMS signing BLOCKED) |
 
 ## Phase 9 — Interfaces
 
@@ -437,3 +437,123 @@ for signing/release. Live steps stay `BLOCKED`; they are not described as verifi
 
 Classification for this commit remains **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
 
+
+## Addendum — 2026-11-28 (backup/restore and observability pass)
+
+Branch `feat/backup-observability-completion`, started from the then-current
+`main`. No direct `main` edit, no push, no pull request, no tag or release, no
+visibility change and no `LICENSE` file touched in this pass.
+
+### Implemented and tested
+
+* **ENT-10** — `src/ogx/enterprise/backup.py`: online consistent SQLite snapshot, integrity
+  proof, SHA-256 manifest, optional chunked AEAD sealing, verified atomic restore with a
+  `.pre-restore` safety copy and sidecar cleanup, retention pruning, and five CLI commands.
+* **ENT-09** — `src/ogx/api/observability.py`: bounded, thread-safe metrics registry exposed at
+  `/api/v1/metrics` (JSON and Prometheus text) with per-route counts, status codes, duration
+  statistics, in-flight gauge and uptime; the handler now times every request and keeps the
+  correlation id on the response, error and log line.
+* **ENT-08** — `src/ogx/api/openapi.py`: generated OpenAPI 3.1 document at
+  `/api/v1/openapi.json`, built from the same path/limit constants the router uses.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q tests/test_backup.py tests/test_observability.py tests/test_api.py` | 26 passed, 1 skipped, exit 0 |
+| `python -m pytest -q` (full suite, same commit) | recorded in the final report of this pass |
+| CLI smoke: `backup --encrypt`, `backups`, `backup-verify`, `restore --target`, `backup-prune` | exit 0/0/0/0/0 with a verified restore |
+
+### Still open in these areas
+
+Distributed tracing, OTLP/Prometheus server storage, alert rules, operational
+dashboards and retention configuration (ENT-09); PostgreSQL backup, WAL
+archiving, point-in-time recovery, signed manifests, off-site/immutable storage,
+quantified RPO/RTO and a rehearsed DR drill (ENT-10). The digest-only manifest
+and the local keyring are documented limitations, not production KMS evidence.
+
+## Addendum — 2026-11-28 (backup signing, restore hardening, observability pass 2)
+
+Branch `feat/backup-signing-hardening`, created from `628ceac` (the previous
+feature commit). No direct `main` edit, no push, no pull request, no tag or
+release, no visibility change, no `LICENSE` file touched.
+
+### Implemented and tested
+
+* **ENT-10 hardening** — versioned manifest schema (v2) with strict validation; explicit
+  `SigningProvider` boundary plus a real HMAC-SHA256 provider with 0600 key file, rotation,
+  retirement and revocation; separated hash / AEAD / signature reporting; path-traversal,
+  symlink, non-regular-file, oversize and artifact-name checks on restore; journal-based
+  crash recovery (`restore-recover`); retention that refuses to delete when no retained
+  backup verifies; CLI `--sign`, `--check-signature`, `--require-signature`,
+  `restore-recover`, `signing-keys`, `signing-key-rotate`.
+* **ENT-09** — `/ready` now reports `database` and `schema` dependency checks separately
+  (503 with missing tables), metrics gain public `error_codes` counters rendered in the
+  Prometheus output, and the correlation id still travels through header, error and log.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q tests/test_backup.py tests/test_backup_security.py tests/test_api.py tests/test_observability.py tests/test_authz.py` | 62 passed, 1 skipped, exit 0 |
+| New focused suites (`test_backup`, `test_backup_security`) | 17 passed, 1 skipped |
+| Full canonical suite at the final commit | recorded in the final report of this pass |
+
+### Explicitly not claimed
+
+Manifest signing is symmetric and operator-local; no production/asymmetric signing key
+exists, and KMS/HSM signing, PostgreSQL backup/PITR, off-site immutable storage,
+quantified RPO/RTO and a DR drill remain BLOCKED on owner decisions and infrastructure.
+Metrics persistence, distributed tracing and alert delivery are NOT_STARTED.
+
+## Addendum — 2026-11-28 (persistent observability, tracing, isolation, adversarial verification pass 3)
+
+Branch `feat/persistent-observability-enterprise-hardening`, created from `0ba8431`.
+No push, PR, merge, tag or release.
+
+### Implemented and tested
+
+* **ENT-09 persistent observability** — pluggable `MetricsStorage` interface with
+  `InMemoryMetricsStorage` (default) and bounded durable `SqliteMetricsStorage`
+  (retention, max-rows, max-routes cardinality, concurrency-safe WAL writes,
+  failure isolation, health reporting). `Metrics` hydrates from storage on
+  construction and persists writes; `/ready` reports `observability_storage` as a
+  non-critical check (health/readiness separation). New module
+  `src/ogx/api/metrics_store.py`.
+* **Priority C tracing/alerting foundations** — `src/ogx/api/tracing.py`: W3C
+  trace context, propagation inject/extract, contextvars, configurable Sampler,
+  `OTLPExporter` interface with `NoOpExporter`, bounded in-memory `Tracer` with
+  redaction, `AlertRule`/`AlertEvaluator`. Live OTLP and alert delivery remain
+  BLOCKED (no backend).
+* **Priority D authorization/isolation** — adversarial tests in
+  `tests/test_enterprise_isolation.py` (cross-tenant read/write denial, fail-closed,
+  service token tenant isolation, revocation, privilege escalation, IDOR).
+* **Priority E API/dashboard consistency** — contract tests in
+  `tests/test_openapi_contract.py` (documented routes not 405, security scheme,
+  no human SSO, error schema).
+* **Priority F backup adversarial** — `tests/test_backup_adversarial.py` (journal
+  tampering/version, symlink artifact, oversized manifest, algorithm substitution,
+  concurrent create, restore preserves previous on verify failure, unknown fields).
+* **Priority G performance** — synthetic smoke tests in
+  `tests/test_performance_smoke.py` (metrics 1000 ops 0.0139s, authz 5000 ops 0.0851s,
+  backup verify 0.0541s). Labeled synthetic.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q` (full canonical) | 1252 passed, 25 skipped, 119 subtests, exit 0 (244.80s) |
+| `PYTHONPATH=core python -m unittest discover -s _dev/tests` | 289 passed, 9 skipped, exit 0 (56.214s) |
+| `python -m compileall` (touched modules) | exit 0 |
+| `python _dev/tools/sync_core_from_src.py --check` | OK |
+| `python _dev/tools/repro_check.py` | reproducible: yes |
+| `python -m pip wheel . --no-deps` | 601342 bytes, includes new modules |
+| CLI smoke `enterprise backup --sign` | exit 0 |
+
+### Explicitly not claimed
+
+PostgreSQL backend, OIDC/SAML/MFA, managed KMS/HSM, Docker/K8s/SSH/cloud,
+physical relocation, production distributed tracing/alert delivery, independent
+security review, production signing key/escrow, RPO/RTO validation, release
+authorization remain BLOCKED. Browser E2E not run (no browser automation in this
+environment) — BLOCKED.
