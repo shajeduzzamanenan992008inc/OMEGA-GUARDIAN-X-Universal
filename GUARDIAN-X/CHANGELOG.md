@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — backup/restore and operational observability
+
+- Added `src/ogx/enterprise/backup.py` (ENT-10): online consistent SQLite snapshot through the
+  backup API, `PRAGMA integrity_check` proof, SHA-256/size manifest, optional 64 KiB-chunked
+  ChaCha20-Poly1305 sealing through the `KMSProvider` boundary with chunk-index associated data,
+  verified atomic restore (`os.replace`, `.pre-restore` safety copy, stale WAL sidecar cleanup)
+  and retention pruning. New commands `ogx enterprise backup|backups|backup-verify|restore|
+  backup-prune`.
+- Added `src/ogx/api/observability.py` and `src/ogx/api/openapi.py` (ENT-08/ENT-09):
+  thread-safe bounded metrics registry exposed at `/api/v1/metrics` (JSON or Prometheus text),
+  request timing in the HTTP handler, and a generated OpenAPI 3.1 document at
+  `/api/v1/openapi.json`.
+- Added `tests/test_backup.py` (real restore, digest and AEAD tamper cases) and
+  `tests/test_observability.py` (metrics, route labels, OpenAPI).
+- Added `docs/BACKUP_AND_RESTORE.md`; updated the API document, tracker and report.
+
 ## Unreleased — enterprise authorization, REST API, encryption and cloud workspace host
 
 - Added `src/ogx/enterprise/authz.py`: one deny-by-default policy engine shared by the CLI, REST

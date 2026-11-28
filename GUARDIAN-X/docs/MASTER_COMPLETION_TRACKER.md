@@ -210,9 +210,9 @@ any live provider API call with credentials, release signing.
 | ENT-05 | Service identities and tenant isolation | `enterprise/service_identity.py` + store tables: tenant-scoped accounts, role∩scope bearer tokens (SHA-256 at rest, bounded expiry, revocation, account disablement), `organization_id` predicate on every scoped query and object-level policy checks. Automated token rotation is not implemented. | `tests/test_enterprise_identity.py` (11), `tests/test_api.py` tenant cases | TESTED (manual rotation) |
 | ENT-06 | Encryption, KMS, rotation | `enterprise/crypto.py`: RFC 8439 ChaCha20-Poly1305 in portable Python, `KMSProvider` seam, local 0600 keyring with rotation/revocation, purpose/AAD-bound envelopes; `enterprise/secrets.py` tenant vault with audited read/write/rotate. No managed KMS or HSM; pure-Python AEAD is not constant-time. | `tests/test_crypto_kms.py` (14) incl. RFC vectors, rotation, revocation, tenant binding, role denial | TESTED (local provider; managed KMS BLOCKED) |
 | ENT-07 | Job queue/workers/DLQ | `src/ogx/jobs.py`: durable SQLite queue with `BEGIN IMMEDIATE` claim, bounded pending+leased capacity, dedupe keys, attempt budget, exponential backoff, lease reaping, dead-letter state with approval-gated requeue, redacted errors and a bounded worker loop. A PostgreSQL-backed deployment is still absent (ENT-02). | `tests/test_jobs.py` (14 passed): capacity rejection, dedupe, backoff, DLQ, lease loss, concurrent claims. | TESTED (SQLite backend; Postgres BLOCKED) |
-| ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema and no CORS. No OpenAPI document, deprecation policy or TLS termination. | `tests/test_api.py` (17) over a real loopback socket | TESTED |
-| ENT-09 | Monitoring/metrics/tracing | local audit/logs only | `docs/OBSERVABILITY.md` | PARTIAL |
-| ENT-10 | Backup/restore/DR | registry backup/recover only | registry tests | PARTIAL |
+| ENT-08 | Durable REST API | `src/ogx/api/server.py`: `v1` over loopback HTTP with bearer service auth, policy-checked tenant routes, 64 KiB body cap, JSON-only writes, bounded offset pagination, idempotency keys, per-token rate limiting, request ids, uniform error schema, no CORS, and a generated OpenAPI 3.1 document at `/api/v1/openapi.json` (`src/ogx/api/openapi.py`) built from the same constants the router uses. No deprecation policy document, HA deployment or TLS termination. | `tests/test_api.py` (17) over a real loopback socket, `tests/test_observability.py` (OpenAPI + metrics) | TESTED |
+| ENT-09 | Monitoring/metrics/tracing | `src/ogx/api/observability.py`: thread-safe in-process registry (requests per bounded route label, status codes, duration sum/max/mean, in-flight gauge, uptime) exposed at `/api/v1/metrics` as JSON or Prometheus text, next to `/health` and `/ready` probes and a correlation id on every response, error and log line. No distributed tracing, no OTLP/Prometheus server storage, no alert rules or operational dashboards, no retention configuration, metrics are per-process and lost on restart. | `tests/test_observability.py` (6) over a real loopback socket | PARTIAL (metrics/probes TESTED; tracing, alerts and retention NOT_STARTED) |
+| ENT-10 | Backup/restore/DR | `src/ogx/enterprise/backup.py`: online consistent SQLite snapshot (backup API, WAL safe), `PRAGMA integrity_check` proof, SHA-256 manifest, optional 64 KiB-chunked AEAD sealing through the KMS boundary with chunk-index AAD, verified atomic restore with `.pre-restore` safety copy and sidecar cleanup, retention pruning, and `ogx enterprise backup|backups|backup-verify|restore|backup-prune`. PostgreSQL PITR, off-site/immutable storage, signed manifests, RPO/RTO targets and DR drills are not implemented. | `tests/test_backup.py` (6 passed, 1 skipped: Windows symlinks) — real restore, digest tamper and AEAD tamper tests | PARTIAL (SQLite cycle TESTED; PostgreSQL/DR BLOCKED) |
 
 ## Phase 9 — Interfaces
 
@@ -437,3 +437,37 @@ for signing/release. Live steps stay `BLOCKED`; they are not described as verifi
 
 Classification for this commit remains **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
 
+
+## Addendum — 2026-11-28 (backup/restore and observability pass)
+
+Branch `feat/backup-observability-completion`, started from the then-current
+`main`. No direct `main` edit, no push, no pull request, no tag or release, no
+visibility change and no `LICENSE` file touched in this pass.
+
+### Implemented and tested
+
+* **ENT-10** — `src/ogx/enterprise/backup.py`: online consistent SQLite snapshot, integrity
+  proof, SHA-256 manifest, optional chunked AEAD sealing, verified atomic restore with a
+  `.pre-restore` safety copy and sidecar cleanup, retention pruning, and five CLI commands.
+* **ENT-09** — `src/ogx/api/observability.py`: bounded, thread-safe metrics registry exposed at
+  `/api/v1/metrics` (JSON and Prometheus text) with per-route counts, status codes, duration
+  statistics, in-flight gauge and uptime; the handler now times every request and keeps the
+  correlation id on the response, error and log line.
+* **ENT-08** — `src/ogx/api/openapi.py`: generated OpenAPI 3.1 document at
+  `/api/v1/openapi.json`, built from the same path/limit constants the router uses.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest -q tests/test_backup.py tests/test_observability.py tests/test_api.py` | 26 passed, 1 skipped, exit 0 |
+| `python -m pytest -q` (full suite, same commit) | recorded in the final report of this pass |
+| CLI smoke: `backup --encrypt`, `backups`, `backup-verify`, `restore --target`, `backup-prune` | exit 0/0/0/0/0 with a verified restore |
+
+### Still open in these areas
+
+Distributed tracing, OTLP/Prometheus server storage, alert rules, operational
+dashboards and retention configuration (ENT-09); PostgreSQL backup, WAL
+archiving, point-in-time recovery, signed manifests, off-site/immutable storage,
+quantified RPO/RTO and a rehearsed DR drill (ENT-10). The digest-only manifest
+and the local keyring are documented limitations, not production KMS evidence.
