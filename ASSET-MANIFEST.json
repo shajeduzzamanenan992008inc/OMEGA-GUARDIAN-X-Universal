@@ -1,0 +1,197 @@
+{
+  "project": "OMEGA GUARDIAN X \u2014 Universal Enterprise Guardian",
+  "release_documented": "0.8.0a1",
+  "manifest_scope": "README package assets; does not describe project source files",
+  "files": [
+    {
+      "path": "assets/README.md",
+      "size_bytes": 1693,
+      "sha256": "437b430b7bf0e13c4c5f6f9ae6f90b53980a6059586354538f4c789911c876b8"
+    },
+    {
+      "path": "assets/banner/banner-1280x640.mp4",
+      "size_bytes": 3586438,
+      "sha256": "f83e0ea986eeec6bdf3af91ed3982092a2643b3a7ad8ccae8e9a7ae0c325e0b1"
+    },
+    {
+      "path": "assets/banner/banner-1280x640.png",
+      "size_bytes": 866303,
+      "sha256": "14a63d2c54f3be257ee1ac5c61b7893e4ecd5f7b7114772717dbb15874f031d1"
+    },
+    {
+      "path": "assets/banner/banner-1280x640.svg",
+      "size_bytes": 126809,
+      "sha256": "68d782992625c7332c0cdac6665ad176a2122b529e4730bab557ee28430da52b"
+    },
+    {
+      "path": "assets/banner/banner-800x400.gif",
+      "size_bytes": 5208966,
+      "sha256": "0d24a445d5984859855c2613fe6b45b71e10b489689aa8540ec9020f36a18ed3"
+    },
+    {
+      "path": "assets/banner/readme-banner-1600x500.mp4",
+      "size_bytes": 2974985,
+      "sha256": "fb66b40604145f610247818903b748c19305d1a57e34eb97854b08d32169ce82"
+    },
+    {
+      "path": "assets/banner/readme-banner-1600x500.png",
+      "size_bytes": 809941,
+      "sha256": "5b60eec5730e58e9d267d4e478c73d38ed842506cab90d74f9878c2708e5fd12"
+    },
+    {
+      "path": "assets/banner/readme-banner-1600x500.svg",
+      "size_bytes": 126770,
+      "sha256": "bf278e2ddc93af88c8633a8f8ef449e8c60ee346a4655eaffd04582cb6642326"
+    },
+    {
+      "path": "assets/banner/social-preview-1280x640.jpg",
+      "size_bytes": 163962,
+      "sha256": "e083dc85ec7bb9eacb26d415a40f14f217a35f6c2675d323395548aaaffc4bd2"
+    },
+    {
+      "path": "assets/logo/omega-icon-128.png",
+      "size_bytes": 34902,
+      "sha256": "80188ed8e8aa1c0a42dc93bcbdf77157919c90fcadc85609efc7b0e4bd759767"
+    },
+    {
+      "path": "assets/logo/omega-icon-180.png",
+      "size_bytes": 63002,
+      "sha256": "1f48596be6786c3c6c023684fe6aa8a702f4217762cbc631b2dbb6eb7edc7ca7"
+    },
+    {
+      "path": "assets/logo/omega-icon-192.png",
+      "size_bytes": 70838,
+      "sha256": "7be12ed9d03357f7dad4533a91d62144bf83d071622b7e483806b521925df6e5"
+    },
+    {
+      "path": "assets/logo/omega-icon-256.png",
+      "size_bytes": 105500,
+      "sha256": "26cd7a48be6e89a66517d65d33bf463d6f28f452cf53c6eb20f403fdaf3532a5"
+    },
+    {
+      "path": "assets/logo/omega-icon-32.png",
+      "size_bytes": 2960,
+      "sha256": "8e83248361c3489fe9799f1798d6e1be04d73ee19b69d221ca382d8649b4ef0b"
+    },
+    {
+      "path": "assets/logo/omega-icon-512.png",
+      "size_bytes": 350655,
+      "sha256": "14e40c337f16ccad13779e41c3476b91432e75261bc39c866c05e1b8b25f323f"
+    },
+    {
+      "path": "assets/logo/omega-icon-64.png",
+      "size_bytes": 10133,
+      "sha256": "c3a21e44c79af0eba694bb8b4552b2f35d39cb364e5495fc7cac468f14a4928b"
+    },
+    {
+      "path": "assets/logo/omega-icon.ico",
+      "size_bytes": 161385,
+      "sha256": "f1b788b3ed1cb3038497d288ad895cb90f433d4af62c0bd7f2a5916863c2d84f"
+    },
+    {
+      "path": "assets/logo/omega-icon.svg",
+      "size_bytes": 7197,
+      "sha256": "e8732de9fd1344fb306914eebf7ddcb938dbdb0f3bc82199cd66868dc5db0df3"
+    },
+    {
+      "path": "assets/logo/omega-logo-1024.png",
+      "size_bytes": 917739,
+      "sha256": "6c8de69f15a73e55d8cd2774f077f7835bcd2d2664af1b3dc5ee2054e3866692"
+    },
+    {
+      "path": "assets/logo/omega-logo-bg-1024.png",
+      "size_bytes": 1190178,
+      "sha256": "5ea6a99c0ad422fcc572e23159eae653f097c6d37bb71877d42934de75f5bbb5"
+    },
+    {
+      "path": "assets/logo/omega-logo-bg-768.mp4",
+      "size_bytes": 4147200,
+      "sha256": "96b17a3010bd2814950a125cdf493b3beb8f1148fcd4a9c62b586f8e6972c731"
+    },
+    {
+      "path": "assets/logo/omega-logo-bg.svg",
+      "size_bytes": 83248,
+      "sha256": "52d1401910fc2c1add8a6291930fa7b3730c43cc3440f7f2ee043694222cdfcd"
+    },
+    {
+      "path": "assets/logo/omega-logo.svg",
+      "size_bytes": 32457,
+      "sha256": "044bb0a16f282e89a906f71e0e200e7afbe6f36f3abf3d5df0b4d83de904b11e"
+    },
+    {
+      "path": "assets/readme-kit/README-snippet.md",
+      "size_bytes": 1435,
+      "sha256": "5b7d2a85a107d78851e14a1d652d65528a60916b1996a32b8616cca95568c625"
+    },
+    {
+      "path": "assets/readme-kit/badge-1.svg",
+      "size_bytes": 8373,
+      "sha256": "cd7329754991134c1c7b05f67e6b536c345857cc68e26bdd647d3b01f8c22ec4"
+    },
+    {
+      "path": "assets/readme-kit/badge-2.svg",
+      "size_bytes": 9027,
+      "sha256": "b7e53cbd7a66b2611064de41665930df3d3fa3784420c949cc5378e5e57fb347"
+    },
+    {
+      "path": "assets/readme-kit/badge-3.svg",
+      "size_bytes": 9605,
+      "sha256": "4399d20f0c62cb28e6ef65b21fa1662dae51cc68caa20928889a9a60d9a978eb"
+    },
+    {
+      "path": "assets/readme-kit/badge-4.svg",
+      "size_bytes": 8070,
+      "sha256": "8dc38d71afc0211ce3d8e6802f9ef7d8420d27bc57f4882b3f13682d431803d2"
+    },
+    {
+      "path": "assets/readme-kit/divider.svg",
+      "size_bytes": 5734,
+      "sha256": "832cc0239db0859058e411f04f582eabf1c305bd2d29b91f658df29fd5b18a7c"
+    },
+    {
+      "path": "assets/readme-kit/footer.svg",
+      "size_bytes": 20946,
+      "sha256": "bfe1b41e33978a1be793f8eb3c893fce838059c7ae91d49fa178ca3a60da801f"
+    },
+    {
+      "path": "assets/readme-kit/png/divider.png",
+      "size_bytes": 9279,
+      "sha256": "9b466daf0f986d097088c2ba692e163d065afc472413e95706519a883a24a7a9"
+    },
+    {
+      "path": "assets/readme-kit/png/footer.png",
+      "size_bytes": 16557,
+      "sha256": "d2a275c465fe11d73490cca0679620f1effe2839b277af7dd6aaeda64c297fee"
+    },
+    {
+      "path": "assets/readme-kit/section-architecture.svg",
+      "size_bytes": 12977,
+      "sha256": "a78ccd7be0fdab87cf4546532868afb31e26dfa203f088192680a7e78345aacb"
+    },
+    {
+      "path": "assets/readme-kit/section-credits.svg",
+      "size_bytes": 11875,
+      "sha256": "c8800314daecf4172f0ac8a7a316d761115fbb0e4d0ab81f52f1b1d5ece99e3f"
+    },
+    {
+      "path": "assets/readme-kit/section-features.svg",
+      "size_bytes": 12864,
+      "sha256": "c7e018d20b7153f0740452baf06816abd070286a8a50a68819244fb305f882f0"
+    },
+    {
+      "path": "assets/readme-kit/section-installation.svg",
+      "size_bytes": 11533,
+      "sha256": "cce4ffe8c6fd64e7a22bbc24d8a3470ce36cde2a26bda2847671a129107caff8"
+    },
+    {
+      "path": "assets/readme-kit/section-roadmap.svg",
+      "size_bytes": 12519,
+      "sha256": "294f44de02de384336580840711931187a63dfe4a8a6f1c75fc75abf1dd87343"
+    },
+    {
+      "path": "assets/readme-kit/section-usage.svg",
+      "size_bytes": 12390,
+      "sha256": "9f19ae1c2fb960325ffe4b67430a3144d9b94d44919e5fdf9da421adce41740e"
+    }
+  ]
+}
