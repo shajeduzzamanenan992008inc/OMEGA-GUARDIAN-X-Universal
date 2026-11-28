@@ -784,3 +784,26 @@ and are not implied by any mocked test.
 
 Final classification at this commit: **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.
 
+
+## Addendum — 2026-11-28 (backup/restore, observability, OpenAPI)
+
+This pass added the offline-implementable part of ENT-09 and ENT-10 and closed
+the OpenAPI gap in ENT-08:
+
+| Requirement | Before | After | Evidence |
+| --- | --- | --- | --- |
+| ENT-08 REST API | TESTED (no OpenAPI document) | TESTED (generated OpenAPI 3.1 at `/api/v1/openapi.json`) | `tests/test_observability.py` |
+| ENT-09 monitoring | PARTIAL (audit/logs only) | PARTIAL (metrics + probes TESTED; tracing/alerts NOT_STARTED) | `tests/test_observability.py` (6) |
+| ENT-10 backup/restore/DR | PARTIAL (registry only) | PARTIAL (SQLite backup/verify/restore/prune TESTED; PostgreSQL/DR BLOCKED) | `tests/test_backup.py` (6 passed, 1 skipped) |
+
+New files: `src/ogx/enterprise/backup.py`, `src/ogx/api/observability.py`,
+`src/ogx/api/openapi.py`, `tests/test_backup.py`, `tests/test_observability.py`,
+`docs/BACKUP_AND_RESTORE.md`. Restore was exercised end to end (backup →
+verify → restore → query); a mutated ciphertext with a re-hashed manifest is
+rejected by AEAD authentication, so a manifest-writing attacker still cannot
+forge content.
+
+Still BLOCKED and not claimed: PostgreSQL PITR/WAL archiving, off-site or
+immutable backup storage, signed manifests, quantified RPO/RTO, DR drills,
+distributed tracing, alerting and dashboards. Final classification for this
+branch remains **DEVELOPMENT INCOMPLETE — IMPLEMENTATION REMAINS**.

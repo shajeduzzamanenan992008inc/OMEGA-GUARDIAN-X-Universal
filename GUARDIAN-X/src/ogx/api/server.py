@@ -48,6 +48,7 @@ from ..enterprise.authz import (
 from ..enterprise.service_identity import InvalidToken, ServiceIdentityManager
 from ..enterprise.store import EnterpriseStore
 from . import dashboard
+from .observability import Metrics
 
 API_VERSION = "v1"
 MAX_BODY_BYTES = 64 * 1024
@@ -121,6 +122,7 @@ class ApiContext:
     rate_limit: int = DEFAULT_RATE_LIMIT
     rate_window: float = DEFAULT_RATE_WINDOW
     limiter: _RateLimiter = field(init=False)
+    metrics: Metrics = field(init=False)
 
     def __post_init__(self) -> None:
         self.store.initialize()
@@ -129,6 +131,7 @@ class ApiContext:
         if self.identities is None:
             self.identities = ServiceIdentityManager(self.store, self.policy)
         self.limiter = _RateLimiter(self.rate_limit, self.rate_window)
+        self.metrics = Metrics(version=self.version)
 
     @classmethod
     def default(cls) -> "ApiContext":
@@ -215,6 +218,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.request_id = self.headers.get("X-Request-Id", "").strip() or _token_hex(12)
         if not re.fullmatch(r"[A-Za-z0-9_.:-]{8,64}", self.request_id):
             self.request_id = _token_hex(12)
+        started = time.monotonic()
+        path = "/"
+        self.context.metrics.begin()
         try:
             parsed = urlsplit(self.path)
             path = parsed.path or "/"
@@ -260,6 +266,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": {"code": "internal_error",
                                        "message": "The request could not be completed.",
                                        "request_id": self.request_id}})
+        finally:
+            self.context.metrics.finish(
+                path, getattr(self, "_response_status", 500), time.monotonic() - started
+            )
 
     def _origin_allowed(self, method: str) -> bool:
         origin = self.headers.get("Origin")
@@ -306,6 +316,7 @@ class _Handler(BaseHTTPRequestHandler):
                headers: dict[str, str]) -> None:
         if not getattr(self, "request_id", None):
             self.request_id = _token_hex(12)
+        self._response_status = status
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -344,6 +355,21 @@ class _Handler(BaseHTTPRequestHandler):
 
         if method == "GET" and path == f"/api/{API_VERSION}/meta":
             return 200, self._meta(), {}
+        if method == "GET" and path == f"/api/{API_VERSION}/openapi.json":
+            self._authenticate()
+            from .openapi import build_spec
+
+            return 200, build_spec(version=self.context.version), {}
+        if method == "GET" and path == f"/api/{API_VERSION}/metrics":
+            self._authenticate()
+            wanted = (query.get("format", ["json"])[0] or "json").strip().lower()
+            if wanted == "prometheus":
+                return RawResponse(200, self.context.metrics.prometheus().encode("utf-8"),
+                                   "text/plain; version=0.0.4; charset=utf-8")
+            if wanted != "json":
+                raise ApiError(400, "invalid_parameter",
+                               "format must be json or prometheus.")
+            return 200, self.context.metrics.snapshot(), {}
 
         principal = self._authenticate()
 
@@ -383,6 +409,12 @@ class _Handler(BaseHTTPRequestHandler):
                 "max_body_bytes": MAX_BODY_BYTES,
                 "page_limit": MAX_PAGE_LIMIT,
                 "rate_limit_per_minute": self.context.rate_limit,
+            },
+            "operations": {
+                "openapi": f"/api/{API_VERSION}/openapi.json",
+                "metrics": f"/api/{API_VERSION}/metrics",
+                "health": "/health",
+                "readiness": "/ready",
             },
         }
 
