@@ -6,6 +6,10 @@
   <img src="assets/banner/readme-banner-1600x500.svg" alt="OMEGA GUARDIAN-X UNIVERSAL — animated deep-space identity banner" width="100%">
 </a>
 
+<p>
+  <img src="assets/logo/omega-logo.svg" alt="Animated OMEGA GUARDIAN-X UNIVERSAL logo" width="220">
+</p>
+
 <h1>OMEGA GUARDIAN X &middot; Universal Enterprise Guardian</h1>
 
 <p>
@@ -14,7 +18,7 @@
   Inspect repositories, understand engineering risk, and govern supported changes through human approval.
 </p>
 
-<p><sub><i>Built for controlled engineering.</i> &nbsp;&middot;&nbsp; <i>নিয়ন্ত্রিত, পর্যালোচনাযোগ্য engineering workflow.</i></sub></p>
+<p><sub><i>Built for controlled engineering. Human-governed. Evidence-driven.</i></sub></p>
 
 <p>
   <a href="#architecture"><b>Architecture</b></a> &nbsp;&middot;&nbsp;
@@ -32,11 +36,6 @@
 [![Python](https://img.shields.io/badge/Python-3.11%E2%80%933.13-7C4DFF?style=for-the-badge&logo=python&logoColor=white&labelColor=0C1658)](#requirements)
 [![Operating model](https://img.shields.io/badge/Operating%20model-Local--first-00FF9D?style=for-the-badge&labelColor=0C1658)](#what-omega-guardian-x-provides)
 [![CLI](https://img.shields.io/badge/CLI-ogx-FFC857?style=for-the-badge&labelColor=0C1658)](#installation)
-
-[![Stars](https://img.shields.io/github/stars/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal?style=flat-square&logo=github&labelColor=0C1658&color=7C4DFF)](https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal/stargazers)
-[![Forks](https://img.shields.io/github/forks/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal?style=flat-square&logo=github&labelColor=0C1658&color=00E5FF)](https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal/network/members)
-[![Issues](https://img.shields.io/github/issues/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal?style=flat-square&logo=github&labelColor=0C1658&color=FF2BD6)](https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal/issues)
-[![Last commit](https://img.shields.io/github/last-commit/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal?style=flat-square&logo=github&labelColor=0C1658&color=00FF9D)](https://github.com/shajeduzzamanenan992008inc/OMEGA-GUARDIAN-X-Universal/commits/main)
 
 <p>
   <a href="assets/banner/readme-banner-1600x500.png">Static banner</a> &nbsp;&middot;&nbsp;
@@ -100,21 +99,6 @@
 
 </details>
 
-<details>
-<summary><b>বাংলায় সংক্ষেপে (Bangla summary)</b></summary>
-
-<br>
-
-**OMEGA GUARDIAN X** হলো একটি local-first repository engineering ও governance toolkit। এর দুটি অংশ:
-
-- **`.github/`** — AI-agent instruction, CI template, runbook, issue/PR template ও repository engineering guidance।
-- **`GUARDIAN-X/`** — `ogx` CLI engine; repository audit, stack detection, architecture inventory, heuristic security checks, safe-repair preview, Git workflow এবং local enterprise governance record পরিচালনার জন্য।
-
-**নিরাপত্তা ও নিয়ন্ত্রণ:** Read-only audit approval ছাড়াই চলে। সমর্থিত write action আগে queue হয়; designated approver-এর email approval-এর পর original requester একই validated request execute করে।
-
-**গুরুত্বপূর্ণ সীমাবদ্ধতা:** এটি Alpha software—certified compliance product বা production-ready SaaS নয়। `idp|...` subject string বাস্তব OIDC/SAML authentication নয়। Python `3.11–3.13` declared হলেও দেওয়া local test evidence CPython `3.15.2`-এ; hosted CI এবং real inbox delivery verified নয়।
-
-</details>
 
 <p align="center"><img src="assets/readme-kit/divider.svg" alt="Section divider" width="100%"></p>
 <p align="center"><img src="assets/readme-kit/section-features.svg" alt="Features" width="100%"></p>
@@ -197,24 +181,24 @@ This check verifies version agreement, required packages and modules, absence of
 The repository is split into a reusable GitHub engineering kit and a local Python engine. The two engine distributions have different responsibilities and must be validated independently.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":48,"rankSpacing":60}}}%%
 flowchart LR
     ROOT(["OMEGA GUARDIAN X<br/>repository root"])
-    ROOT --> GH[".github/<br/>engineering kit"]
-    ROOT --> GX["GUARDIAN-X/<br/>local engine"]
+    ROOT e01@--> GH[".github/<br/>engineering kit"]
+    ROOT e02@--> GX["GUARDIAN-X/<br/>local engine"]
 
-    GH --> KIT["Agent instructions<br/>CI templates · runbooks<br/>issue / PR templates"]
-    GX --> SRC["src/ogx/<br/>canonical packaged source"]
-    GX --> CORE["core/ogx/<br/>drop-in standard-library runtime"]
+    GH e03@--> KIT["Agent instructions<br/>CI templates · runbooks<br/>issue / PR templates"]
+    GX e04@--> SRC["src/ogx/<br/>canonical packaged source"]
+    GX e05@--> CORE["core/ogx/<br/>drop-in standard-library runtime"]
 
-    SRC --> WHEEL["Python wheel<br/>omega-guardian-x"]
-    SRC --> CLI["Console command<br/>ogx"]
-    CORE --> INIT["init.py<br/>drop-in entry point"]
+    SRC e06@--> WHEEL["Python wheel<br/>omega-guardian-x"]
+    SRC e07@--> CLI["Console command<br/>ogx"]
+    CORE e08@--> INIT["init.py<br/>drop-in entry point"]
 
-    SRC --> PYTEST["tests/<br/>pytest suite"]
-    CORE --> UNIT["_dev/tests/<br/>unittest suite"]
-    SRC -.-> CHECK["sync_core_from_src.py --check<br/>structure and version validation"]
-    CORE -.-> CHECK
+    SRC e09@--> PYTEST["tests/<br/>pytest suite"]
+    CORE e10@--> UNIT["_dev/tests/<br/>unittest suite"]
+    SRC e11@-.-> CHECK["sync_core_from_src.py --check<br/>structure and version validation"]
+    CORE e12@-.-> CHECK
 
     classDef entry fill:#070C2A,stroke:#FF2BD6,stroke-width:2px,color:#EAF8FF
     classDef core fill:#0C1658,stroke:#00E5FF,stroke-width:2px,color:#EAF8FF
@@ -224,9 +208,37 @@ flowchart LR
     class SRC,CORE,KIT core
     class WHEEL,CLI,INIT distribution
     class PYTEST,UNIT,CHECK validation
+
+    classDef flowCyan stroke:#00E5FF,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowBlue stroke:#60A5FA,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowViolet stroke:#A78BFA,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowGreen stroke:#00FF9D,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowAmber stroke:#FFC857,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowRed stroke:#FF3B6B,stroke-width:2.5px,stroke-dasharray:7\,5
+
+    class e02,e04,e05,e08 flowCyan
+    class e06,e07 flowBlue
+    class e01,e03 flowViolet
+    class e09,e10 flowGreen
+    class e11,e12 flowAmber
+
+    e01@{ animation: fast }
+    e02@{ animation: fast }
+    e03@{ animation: fast }
+    e04@{ animation: fast }
+    e05@{ animation: fast }
+    e06@{ animation: fast }
+    e07@{ animation: fast }
+    e08@{ animation: fast }
+    e09@{ animation: fast }
+    e10@{ animation: fast }
+    e11@{ animation: slow }
+    e12@{ animation: slow }
 ```
 
 <p align="center"><sub><b>Diagram legend:</b> magenta = repository entry points · cyan = source/runtime components · violet = distribution outputs · green = validation surfaces. Dashed links indicate a consistency check, not automatic code generation.</sub></p>
+
+<p align="center"><sub><b>Flow animation legend:</b> cyan / blue = primary system path &nbsp;·&nbsp; violet = distribution or approval &nbsp;·&nbsp; green = successful or validated path &nbsp;·&nbsp; amber = review / verification boundary &nbsp;·&nbsp; red = blocked or identity boundary. Every connection has an explicit Mermaid animation directive.</sub></p>
 
 > [!NOTE]
 > `sync_core_from_src.py --check` validates structure and declarations. It does not generate or synchronize feature implementation code from `src/ogx/` into `core/ogx/`.
@@ -256,23 +268,23 @@ These capabilities do not imply support for every language, Git host, mail provi
 The operating path begins with inspection. A write path is available only for supported actions and passes through validation and the configured approval gate.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":48,"rankSpacing":60}}}%%
 flowchart TD
     START(["Select local repository"])
-    START --> AUDIT["Read-only audit<br/>stack detection · inventory"]
-    AUDIT --> FINDINGS["Findings and evidence<br/>heuristic results"]
-    FINDINGS --> PLAN["Review findings<br/>and proposed plan"]
-    PLAN --> WRITE{"Does the next action<br/>change repository state?"}
+    START e01@--> AUDIT["Read-only audit<br/>stack detection · inventory"]
+    AUDIT e02@--> FINDINGS["Findings and evidence<br/>heuristic results"]
+    FINDINGS e03@--> PLAN["Review findings<br/>and proposed plan"]
+    PLAN e04@--> WRITE{"Does the next action<br/>change repository state?"}
 
-    WRITE -->|"No · read-only"| REPORT(["Return audit report"])
-    WRITE -->|"Yes · write path"| SUPPORTED{"Is the operation<br/>supported?"}
-    SUPPORTED -->|"No"| MANUAL["Stop here<br/>use a separately reviewed workflow"]
-    SUPPORTED -->|"Yes"| VALIDATE["Validate request<br/>and requested scope"]
-    VALIDATE --> QUEUE["Queue for email approval<br/>no write at request time"]
-    QUEUE --> DECISION{"Approver decision recorded?"}
-    DECISION -->|"No"| HOLD["Do not execute"]
-    DECISION -->|"Yes"| EXEC["Original requester executes<br/>the approved request"]
-    EXEC --> REVIEW["Review resulting diff<br/>and operation outcome"]
+    WRITE e05@-->|"No · read-only"| REPORT(["Return audit report"])
+    WRITE e06@-->|"Yes · write path"| SUPPORTED{"Is the operation<br/>supported?"}
+    SUPPORTED e07@-->|"No"| MANUAL["Stop here<br/>use a separately reviewed workflow"]
+    SUPPORTED e08@-->|"Yes"| VALIDATE["Validate request<br/>and requested scope"]
+    VALIDATE e09@--> QUEUE["Queue for email approval<br/>no write at request time"]
+    QUEUE e10@--> DECISION{"Approver decision recorded?"}
+    DECISION e11@-->|"No"| HOLD["Do not execute"]
+    DECISION e12@-->|"Yes"| EXEC["Original requester executes<br/>the approved request"]
+    EXEC e13@--> REVIEW["Review resulting diff<br/>and operation outcome"]
 
     classDef entry fill:#070C2A,stroke:#FF2BD6,stroke-width:2px,color:#EAF8FF
     classDef audit fill:#0C1658,stroke:#00E5FF,stroke-width:2px,color:#EAF8FF
@@ -286,6 +298,33 @@ flowchart TD
     class VALIDATE,QUEUE,EXEC approval
     class REVIEW success
     class MANUAL,HOLD blocked
+
+    classDef flowCyan stroke:#00E5FF,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowBlue stroke:#60A5FA,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowViolet stroke:#A78BFA,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowGreen stroke:#00FF9D,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowAmber stroke:#FFC857,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowRed stroke:#FF3B6B,stroke-width:2.5px,stroke-dasharray:7\,5
+
+    class e01,e02,e03 flowBlue
+    class e06,e08,e09,e10 flowViolet
+    class e05,e12,e13 flowGreen
+    class e04 flowAmber
+    class e07,e11 flowRed
+
+    e01@{ animation: fast }
+    e02@{ animation: fast }
+    e03@{ animation: fast }
+    e04@{ animation: slow }
+    e05@{ animation: fast }
+    e06@{ animation: fast }
+    e07@{ animation: slow }
+    e08@{ animation: fast }
+    e09@{ animation: fast }
+    e10@{ animation: fast }
+    e11@{ animation: slow }
+    e12@{ animation: fast }
+    e13@{ animation: fast }
 ```
 
 <p align="center"><sub>Read-only reports branch away before the write gate. The approval path applies to supported operations only; this diagram does not claim universal repair or universal write support.</sub></p>
@@ -437,7 +476,7 @@ The example uses placeholder organization and subject values. Replace them with 
 The six pillars organize the local governance model. The model currently records the listed governance objects and membership roles; it is not a substitute for a real identity provider or production enterprise control plane.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":48,"rankSpacing":60}}}%%
 flowchart TB
     subgraph PILLARS["Six governance pillars"]
         direction LR
@@ -450,16 +489,16 @@ flowchart TB
     end
 
     MODEL[("Local enterprise<br/>governance data model<br/>Alpha")]
-    LEAD --> MODEL
-    DIR --> MODEL
-    MGMT --> MODEL
-    ADMIN --> MODEL
-    STEER --> MODEL
-    OPS --> MODEL
+    LEAD e01@--> MODEL
+    DIR e02@--> MODEL
+    MGMT e03@--> MODEL
+    ADMIN e04@--> MODEL
+    STEER e05@--> MODEL
+    OPS e06@--> MODEL
 
-    MODEL --> RECORDS["Supported records<br/>objectives · initiatives · risks<br/>decisions · changes · incidents<br/>service metrics"]
-    MODEL --> ROLES["Membership roles<br/>owner · admin · developer<br/>auditor · viewer"]
-    ROLES -.-> IDENTITY["Identity boundary<br/>idp|... strings are not<br/>OIDC / SAML authentication"]
+    MODEL e07@--> RECORDS["Supported records<br/>objectives · initiatives · risks<br/>decisions · changes · incidents<br/>service metrics"]
+    MODEL e08@--> ROLES["Membership roles<br/>owner · admin · developer<br/>auditor · viewer"]
+    ROLES e09@-.-> IDENTITY["Identity boundary<br/>idp|... strings are not<br/>OIDC / SAML authentication"]
 
     classDef pillar fill:#070C2A,stroke:#00E5FF,stroke-width:2px,color:#EAF8FF
     classDef model fill:#0C1658,stroke:#7C4DFF,stroke-width:3px,color:#EAF8FF
@@ -471,6 +510,28 @@ flowchart TB
     class RECORDS records
     class ROLES roles
     class IDENTITY boundary
+
+    classDef flowCyan stroke:#00E5FF,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowBlue stroke:#60A5FA,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowViolet stroke:#A78BFA,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowGreen stroke:#00FF9D,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowAmber stroke:#FFC857,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowRed stroke:#FF3B6B,stroke-width:2.5px,stroke-dasharray:7\,5
+
+    class e01,e02,e08 flowCyan
+    class e03,e04,e05,e06 flowViolet
+    class e07 flowGreen
+    class e09 flowRed
+
+    e01@{ animation: fast }
+    e02@{ animation: fast }
+    e03@{ animation: fast }
+    e04@{ animation: fast }
+    e05@{ animation: fast }
+    e06@{ animation: fast }
+    e07@{ animation: fast }
+    e08@{ animation: fast }
+    e09@{ animation: slow }
 ```
 
 <p align="center"><sub>Cyan = governance pillars · violet = local governance model · green = supported record set · amber = membership roles · red = external identity limitation.</sub></p>
@@ -521,21 +582,21 @@ Supported write actions are designed to require email approval by default. The r
 The mail provider delivers a one-time code to the designated approver. The approver records the decision, and the original requester executes the approved request from their own trusted terminal.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":48,"rankSpacing":60}}}%%
 flowchart TD
-    REQUESTER["Original requester"] --> CLI["ogx CLI<br/>supported write request"]
-    CLI --> VALIDATE["Validate request<br/>and arguments"]
-    VALIDATE --> QUEUE["Queue approval request<br/>write has not executed"]
-    QUEUE --> MAIL["Configured mail adapter<br/>Brevo API or SMTP relay"]
-    MAIL --> CODE["Deliver one-time code<br/>to designated approver"]
-    CODE --> APPROVER["Approver<br/>trusted terminal"]
-    APPROVER --> DECISION{"Approval decision?"}
+    REQUESTER["Original requester"] e01@--> CLI["ogx CLI<br/>supported write request"]
+    CLI e02@--> VALIDATE["Validate request<br/>and arguments"]
+    VALIDATE e03@--> QUEUE["Queue approval request<br/>write has not executed"]
+    QUEUE e04@--> MAIL["Configured mail adapter<br/>Brevo API or SMTP relay"]
+    MAIL e05@--> CODE["Deliver one-time code<br/>to designated approver"]
+    CODE e06@--> APPROVER["Approver<br/>trusted terminal"]
+    APPROVER e07@--> DECISION{"Approval decision?"}
 
-    DECISION -->|"Not approved"| HOLD["No write execution"]
-    DECISION -->|"Approved"| RECORD["Record approval<br/>ogx governance approve"]
-    RECORD --> ORIGINAL["Original requester<br/>ogx governance execute"]
-    ORIGINAL --> ACTION["Execute the same<br/>validated request once"]
-    ACTION --> REVIEW["Review resulting change<br/>and operation outcome"]
+    DECISION e08@-->|"Not approved"| HOLD["No write execution"]
+    DECISION e09@-->|"Approved"| RECORD["Record approval<br/>ogx governance approve"]
+    RECORD e10@--> ORIGINAL["Original requester<br/>ogx governance execute"]
+    ORIGINAL e11@--> ACTION["Execute the same<br/>validated request once"]
+    ACTION e12@--> REVIEW["Review resulting change<br/>and operation outcome"]
 
     classDef actor fill:#070C2A,stroke:#FF2BD6,stroke-width:2px,color:#EAF8FF
     classDef internal fill:#0C1658,stroke:#00E5FF,stroke-width:2px,color:#EAF8FF
@@ -549,6 +610,33 @@ flowchart TD
     class DECISION decision
     class HOLD blocked
     class REVIEW success
+
+    classDef flowCyan stroke:#00E5FF,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowBlue stroke:#60A5FA,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowViolet stroke:#A78BFA,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowGreen stroke:#00FF9D,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowAmber stroke:#FFC857,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowRed stroke:#FF3B6B,stroke-width:2.5px,stroke-dasharray:7\,5
+
+    class e01,e02 flowCyan
+    class e03,e04 flowBlue
+    class e05,e06,e07 flowViolet
+    class e10,e11,e12 flowGreen
+    class e08 flowAmber
+    class e09 flowRed
+
+    e01@{ animation: fast }
+    e02@{ animation: fast }
+    e03@{ animation: fast }
+    e04@{ animation: fast }
+    e05@{ animation: fast }
+    e06@{ animation: fast }
+    e07@{ animation: fast }
+    e08@{ animation: slow }
+    e09@{ animation: slow }
+    e10@{ animation: fast }
+    e11@{ animation: fast }
+    e12@{ animation: fast }
 ```
 
 > [!IMPORTANT]
@@ -715,25 +803,25 @@ The supplied text contains conflicting execution metadata: one statement says th
 This map separates reported local checks and build outputs from release evidence that remains unverified in the supplied record.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#070C2A", "primaryColor": "#0C1658", "primaryTextColor": "#EAF8FF", "primaryBorderColor": "#00E5FF", "lineColor": "#7C4DFF", "secondaryColor": "#101A42", "tertiaryColor": "#070C2A", "clusterBkg": "#070C2A", "clusterBorder": "#7C4DFF", "edgeLabelBackground": "#101A42", "fontFamily": "Segoe UI, Arial, sans-serif"},"flowchart":{"curve":"basis","htmlLabels":true,"nodeSpacing":48,"rankSpacing":60}}}%%
 flowchart TD
     SOURCE["Source trees<br/>src/ogx and core/ogx"]
-    SOURCE --> CANON["Canonical pytest suite<br/>631 passed · 18 skipped<br/>119 subtests reported"]
-    SOURCE --> DROPIN["Drop-in unittest suite<br/>289 tests · 9 skipped"]
-    SOURCE --> COMPILE["compileall<br/>reported passed"]
-    SOURCE --> STRUCT["Architecture / distribution checks<br/>17 reported passed"]
+    SOURCE e01@--> CANON["Canonical pytest suite<br/>631 passed · 18 skipped<br/>119 subtests reported"]
+    SOURCE e02@--> DROPIN["Drop-in unittest suite<br/>289 tests · 9 skipped"]
+    SOURCE e03@--> COMPILE["compileall<br/>reported passed"]
+    SOURCE e04@--> STRUCT["Architecture / distribution checks<br/>17 reported passed"]
 
-    CANON --> LOCAL["Reported local verification<br/>Windows · CPython 3.15.2"]
-    DROPIN --> LOCAL
-    COMPILE --> LOCAL
-    STRUCT --> LOCAL
+    CANON e05@--> LOCAL["Reported local verification<br/>Windows · CPython 3.15.2"]
+    DROPIN e06@--> LOCAL
+    COMPILE e07@--> LOCAL
+    STRUCT e08@--> LOCAL
 
-    LOCAL --> WHEEL["Wheel build reported<br/>140 files · 422,662 bytes"]
-    LOCAL --> ZIP["Drop-in archive reported<br/>326 files"]
-    WHEEL --> PACK["Packaging and exclusion review"]
-    ZIP --> PACK
-    PACK --> GAPS["Still unverified in supplied evidence<br/>hosted GitHub Actions · Python 3.11–3.13 matrix<br/>latest wheel clean-venv install · real inbox delivery"]
-    GAPS --> LIMIT["Alpha evidence only<br/>not production certification"]
+    LOCAL e09@--> WHEEL["Wheel build reported<br/>140 files · 422,662 bytes"]
+    LOCAL e10@--> ZIP["Drop-in archive reported<br/>326 files"]
+    WHEEL e11@--> PACK["Packaging and exclusion review"]
+    ZIP e12@--> PACK
+    PACK e13@--> GAPS["Still unverified in supplied evidence<br/>hosted GitHub Actions · Python 3.11–3.13 matrix<br/>latest wheel clean-venv install · real inbox delivery"]
+    GAPS e14@--> LIMIT["Alpha evidence only<br/>not production certification"]
 
     classDef source fill:#070C2A,stroke:#FF2BD6,stroke-width:2px,color:#EAF8FF
     classDef reported fill:#0C1658,stroke:#00E5FF,stroke-width:2px,color:#EAF8FF
@@ -745,6 +833,34 @@ flowchart TD
     class WHEEL,ZIP,PACK artifact
     class GAPS gaps
     class LIMIT limit
+
+    classDef flowCyan stroke:#00E5FF,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowBlue stroke:#60A5FA,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowViolet stroke:#A78BFA,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowGreen stroke:#00FF9D,stroke-width:2.5px,stroke-dasharray:9\,5
+    classDef flowAmber stroke:#FFC857,stroke-width:2.5px,stroke-dasharray:8\,5
+    classDef flowRed stroke:#FF3B6B,stroke-width:2.5px,stroke-dasharray:7\,5
+
+    class e01,e02,e03,e04 flowBlue
+    class e09,e10,e11,e12 flowViolet
+    class e05,e06,e07,e08 flowGreen
+    class e13 flowAmber
+    class e14 flowRed
+
+    e01@{ animation: fast }
+    e02@{ animation: fast }
+    e03@{ animation: fast }
+    e04@{ animation: fast }
+    e05@{ animation: slow }
+    e06@{ animation: slow }
+    e07@{ animation: slow }
+    e08@{ animation: slow }
+    e09@{ animation: fast }
+    e10@{ animation: fast }
+    e11@{ animation: fast }
+    e12@{ animation: fast }
+    e13@{ animation: slow }
+    e14@{ animation: slow }
 ```
 
 <p align="center"><sub>Cyan = reported local checks · violet = generated artifacts and packaging review · amber = evidence gaps · red = release limitation. Counts are reproduced from the supplied verification notes, not newly rerun in this README-editing step.</sub></p>
@@ -865,7 +981,7 @@ The supplied `assets.zip` contains the complete visual identity package. The pat
 
 | Asset | Use |
 |---|---|
-| [`assets/logo/omega-logo.svg`](assets/logo/omega-logo.svg) | Animated transparent Omega logo |
+| [`assets/logo/omega-logo.svg`](assets/logo/omega-logo.svg) | Animated transparent Omega logo, displayed prominently beneath the README hero banner |
 | [`assets/logo/omega-logo-1024.png`](assets/logo/omega-logo-1024.png) | Transparent 1024×1024 logo image |
 | [`assets/logo/omega-logo-bg.svg`](assets/logo/omega-logo-bg.svg) | Animated logo with background |
 | [`assets/logo/omega-logo-bg-1024.png`](assets/logo/omega-logo-bg-1024.png) | Static logo with background |
@@ -928,7 +1044,7 @@ The supplied `assets.zip` contains the complete visual identity package. The pat
 
 <div align="center">
 
-<sub>Built with precision by <b>Shajeduzzaman Enan</b> &nbsp;&middot;&nbsp; নির্মাতা: Shajeduzzaman Enan</sub>
+<sub>Built with precision by <b>Shajeduzzaman Enan</b>.</sub>
 
 <a href="#readme-top"><b>↑ Back to top</b></a>
 
