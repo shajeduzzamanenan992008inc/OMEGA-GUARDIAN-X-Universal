@@ -275,10 +275,17 @@ JS = """'use strict';
     });
   }
 
+  // Mutations return {data: ...}; reads return the resource directly. Accept
+  // both so the dashboard never depends on one envelope shape.
+  function body(payload) {
+    return payload && Object.prototype.hasOwnProperty.call(payload, 'data')
+      ? payload.data : payload;
+  }
+
   function needOrg() {
     if (state.org) { return Promise.resolve(state.org); }
     return api('/api/v1/organizations').then(function (payload) {
-      var items = payload.data.items || [];
+      var items = body(payload).items || [];
       if (!items.length) { throw new Error('This token has no visible organization.'); }
       state.org = items[0];
       return state.org;
@@ -295,17 +302,17 @@ JS = """'use strict';
         api('/api/v1/hosts').catch(function () { return { data: { items: [] } }; })
       ]);
     }).then(function (results) {
-      var jobs = results[2].data || {};
+      var jobs = body(results[2]) || {};
       cards(byId('overview-cards'), [
-        { label: 'Projects', value: results[0].data.total },
-        { label: 'Members', value: results[1].data.total },
-        { label: 'Registered hosts', value: (results[3].data.items || []).length },
+        { label: 'Projects', value: body(results[0]).total },
+        { label: 'Members', value: body(results[1]).total },
+        { label: 'Registered hosts', value: (body(results[3]).items || []).length },
         { label: 'Queued jobs', value: jobs.pending === undefined ? 'n/a' : jobs.pending,
           note: jobs.dead ? jobs.dead + ' dead-lettered' : '' }
       ]);
       var queue = byId('queue');
       queue.textContent = '';
-      if (!results[2].data) {
+      if (!body(results[2])) {
         queue.appendChild(el('p', 'Queue statistics are not available to this token.', 'muted'));
         return;
       }
@@ -318,18 +325,20 @@ JS = """'use strict';
     return needOrg().then(function (org) {
       return api('/api/v1/organizations/' + encodeURIComponent(org.id) + '/projects?limit=100');
     }).then(function (payload) {
-      var rows = payload.data.items.map(function (project) {
+      var data = body(payload);
+      var rows = data.items.map(function (project) {
         return [project.name, project.provider, project.repository_ref || '—', project.status];
       });
       var target = byId('projects');
       target.textContent = '';
-      target.appendChild(table(payload.data.total + ' project(s)', ['Name', 'Provider', 'Repository', 'Status'], rows));
+      target.appendChild(table(data.total + ' project(s)', ['Name', 'Provider', 'Repository', 'Status'], rows));
     });
   }
 
   function loadHosts() {
     return api('/api/v1/hosts').then(function (payload) {
-      var rows = payload.data.items.map(function (host) {
+      var data = body(payload);
+      var rows = data.items.map(function (host) {
         var supported = (host.capabilities || []).filter(function (item) {
           return item.status === 'supported';
         }).map(function (item) { return item.name; });
@@ -337,7 +346,7 @@ JS = """'use strict';
       });
       var target = byId('hosts');
       target.textContent = '';
-      target.appendChild(table(payload.data.items.length + ' host(s)', ['Type', 'Provider', 'Status', 'Supported'], rows));
+      target.appendChild(table(data.items.length + ' host(s)', ['Type', 'Provider', 'Status', 'Supported'], rows));
     });
   }
 
@@ -345,12 +354,13 @@ JS = """'use strict';
     return needOrg().then(function (org) {
       return api('/api/v1/organizations/' + encodeURIComponent(org.id) + '/governance/records?limit=100');
     }).then(function (payload) {
-      var rows = payload.data.items.map(function (record) {
+      var data = body(payload);
+      var rows = data.items.map(function (record) {
         return [record.record_type, record.title, record.priority, record.status, record.owner_subject];
       });
       var target = byId('governance');
       target.textContent = '';
-      target.appendChild(table(payload.data.total + ' record(s)',
+      target.appendChild(table(data.total + ' record(s)',
         ['Type', 'Title', 'Priority', 'Status', 'Owner'], rows));
     });
   }
@@ -359,12 +369,13 @@ JS = """'use strict';
     return needOrg().then(function (org) {
       return api('/api/v1/organizations/' + encodeURIComponent(org.id) + '/audit?limit=100');
     }).then(function (payload) {
-      var rows = payload.data.items.map(function (event) {
+      var data = body(payload);
+      var rows = data.items.map(function (event) {
         return [event.occurred_at, event.action, event.resource_type, event.resource_id || '—'];
       });
       var target = byId('audit');
       target.textContent = '';
-      var wrap = table(payload.data.total + ' event(s)',
+      var wrap = table(data.total + ' event(s)',
         ['When', 'Action', 'Resource', 'Id'], rows);
       wrap.classList.add('scroll');
       target.appendChild(wrap);
@@ -373,9 +384,10 @@ JS = """'use strict';
 
   function loadPolicy() {
     return api('/api/v1/policy/matrix').then(function (payload) {
-      var matrix = payload.data.matrix;
+      var data = body(payload);
+      var matrix = data.matrix;
       var roles = Object.keys(matrix);
-      var actions = payload.data.actions;
+      var actions = data.actions;
       var rows = actions.map(function (action) {
         return [action].concat(roles.map(function (role) {
           return matrix[role].indexOf(action) !== -1 ? 'allow' : '—';
@@ -423,8 +435,9 @@ JS = """'use strict';
     byId('token').value = '';
     if (!token) { status('Enter a service token.', 'error'); return; }
     api('/api/v1/meta').then(function (payload) {
-      state.meta = payload.data;
-      apiVersion = payload.data.api_version;
+      var meta = payload.data || payload;
+      state.meta = meta;
+      apiVersion = meta.api_version;
       status('Connected.', 'ok');
       show('overview');
     }).catch(function (error) {
@@ -468,8 +481,9 @@ JS = """'use strict';
   });
 
   api('/api/v1/meta').then(function (payload) {
-    state.meta = payload.data;
-    byId('product-line').textContent = 'Control plane · ' + payload.data.product_version;
+    var meta = payload.data || payload;
+    state.meta = meta;
+    byId('product-line').textContent = 'Control plane · ' + meta.product_version;
   }).catch(function () { /* meta is public; ignore */ });
 })();
 """
